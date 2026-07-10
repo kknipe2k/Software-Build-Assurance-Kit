@@ -1,0 +1,115 @@
+name: release
+
+# The ONLY workflow that spends meaningful cloud minutes — and only on version
+# tags, so cost is bounded by release cadence (verification_locus: hybrid |
+# local_first). This is where macOS finally runs: the full cross-OS test matrix
+# plus, for desktop apps, the signed + notarized macOS build that cannot be
+# produced on a Windows/Linux dev machine.
+#
+# macOS bills at ~10x the Linux minute rate, so it lives here and nowhere else.
+# If the Phase-0 audit found NO macOS ship target, delete the macos-latest entry
+# from the matrices and the package job below.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:        # manual dry-run rehearsal before cutting a real tag
+
+# PKG-003 — least-privilege DEFAULT for the whole workflow (read-only floor). The
+# `package` job below deliberately ELEVATES to id-token/attestations write in its
+# own block — that override is the hardened model this stage mirrors elsewhere.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0  (adjust or remove for non-Node stacks)
+        with:
+          node-version: '20'
+      - name: Full test suite
+        # fill {{RELEASE_TEST_COMMAND}} — e.g. npm ci && npm test
+        run: |
+          {{RELEASE_TEST_COMMAND}}
+
+  # ---------------------------------------------------------------------------
+  # Desktop packaging (e.g. Electron). Remove this job for non-desktop projects.
+  # The macOS build is code-signed + notarized here; this is the excluded
+  # OS-call wrapper from docs/gates.md, finally exercised.
+  #
+  # Required GitHub Actions secrets (Settings -> Secrets and variables -> Actions;
+  # NEVER commit these):
+  #   CSC_LINK            base64 of the Developer ID Application .p12
+  #   CSC_KEY_PASSWORD    password for that .p12
+  #   APPLE_API_KEY       base64 (or path) of the App Store Connect .p8 key
+  #   APPLE_API_KEY_ID    the key id
+  #   APPLE_API_ISSUER    the issuer id
+  # (An Apple Developer Program membership is required to sign + notarize.)
+  # ---------------------------------------------------------------------------
+  package:
+    needs: test
+    # ---------------------------------------------------------------------------
+    # SLSA Build provenance (G16). These permissions are
+    # LOAD-BEARING, not decorative: actions/attest-build-provenance FAILS at
+    # runtime without `id-token: write` (to mint the Sigstore OIDC token) and
+    # `attestations: write` (to write the attestation); `contents: read` is the
+    # least-privilege default for checkout. A permission-less attest step would
+    # red EVERY release, so the gate's release-state SLSA cite would be a lie.
+    # The package job's release-state entry must cite `SLSA build level: L2`.
+    # ---------------------------------------------------------------------------
+    permissions:
+      id-token: write        # mint the Sigstore OIDC token (REQUIRED by attest)
+      attestations: write    # write the build-provenance attestation (REQUIRED)
+      contents: read         # least-privilege checkout
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          persist-credentials: false   # CHG-601 — publish uses GH_TOKEN in step env:, not the checkout's git creds
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: '20'
+      - name: Build / sign / notarize / publish
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # fill {{PACKAGE_COMMAND}} — e.g. npm ci && npx electron-builder --publish always
+        run: |
+          {{PACKAGE_COMMAND}}
+
+      # SLSA Build L2 — the DEFAULT floor (free, one step). Binds the built
+      # artifact to the build instructions that produced it: Sigstore-signed,
+      # recorded in the public transparency log, verifiable with `gh attestation
+      # verify <artifact>`. Fill {{ARTIFACT_GLOB}} with the built artifact path(s)
+      # (e.g. dist/*.dmg, dist/*.exe, dist/*.AppImage).
+      - name: Attest build provenance (SLSA Build L2)
+        uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018  # v1.4.4
+        with:
+          subject-path: '{{ARTIFACT_GLOB}}'
+
+      # ---------------------------------------------------------------------------
+      # SLSA Build L3 — the DOCUMENTED UPGRADE (not the default; do not claim L3
+      # until this is wired). L3 requires the build run on an isolated, hardened
+      # builder with the signing key NEVER exposed to user-defined build steps —
+      # achieved by delegating the build to a trusted REUSABLE WORKFLOW (the
+      # slsa-framework/slsa-github-generator generator_generic_slsa3.yml), which
+      # runs the build in its own job and produces the provenance out of reach of
+      # this job's steps. Until then the honest release-state cite is L2, NOT L3.
+      # See: https://github.com/slsa-framework/slsa-github-generator
+      # ---------------------------------------------------------------------------

@@ -1,0 +1,66 @@
+name: ci
+
+# The public kit's self-verification. This repository ships the enforcement layer
+# it describes, so CI's job is to prove that layer still fires — not to build an
+# artifact. Every step below runs a checked-in script against checked-in fixtures:
+# no network, no secrets, no matrix. A few seconds on free ubuntu minutes.
+#
+# What each step proves:
+#   * stage-prompt schema — the XML stage prompts in any Phase doc validate.
+#   * enumeration coherence — every shipped validators/*.cjs is catalogued in all
+#     three places that claim to list them; add a validator and forget a catalog
+#     and this fails.
+#   * self-description — the counts, gate range, and protocol version the entry
+#     docs state are derived from the code and compared against it; a number that
+#     drifts fails the build rather than quietly misleading a reader.
+#   * calibration set — the seeded-defect fixtures shadow the protocol's escape
+#     catalog in both directions, each fixture is labeled, and no fixture leaks
+#     its own answer.
+#   * golden scaffold — the rendered scaffold still hashes to the committed
+#     golden manifest, so a template edit cannot silently change what a
+#     bootstrapped project receives.
+#   * bake-and-test — the harness renders a real project and proves the inherited
+#     gates FIRE there: plant a violation, the baked validator must reject it.
+#     Presence is never taken for effectiveness.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least-privilege default token (read-only floor).
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false   # no GITHUB_TOKEN left behind in .git/config
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: '20'
+
+      - name: Stage-prompt schema
+        run: node validators/validate-stage-prompts.cjs --all
+
+      - name: Validator enumeration coherence
+        run: node validators/validate-validator-enumeration.cjs
+
+      - name: Self-description — the docs' own numbers match the code
+        run: node validators/validate-entry-docs.cjs
+
+      - name: Seeded-defect calibration set
+        run: node validators/validate-calibration.cjs --set prompts/calibration --catalog STAGE-PROMPT-PROTOCOL.md
+
+      - name: Golden scaffold — rendered tree matches the committed manifest
+        run: node scripts/golden-bootstrap.cjs --check-manifest
+
+      - name: Golden scaffold — contract diff (enforcing)
+        run: node scripts/golden-bootstrap.cjs --diff
+
+      - name: Bake a project and prove the inherited gates fire
+        run: node scripts/bake-and-test.cjs

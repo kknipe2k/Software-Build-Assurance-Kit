@@ -1,0 +1,87 @@
+name: ci
+
+# verification_locus: cloud — the conventional posture.
+# The full test matrix runs on every push and PR. Free + unlimited on PUBLIC
+# repos; metered on private repos (macOS bills ~10x Linux). If Actions cost on a
+# private repo becomes a problem, switch to verification_locus: hybrid (local
+# pre-push + one ubuntu PR smoke check + release-only macOS). See
+# FRAMEWORK-CONFIG.md §4.14. Generated only under verification_locus: cloud;
+# hybrid / local_first generate the local harness + pr-smoke.yml + release.yml
+# instead.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# PKG-003 — least-privilege default token (read-only floor). A job that needs to
+# write (releases, attestations) elevates in its own `permissions:` block.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]   # drop macos-latest if it isn't a target
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # Full history so the App-Map currency check's `git diff <base>` has the
+          # PR base commit locally (a shallow clone would not). Baked in
+          # unconditionally — matches append-only-ledger.yml's checkout — so it is
+          # never a forgotten manual step: harmless when the App-Map step no-ops
+          # (no docs/app-map.md), load-bearing the moment a surface ships its entry.
+          fetch-depth: 0
+          persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0  (adjust or remove for non-Node stacks)
+        with:
+          node-version: '20'
+      - name: Full test suite
+        # fill {{CI_TEST_COMMAND}} — e.g. npm ci && npm test
+        run: |
+          {{CI_TEST_COMMAND}}
+
+      # App-Map currency check — generated when app_map: on (under app_map: skip
+      # the bootstrap omits this step entirely). It runs AFTER the test suite on
+      # purpose: the binding check asserts every `verified` map entry's test-id
+      # EXISTS, and existence is only meaningful once the suite above is green —
+      # ordering is the green-suite proof. The tripwire (--surface) also fails a
+      # surface-source diff that left docs/app-map.md untouched (escape: a logged
+      # app-map-unchanged token via --reason-ok). Globs come from docs/gates.md.
+      # Needs git history for the diff base → `fetch-depth: 0` is already set on the
+      # checkout step above (baked in unconditionally, like append-only-ledger.yml).
+      #
+      # The `hashFiles(...)` guard makes the step a structural NO-OP whenever
+      # docs/app-map.md is absent — so it never hard-fails (the validator exits 2
+      # on a missing map). This covers both app_map: skip (map never generated)
+      # AND app_map: on early milestones, before the first surface ships its map
+      # entry. The guard is belt-and-suspenders to the bootstrap's omission: even
+      # if the step is left in, no map means no failure.
+      - name: App-Map currency check
+        if: ${{ matrix.os == 'ubuntu-latest' && hashFiles('docs/app-map.md') != '' }}   # one OS suffices; the map is OS-agnostic; skip if no map
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}   # PKG-005 — bind base_ref via env; never interpolate ${{ }} into the run: shell line
+        run: node validators/validate-app-map.cjs --base "origin/$BASE_REF" --tests '{{APP_MAP_TEST_GLOBS}}' --surface '{{APP_MAP_SURFACE_GLOBS}}' docs/app-map.md
+
+      # Sources-registry binding check (operating_mode: research_publish) — the
+      # mechanical half of G_RP_R1 (grounded STORM): every inline `[S###]`
+      # citation in docs/paper/ must resolve to an id logged in the sources registry
+      # (docs/sources/registry.md). A fabricated citation (no registry id) → exit 1.
+      # The validator defaults both --paper (docs/paper) and --registry, so a bare
+      # invocation suffices.
+      #
+      # Guarded by hashFiles('docs/paper/**') so the step is a structural NO-OP for
+      # every non-research_publish project (and for a research_publish project before
+      # Phase R has drafted a paper) — the validator exits 2 on a missing paper/
+      # registry, so the guard prevents an off-path red. Same hashFiles lesson the
+      # App-Map step above applies (M04). One OS suffices; the check is OS-agnostic.
+      - name: Sources-registry binding check (research_publish)
+        if: ${{ matrix.os == 'ubuntu-latest' && hashFiles('docs/paper/**') != '' }}   # skip when no paper (non-research_publish, or pre-Phase-R)
+        run: node validators/validate-sources.cjs

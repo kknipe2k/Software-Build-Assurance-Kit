@@ -1,0 +1,3 @@
+# Streamlit starter for the research_publish Phase-A app.
+# Pin to the current major at bootstrap time (web-verify the latest stable).
+streamlit

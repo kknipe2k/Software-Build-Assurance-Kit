@@ -1,0 +1,29 @@
+# Framework-managed transient state — uncommitted by design.
+# The build session's in-flight checkpoint log (see STAGE-PROMPT-PROTOCOL
+# <status_log>). Read by an orchestrator consultation; cleared at stage close.
+.claude/build-status.md
+
+# The session's current role (work / verifier / orchestrator / refactor). Local to
+# the machine; not part of the project's shared state. `.claude/role` is the canonical
+# marker; `.claude/active-mode` is the one-release read-compatible alias (both written
+# through the M20.B alias-window; the alias is retired at v0.2.0).
+.claude/role
+.claude/active-mode
+
+# PROC-001 red-gate markers (shipped via the red-gate hook): the open-stage marker
+# and the per-stage red-approval marker. Per-session, never committed. Comments stay
+# on their OWN lines — an inline `#` becomes part of the pattern and ignores nothing.
+.claude/stage-active
+.claude/red-approved
+
+# Build-receipt event ledgers (per-session JSONL written by the receipts
+# machinery; local observability data, never committed).
+.claude/receipts/
+
+# Build-receipt reports (rendered JSON/HTML/MD views written by
+# `node scripts/build-receipts.cjs render`; local observability output). This
+# entry is a default, not a wall — a report you want to keep is deliberately
+# trackable: negate or delete this line for the files you commit.
+reports/
+
+# Add project/stack-specific ignores below (node_modules/, dist/, __pycache__/, etc.)

@@ -1,0 +1,69 @@
+name: append-only-ledger
+
+# Enforces the append-only invariant on every ledger listed below, using the
+# kit's shared checker `validators/check-append-only.cjs`: a ledger's previously
+# committed content must remain a CRLF-normalized byte-prefix of its current
+# content (appends only ever go at the end, newest at the bottom). Any edit,
+# reorder, or deletion of prior bytes breaks the prefix and fails the job.
+#
+# Tier behavior (see project-config.md `ledger` toggle):
+#   * Full     — make this a REQUIRED status check in branch protection. A
+#                prior-line edit then blocks the PR (append_only_enforced).
+#   * Standard — keep the workflow but leave it non-required: it reports a
+#                violation without blocking (append_only_advisory).
+#   * Lite     — no ledgers; delete this workflow.
+#
+# To add or remove a ledger, edit the LEDGERS list below — that is the ONLY
+# place. Do NOT split into per-ledger jobs; the checker takes many paths at once.
+#
+# NOTE on project-config.md: its override log is append-only, but the file as a
+# whole is intentionally editable (the Tier line and toggle table change on
+# re-tier). A whole-file byte-prefix check would false-positive on a legitimate
+# re-tier, so project-config.md is deliberately NOT in this list. Its override
+# log cites the shared check and stays honor-system / human-reviewed.
+
+on:
+  pull_request:
+
+concurrency:
+  group: append-only-${{ github.ref }}
+  cancel-in-progress: true
+
+# PKG-003 — least-privilege default token (the read-only floor). A job needing
+# more elevates in its own `permissions:` block (see release.yml's package job).
+permissions:
+  contents: read
+
+env:
+  # ▼▼▼ The configurable ledger path set — the ONLY place to edit. ▼▼▼
+  # Space-separated, repo-relative, forward slashes. A path absent from a given
+  # project (e.g. a Standard project that never opened docs/consultations.md)
+  # passes harmlessly: absent-from-base is treated as a new file.
+  LEDGERS: >-
+    docs/gap-analysis.md
+    docs/tech-debt.md
+    docs/consultations.md
+    docs/off-track-log.md
+    docs/sources/registry.md
+    docs/audit/findings-ledger.md
+    docs/release-state.md
+  # ▲▲▲ ────────────────────────────────────────────────────────── ▲▲▲
+
+jobs:
+  append-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          # Full history so the PR base commit is present locally; the checker
+          # runs `git show <base>:<path>` and a shallow clone would not have it.
+          fetch-depth: 0
+          persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: '20'
+      - name: Check ledgers are append-only
+        # ${{ ... }}.base.sha is the PR base commit — passed to --base explicitly
+        # rather than relying on the local merge-base default. $LEDGERS is unquoted
+        # on purpose: bash word-splits it into one literal path argument per ledger.
+        run: node validators/check-append-only.cjs --base "${{ github.event.pull_request.base.sha }}" $LEDGERS

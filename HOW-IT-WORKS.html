@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Software Build Assurance Kit — How It Works</title>
+<style>
+  :root {
+    --ink: #1a1f2b;
+    --muted: #5b6472;
+    --line: #d6dbe3;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --accent: #2f6fed;
+    --accent-soft: #e9f0fe;
+    --green: #1f9d57;
+    --amber: #d98a00;
+    --red: #d23f3f;
+    --lite: #3a9b78;
+    --standard: #2f6fed;
+    --full: #7a4fd0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 48px 28px 80px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -.4px; }
+  h2 {
+    font-size: 21px; margin: 56px 0 18px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--line); letter-spacing: -.2px;
+  }
+  h3 { font-size: 15px; margin: 26px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  p { margin: 0 0 14px; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 760px; }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .4px;
+    color: var(--accent); background: var(--accent-soft); padding: 4px 10px; border-radius: 999px;
+    margin-bottom: 18px;
+  }
+  code {
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 13px; background: #eef0f3; padding: 2px 6px; border-radius: 4px;
+  }
+  pre {
+    background: #1a1f2b; color: #e6e9ef; padding: 18px 20px; border-radius: 10px;
+    overflow-x: auto; font-size: 13px; line-height: 1.7;
+  }
+  pre code { background: none; color: inherit; padding: 0; }
+
+  /* flow diagram */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin: 22px 0; }
+  .step {
+    flex: 1 1 0; min-width: 150px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 16px 16px; position: relative; display: flex; flex-direction: column;
+  }
+  .step + .step { margin-left: 30px; }
+  .step + .step::before {
+    content: "▸"; position: absolute; left: -24px; top: 50%; transform: translateY(-50%);
+    color: var(--accent); font-size: 20px;
+  }
+  .step .n { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+  .step .t { font-weight: 650; font-size: 15px; margin-bottom: 4px; }
+  .step .d { font-size: 13px; color: var(--muted); }
+
+  /* stage pipeline */
+  .pipe { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 8px; }
+  .node {
+    background: var(--card); border: 1.5px solid var(--line); border-radius: 9px;
+    padding: 12px 14px; text-align: center; min-width: 86px;
+  }
+  .node .lbl { font-weight: 700; font-size: 15px; }
+  .node .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .node.work { border-color: #c3d4f7; }
+  .node.verify { border-color: #f7d9a8; background: #fffaf0; }
+  .node.closeout { border-color: #cfeede; background: #f3fbf6; }
+  .arrow { color: var(--accent); font-size: 18px; font-weight: 700; }
+  .loop {
+    font-size: 12px; color: var(--amber); border: 1px dashed var(--amber);
+    border-radius: 8px; padding: 8px 12px; margin: 6px 0 0; display: inline-block;
+  }
+
+  /* layer stack */
+  .layers { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; }
+  .layer {
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; background: var(--card);
+    display: flex; align-items: flex-start; gap: 16px;
+  }
+  .layer .ln {
+    flex: 0 0 96px; font-weight: 700; font-size: 13px; color: var(--accent);
+  }
+  .layer .lc { flex: 1; }
+  .layer .lc b { font-size: 14.5px; }
+  .layer .lc span { display:block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .layer.immut { background: #fdf3f3; border-color: #f0caca; }
+  .layer.immut .ln { color: var(--red); }
+
+  /* table */
+  table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  td:first-child { font-weight: 650; }
+  .pill { display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; color:#fff; }
+  .pill.lite { background: var(--lite); }
+  .pill.standard { background: var(--standard); }
+  .pill.full { background: var(--full); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .panel h3 { margin-top: 0; }
+  .panel ul { margin: 0; padding-left: 18px; }
+  .panel li { margin: 6px 0; font-size: 14px; }
+  .dot { display:inline-block; width:9px;height:9px;border-radius:50%; margin-right:7px; vertical-align: middle;}
+  .dot.r{background:var(--red);} .dot.a{background:var(--amber);} .dot.g{background:var(--green);}
+  .note { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding-left: 14px; margin: 14px 0; }
+  footer { margin-top: 60px; padding-top: 20px; border-top: 2px solid var(--line); font-size: 13px; color: var(--muted); }
+  @media (max-width: 760px) {
+    .cols { grid-template-columns: 1fr; }
+    .step + .step { margin-left: 0; margin-top: 28px; }
+    .step + .step::before { left: 50%; top: -22px; transform: translateX(-50%) rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="tag">SOFTWARE BUILD ASSURANCE KIT</span>
+  <h1>How It Works</h1>
+  <p class="lede">A drop-in framework that turns Claude Code into a disciplined building partner. You describe what to build; it calibrates how much process to apply, then runs a structured loop with human approval gates, fresh-context verification, and an append-only audit trail.</p>
+
+  <h2>What it does, in one picture</h2>
+  <div class="flow">
+    <div class="step">
+      <div class="n">1 · DROP IN</div>
+      <div class="t">Copy the kit into your project directory</div>
+      <div class="d">Open it in Claude Code. The kit's CLAUDE.md auto-loads and takes over.</div>
+    </div>
+    <div class="step">
+      <div class="n">2 · CALIBRATE</div>
+      <div class="t">Answer 5 questions</div>
+      <div class="d">Project size, your experience, approval cadence, deliverable type, verification &amp; CI cost. Sets how much ceremony and which gates apply.</div>
+    </div>
+    <div class="step">
+      <div class="n">3 · BOOTSTRAP</div>
+      <div class="t">Spec → milestones → scaffold</div>
+      <div class="d">Generates ~36 files for Lite, ~68 for Standard, ~69 for Full. Then hands off to the build loop.</div>
+    </div>
+    <div class="step">
+      <div class="n">4 · BUILD LOOP</div>
+      <div class="t">Stages, verified, approved</div>
+      <div class="d">Each milestone runs as stages. You approve before every commit.</div>
+    </div>
+    <div class="step">
+      <div class="n">5 · SHIP</div>
+      <div class="t">PR per milestone</div>
+      <div class="d">Code + retrospectives + audit ledger reviewed together, then merged.</div>
+    </div>
+  </div>
+  <p class="note">The core promise: <b>human reviews, agent implements, CI enforces.</b> The agent never commits without your explicit approval — that rule holds in every tier and every mode.</p>
+
+  <h2>Step 2 — Calibration (the 5 questions)</h2>
+  <p>The first thing the framework asks. Each answer maps to settings stored in <code>project-config.md</code>. You can change them later via an append-only override log.</p>
+  <table>
+    <tr><th>Question</th><th>Options</th><th>What it controls</th></tr>
+    <tr>
+      <td>Project size / complexity</td>
+      <td><span class="pill lite">Lite</span> <span class="pill standard">Standard</span> <span class="pill full">Full</span></td>
+      <td>The <b>tier</b> — how much ceremony. Scaffold size, retrospective depth, whether the audit ledger is CI-enforced.</td>
+    </tr>
+    <tr>
+      <td>Your experience with the stack</td>
+      <td>New · Familiar · Experienced</td>
+      <td>The <b>expertise</b> — how much the agent narrates decisions, and whether it web-verifies best practices before coding.</td>
+    </tr>
+    <tr>
+      <td>Approval cadence</td>
+      <td>Minimum · Standard · Maximum</td>
+      <td>How often the agent stops for your review — per PR, per stage, or per micro-task.</td>
+    </tr>
+    <tr>
+      <td>Deliverable type</td>
+      <td>CLI · Web-UI · Library · Service · Other</td>
+      <td>The <b>deliverable_type</b> — orthogonal to tier. Decides <em>which</em> gates apply: <code>web</code> turns on a design brief (<code>docs/design.md</code>) plus browser-load and design-conformance verifier passes; <code>library</code> adds an API-surface contract; <code>service</code> adds endpoint contracts; <code>cli</code> adds command-surface checks. Usually inferred from your description rather than asked outright.</td>
+    </tr>
+    <tr>
+      <td>Verification &amp; CI cost</td>
+      <td>Local-first · Cloud · Local-only</td>
+      <td>The <b>verification_locus</b> — where the test suite runs and what GitHub Actions costs. Public repo → cloud is free and unlimited; private repo → local-first (hybrid) keeps hosted minutes near-zero. Orthogonal to tier; usually proposed from repo visibility and whether the project ships to macOS.</td>
+    </tr>
+  </table>
+  <p class="note">Don't know? The safe default is <b>Standard + Familiar + Standard</b> (deliverable type inferred). Re-tiering later is cheap and tracked.</p>
+
+  <h2>Step 4 — The per-milestone build loop</h2>
+  <p>Every milestone runs through the same pipeline. Each box is a <b>fresh Claude session</b> — context is cleared between stages on purpose, so each stage reads only what it needs and nothing stale carries over.</p>
+  <div class="pipe">
+    <div class="node work"><div class="lbl">A</div><div class="sub">work · TDD</div></div>
+    <span class="arrow">→</span>
+    <div class="node work"><div class="lbl">B</div><div class="sub">work · TDD</div></div>
+    <span class="arrow">→</span>
+    <div class="node work"><div class="lbl">C</div><div class="sub">work · TDD</div></div>
+    <span class="arrow">→</span>
+    <div class="node work"><div class="lbl">D</div><div class="sub">work · TDD</div></div>
+    <span class="arrow">→</span>
+    <div class="node verify"><div class="lbl">V</div><div class="sub">verify · 4 passes</div></div>
+    <span class="arrow">→</span>
+    <div class="node closeout"><div class="lbl">E</div><div class="sub">closeout · ledger</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="lbl">PR</div><div class="sub">review · merge</div></div>
+  </div>
+  <div class="loop">↺ If Stage V finds a critical issue → a scoped <b>D.fix</b> stage runs, then V re-runs. Capped at 2 iterations before it escalates to you.</div>
+
+  <div class="cols" style="margin-top:24px">
+    <div class="panel">
+      <h3>Stages A–D — Work</h3>
+      <ul>
+        <li>Test-driven: write a failing test, make it pass, refactor</li>
+        <li>All quality gates green; no skips, no <code>--no-verify</code></li>
+        <li>Agent states its plan, you confirm, it works, it surfaces the diff</li>
+        <li><b>No commit until you approve.</b> Then a fresh session opens for the next stage.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Stage V — Verifier</h3>
+      <ul>
+        <li>Fresh session with <b>prior retrospectives deliberately hidden</b> — the bias guard</li>
+        <li>Asks "does the code do what was promised?" not "did the tests pass?"</li>
+        <li>Four passes: inventory · wire-tracing · multi-call · runtime behavior</li>
+        <li>Findings graded <span class="dot r"></span>blocks merge · <span class="dot a"></span>carry forward · <span class="dot g"></span>tech-debt</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:18px">
+    <h3>Stage E — Closeout</h3>
+    <ul>
+      <li>Cumulative review of everything shipped this milestone vs. the spec</li>
+      <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Standard &amp; Full) — never edited, only appended; CI enforces this in Full tier</li>
+      <li>You review three artifacts together: the code diff, the retrospectives, and the ledger entry</li>
+    </ul>
+  </div>
+
+  <h2>Two roles — orchestrator and build (Standard &amp; Full)</h2>
+  <p>At Standard and Full tier, the agent runs as two distinct session types that never share a session. You — the human — are the conduit between them; only one acts at a time. These roles are the kit's agents — separated by hooks, not by request.</p>
+  <div class="cols">
+    <div class="panel">
+      <h3>Orchestrator</h3>
+      <ul>
+        <li>Authors Phase docs, ADRs, protocol docs</li>
+        <li>Adjudicates the build's surfaces; routes Verifier findings</li>
+        <li>Sequences milestones; runs the PR and merge</li>
+        <li>Governed by <code>ORCHESTRATOR.md</code> — its own operating manual</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Build</h3>
+      <ul>
+        <li>Executes one stage per fresh session from a pasted prompt</li>
+        <li>Does the TDD, runs gates, fills the retrospective</li>
+        <li>Does not sequence, route, or author Phase docs</li>
+        <li>Governed by <code>CLAUDE.md</code> + the stage prompt; never reads <code>ORCHESTRATOR.md</code></li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Why split them: the build machine doesn't drift — each stage is a fresh scoped session. The orchestrator runs long, so it gets its own hardened manual to keep it from drifting. Recommended hosting: two Claude Code CLIs + git worktrees on one machine. At <b>Lite</b> tier the two roles collapse into one session.</p>
+
+  <h2>How memory works (why it stays coherent across many sessions)</h2>
+  <p>The framework is built on five layers. Lower layers read from higher layers. The top two auto-load on every single session, so the agent always re-orients before doing anything.</p>
+  <div class="layers">
+    <div class="layer"><div class="ln">Layer 1</div><div class="lc"><b>Static contract</b><span>The spec. Changes only via a formal decision record (ADR).</span></div></div>
+    <div class="layer"><div class="ln">Layer 2</div><div class="lc"><b>Slow protocol — auto-loaded every session</b><span>CLAUDE.md, project-config.md, the playbook, identity, gates. A SessionStart hook injects these so the agent can't "forget" to read them.</span></div></div>
+    <div class="layer"><div class="ln">Layer 3</div><div class="lc"><b>Per-milestone Phase doc</b><span>The plan for the current milestone — stages, scope, the XML prompts pasted into each fresh session.</span></div></div>
+    <div class="layer"><div class="ln">Layer 4</div><div class="lc"><b>Per-session working memory</b><span>Ephemeral. One stage's context. Cleared when the stage ends — on purpose.</span></div></div>
+    <div class="layer immut"><div class="ln">Layer 5</div><div class="lc"><b>Stage outputs — committed; some append-only forever</b><span>Code commits, retrospectives, the gap-analysis ledger, the session register. The audit trail. Append-only items are never rewritten.</span></div></div>
+  </div>
+
+  <h2>How to use it</h2>
+  <h3>Get the kit</h3>
+  <pre><code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project
+cd my-project</code></pre>
+  <h3>Start</h3>
+  <pre><code>claude
+# The kit's CLAUDE.md auto-loads.
+# It presents the 5-question calibration interview as its first response.
+# Answer the questions (or describe your project and let it propose a calibration).
+# Then tell it what you want to build — a paragraph is enough.</code></pre>
+  <h3>Then</h3>
+  <p>The agent runs bootstrap (spec → milestones → scaffold), replaces the kit's CLAUDE.md with your project's own, and hands off. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
+  <p class="note">Runs anywhere Claude Code runs — terminal CLI or the web app at claude.ai/code. Cross-platform (the hooks are Node, which Claude Code already requires — no bash/WSL needed on Windows).</p>
+
+  <h2>Pick a tier</h2>
+  <table>
+    <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill standard">Standard</span></th><th><span class="pill full">Full</span></th></tr>
+    <tr><td>Best for</td><td>Weekend tool, prototype, ≤1 week</td><td>Real project, 1–4 weeks</td><td>Multi-month, regulated, or audited</td></tr>
+    <tr><td>Scaffold files</td><td>~36</td><td>~68</td><td>~69</td></tr>
+    <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td><td>Per stage</td></tr>
+    <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td><td>3 axes (+ pattern)</td></tr>
+    <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory)</td><td>Append-only (CI-enforced)</td></tr>
+    <tr><td>Verifier</td><td>1 pass (inventory)</td><td>3 passes</td><td>4 passes + project-specific</td></tr>
+    <tr><td>Review time / stage</td><td>~10 min</td><td>~30 min</td><td>~60–90 min</td></tr>
+  </table>
+
+  <h2>What you get · what it doesn't do</h2>
+  <div class="cols">
+    <div class="panel">
+      <h3>What you get</h3>
+      <ul>
+        <li>Calibrated ceremony — discipline scales to the project</li>
+        <li>A do-not-commit-without-approval guarantee</li>
+        <li>Fresh-context verification that catches "tests pass but it's broken"</li>
+        <li>An append-only forensic audit trail (Standard+)</li>
+        <li>A schema validator enforced at pre-commit + CI</li>
+        <li>Stack-agnostic — Rust, Python, TypeScript, Go, anything</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>What it doesn't do</h3>
+      <ul>
+        <li>Doesn't run the agent for you — you drive Claude Code</li>
+        <li>Doesn't enforce gates itself — your CI does</li>
+        <li>Doesn't replace specs or design discussion — it frames them</li>
+        <li>Doesn't pretend Lite is auditable — pick Standard+ if you need a trail</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    <b>Roadmap (mostly shipped):</b> the Refactor health-check stage (<code>proposals/STAGE-R-REFACTOR.md</code>) and all three further operating modes — bug-fix, research-publish, audit (<code>proposals/OPERATING-MODES.md</code>) — are now live; only <code>proposals/RUNTIME-CREATION-MODE.md</code> remains deferred. &nbsp;·&nbsp; Framework references: <code>BUILD-PLAYBOOK.md</code> (methodology) · <code>FRAMEWORK-CONFIG.md</code> (the dial) · <code>persistence-architecture.md</code> (the layer model) · <code>STAGE-PROMPT-PROTOCOL.md</code> (the XML schema) · <code>PROCESS-VALIDATION.md</code> (the scoring).
+  </footer>
+
+</div>
+</body>
+</html>

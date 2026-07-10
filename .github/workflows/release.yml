@@ -1,0 +1,87 @@
+name: release
+
+# Publishes the starter archive for a tagged version, and the evidence that says
+# where the archive came from. It runs only on a `v*` tag.
+#
+# The published claims this workflow is the control for:
+#   * "built from a signed tag, never a working tree" — the tag is refused unless
+#     it is annotated AND its signature verifies against the maintainer's public
+#     key. The key comes from the RELEASE_SIGNING_PUBKEY repository variable; if
+#     that variable is unset the job FAILS. An unverifiable tag must stop a
+#     release, not quietly skip the check.
+#   * "the same tag always produces the same hash" — `git archive` extracts the
+#     tag object. Nothing here reads the checked-out working tree, so a later
+#     commit cannot change what a tag builds.
+#   * "SLSA Level 2 build provenance" — actions/attest-build-provenance signs a
+#     provenance statement for the archive, on GitHub's hosted runner, with a
+#     workload identity this repository cannot forge. Verify a download with:
+#         gh attestation verify <zip> --repo <owner>/<repo>
+#
+# What it does NOT claim: no human security audit, no reproducibility across git
+# versions, no attestation of the source tree's contents beyond the tag it names.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Least-privilege floor, widened only for what attestation needs.
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # create the release and upload the archive
+      id-token: write        # mint the OIDC token the attestation is bound to
+      attestations: write    # record the provenance statement
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0            # tag objects and their signatures
+          persist-credentials: false
+
+      - name: Refuse a lightweight or unverified tag
+        env:
+          PUBKEY: ${{ vars.RELEASE_SIGNING_PUBKEY }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [ "$(git cat-file -t "$TAG")" != "tag" ]; then
+            echo "::error::$TAG is a lightweight tag. A release tag must be annotated and signed: git tag -s $TAG" >&2
+            exit 1
+          fi
+          if [ -z "${PUBKEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_PUBKEY is unset, so the tag signature cannot be verified. Set the repository variable to the maintainer's public key. The release claims a signed tag; an unchecked signature is not one." >&2
+            exit 1
+          fi
+          printf '%s\n' "$PUBKEY" | gpg --batch --import
+          git verify-tag "$TAG"
+
+      - name: Build the archive from the tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          NAME="software-build-assurance-kit-${TAG}-starter.zip"
+          echo "ARCHIVE=$NAME" >> "$GITHUB_ENV"
+          # The tag object is the source. The checked-out working tree is not read.
+          git archive --format=zip -o "$NAME" "$TAG"
+          sha256sum "$NAME" > "$NAME.sha256"
+          cat "$NAME.sha256"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
+        with:
+          subject-path: ${{ env.ARCHIVE }}
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file RELEASE-NOTES.md \
+            "${ARCHIVE}" "${ARCHIVE}.sha256"

@@ -1,0 +1,32 @@
+# Read-first orientation list — auto-loaded by .claude/hooks/session-start-read-first.cjs
+#
+# One file path per line, relative to the repo root. Lines starting with `#`
+# are comments. Blank lines are ignored. The list is capped at session start
+# by the `read_first_cap` setting in project-config.md (small=4, medium=8,
+# large=12, unlimited=no cap). List in priority order; the cap takes the top N.
+#
+# Update this list when:
+#   - A new framework-level reference becomes load-bearing
+#   - A new milestone Phase doc opens (replace the previous milestone's Phase doc reference)
+#   - An ADR is referenced often enough that it should auto-load
+#
+# The agent should not have to remember to read these — the hook handles it.
+#
+# Restructured under I8 (M20.5.A): ≤8 entries, top-3 orientation core
+# (CLAUDE.md, project-config.md, the open Phase doc). The protocol spine
+# (BUILD-PLAYBOOK / STAGE-PROMPT-PROTOCOL / PROCESS-VALIDATION /
+# persistence-architecture) is NOT preloaded — it moved to the on-demand
+# "reference index" the SessionStart stamp emits ("read when the stage prompt
+# cites them"); the validators enforce its schema mechanically, so preloading
+# it is redundant with the floor. docs/scope, docs/style, docs/design are cited
+# on-demand by the stage prompt, not preloaded (they were already past the cap-8
+# cut, silently — this makes the drop honest).
+
+CLAUDE.md
+project-config.md
+docs/build-prompts/M01-foundation.md
+docs/identity.md
+docs/backlog.md
+docs/gates.md
+docs/app-map.md
+docs/gotchas.md

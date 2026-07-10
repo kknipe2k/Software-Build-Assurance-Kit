@@ -1,0 +1,34 @@
+# OPTIONAL — the $0 self-hosted backstop.
+# Rename to pr-smoke.yml (replacing the hosted version) to run the required PR
+# check on a SELF-HOSTED runner for zero GitHub-hosted minutes.
+#
+# Trade-off (see FRAMEWORK-CONFIG.md, verification_locus):
+#   + $0 minutes, and runs the FULL local matrix (not just a smoke subset) on
+#     your own hardware.
+#   - The runner (your dev box) must be ONLINE to gate a PR; needs basic
+#     hardening; and is PRIVATE-REPO-ONLY (never attach a self-hosted runner to
+#     a public repo — a fork PR can execute arbitrary code on it).
+#   - Self-hosted minutes are free/unmetered as of 2026, but GitHub has signalled
+#     intent to meter the Actions control plane (~$0.002/min); currently
+#     postponed. Worst case is ~pennies per PR — still the cheapest path.
+#
+# Hosting one runner: Settings -> Actions -> Runners -> New self-hosted runner.
+#
+# name: pr-smoke
+# on:
+#   pull_request:
+# concurrency:
+#   group: pr-smoke-${{ github.ref }}
+#   cancel-in-progress: true
+# # PKG-003 — least-privilege default token (read-only floor). Keep this when you rename.
+# permissions:
+#   contents: read
+# jobs:
+#   smoke:
+#     runs-on: [self-hosted]
+#     steps:
+#       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0 (SHA-pinned — re-resolve before use; see Dependabot in the live repo)
+#         with:
+#           persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
+#       - name: Full local matrix
+#         run: node scripts/verify-local.cjs

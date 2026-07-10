@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!--
+  {{PROJECT_NAME}} — interactive illustration (plain HTML/JS, Distill-style).
+  Phase A of a research_publish project. Zero build step: open in a browser or
+  serve the folder. Replace the placeholder finding + figure with the entries
+  from docs/findings-to-illustrate.md. Keep the paper cross-reference (G_RP_A1)
+  and the reproducibility note (G_RP_A2).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{PROJECT_NAME}}</title>
+  <style>
+    body { max-width: 48rem; margin: 2rem auto; padding: 0 1rem;
+           font: 16px/1.6 system-ui, sans-serif; color: #1a1a1a; }
+    .xref { color: #555; font-size: 0.9rem; }
+    figure { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; }
+    code { background: #f4f4f4; padding: 0 0.25rem; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>{{PROJECT_NAME}}</h1>
+
+  <!-- paper cross-reference surface (G_RP_A1, both directions) -->
+  <p class="xref">
+    This interactive app illustrates findings from
+    <a href="../../docs/paper/{{PAPER_TITLE}}.md"><code>docs/paper/{{PAPER_TITLE}}.md</code></a>.
+    The paper's §5 Illustrations references this app in return.
+  </p>
+  <p class="xref">
+    Every claim binds to a logged source in
+    <code>docs/sources/registry.md</code> — grounded STORM's <em>no source → no claim</em> rule.
+  </p>
+
+  <h2>F1 — {{finding headline}} [S001]</h2>
+  <p>{{One sentence restating the finding the reader is about to explore.}}</p>
+
+  <figure>
+    <!-- reader-driven control illustrating the finding -->
+    <label>{{parameter}}:
+      <input id="param" type="range" min="0" max="100" value="50" />
+    </label>
+    <output id="result">Illustrated result for parameter = 50: {{compute / plot}}</output>
+  </figure>
+
+  <!-- reproducibility surface (G_RP_A2) -->
+  <p class="xref">
+    Reproducibility: the data (<code>data/</code>) and the transformations behind
+    this figure are reproducible from this repo — not from a one-off local run.
+  </p>
+
+  <script type="module">
+    // Load data from in-repo files (e.g. ./data/findings.json) so the figure is
+    // reproducible (G_RP_A2). Replace the placeholder compute below.
+    const param = document.getElementById('param');
+    const result = document.getElementById('result');
+    param.addEventListener('input', () => {
+      result.textContent = `Illustrated result for parameter = ${param.value}: {{compute / plot}}`;
+    });
+  </script>
+</body>
+</html>

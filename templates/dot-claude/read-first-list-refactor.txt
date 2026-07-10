@@ -1,0 +1,38 @@
+# Read-first orientation list for REFACTOR (Stage R) sessions.
+#
+# Loaded by .claude/hooks/session-start-read-first.cjs when .claude/role
+# contains "refactor". This is the STRICTEST bias guard in the kit — one step
+# beyond the verifier list: it omits prior retrospectives, milestone
+# summaries, and gap-analysis carry-forwards (like the verifier) AND it omits
+# prior Stage R findings. Reading the last R run would prime "we already looked
+# at this; it's clean" — exactly the confirmation bias Stage R exists to remove.
+# A genuine fresh-context "is the code maintainable?" pass needs neither the
+# work retros (which justify the code) nor the previous health check.
+#
+# To open a refactor session:
+#   1. Write "refactor" to .claude/role
+#   2. Open a fresh Claude Code session in this repo
+#   3. The hook auto-loads this refactor-specific list
+#   4. Paste the X.5 <refactor_stage_prompt> from docs/build-prompts/M[NN]-*.md
+#
+# When the refactor session is done:
+#   - Write "work" to .claude/role (or delete the file)
+#   - Subsequent sessions load the standard read-first-list.txt
+#
+# Loads the durable orientation (playbook, protocol, plan/spec, gates, gotchas,
+# the Phase doc) — NOT retrospectives/ and NOT prior R findings. The standard
+# read-first-list.txt is for work-mode sessions and IS allowed to reference
+# retros. This refactor list is the bias guard.
+#
+# Restructured under I8 (M20.5.A): ≤8 entries, top-3 orientation core, the
+# protocol spine (BUILD-PLAYBOOK / STAGE-PROMPT-PROTOCOL) moved to the on-demand
+# reference index the SessionStart stamp emits. The strictest bias-guard
+# omissions (no prior retrospectives, no prior R findings, no app-map) are
+# preserved.
+
+CLAUDE.md
+project-config.md
+docs/build-prompts/M01-foundation.md
+spec/project-spec.md
+docs/gates.md
+docs/gotchas.md

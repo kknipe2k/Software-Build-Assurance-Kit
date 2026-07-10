@@ -1,0 +1,16 @@
+# PROC-001 red-gate allow-list — CONFIG-DRIVEN (the hook hardcodes no project's
+# test file). One glob per line; `#` starts a comment. A path matching any glob
+# here is treated as NON-implementation: it can be edited BEFORE /approve-red
+# (the builder must be able to write the failing tests + fill the retro first).
+#
+# The red-gate already covers these as BUILT-IN defaults — do not re-list them:
+#   docs/**  retrospectives/**  prompts/**  .claude/**  .github/**  spec/**  proposals/**
+#   **/*.md
+#   **/*.test.*  **/*.spec.*  **/*_test.*  **/*_spec.*
+#   **/test/**  **/tests/**  **/__tests__/**
+#
+# Add THIS project's test entrypoint(s) below — anything the standard *.test.*
+# patterns don't catch (e.g. a single-file smoke rig, a custom test dir):
+#
+# scripts/smoke.cjs
+# e2e/**

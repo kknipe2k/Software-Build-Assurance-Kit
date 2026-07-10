@@ -1,0 +1,30 @@
+{
+  "_fixture": "CLEARLY A TEST FIXTURE for the golden bootstrap — NOT a real project and NOT a default offered at a real bootstrap (hard rules #3/#7). The values below exist only to render the reference calibration placeholder-free and deterministically.",
+  "tier": "lite",
+  "project_name": "Fixture Project",
+  "cadence": "Standard",
+  "permission_profile": "fenced_autonomy",
+  "license_holder": "FIXTURE-HOLDER",
+  "license_year": "2026",
+  "fill": {
+    "LICENSE_TYPE": "MIT",
+    "LICENSE_HOLDER": "FIXTURE-HOLDER",
+    "LICENSE_YEAR": "2026",
+    "TEST_CMD": "npm run fixture-test",
+    "LINT_CMD": "npm run fixture-lint",
+    "BUILD_CMD": "npm run fixture-build",
+    "TYPECHECK_CMD": "npm run fixture-typecheck",
+    "INSTALL_CMD": "npm ci",
+    "MANIFEST_FILE": "package.json",
+    "DOCKER_IMAGE": "node:20-bookworm-fixture",
+    "LINUX_TEST_COMMAND": "npm run fixture-test",
+    "NATIVE_TEST_COMMAND": "npm run fixture-test",
+    "FAST_CHECK_COMMAND": "npm run fixture-lint",
+    "APP_MAP_SURFACE_GLOBS": "src/**",
+    "APP_MAP_TEST_GLOBS": "tests/**",
+    "SMOKE_COMMAND": "npm run fixture-smoke",
+    "ARTIFACT_GLOB": "dist/**",
+    "PACKAGE_COMMAND": "npm run fixture-package",
+    "RELEASE_TEST_COMMAND": "npm run fixture-test"
+  }
+}

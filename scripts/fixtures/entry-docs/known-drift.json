@@ -1,0 +1,4 @@
+{
+  "note": "EMPTY = the enforcing floor. M20.C CLOSED the identity report cycle: the three identity classes (tier_terms/role_terms/product_name) are swept and now run ENFORCING, joining M19's value/count/doctrine classes. RIDER 1 (M20.A red-review, binding) is DISCHARGED HERE (Stage C, not E): known-drift.json is TOTALLY empty and the blanket length===0 invariant is RESTORED — the transitional class-scoped weakening does not ship past M20.C. Any live finding in any class is now UNKNOWN -> non-zero exit. Regenerate a candidate set: node validators/validate-entry-docs.cjs --report --json.",
+  "drift": []
+}

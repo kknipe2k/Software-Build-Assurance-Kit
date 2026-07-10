@@ -1,0 +1,6 @@
+# Force LF on disk for all tracked text files, regardless of OS or the
+# contributor's git core.autocrlf setting. Without this, a Windows default
+# install (core.autocrlf=true) checks files out as CRLF, and any project
+# configured with prettier endOfLine: "lf" then fails format:check on every
+# file. text=auto lets git decide what's text; eol=lf pins the on-disk ending.
+* text=auto eol=lf

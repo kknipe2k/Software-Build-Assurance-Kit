@@ -1,0 +1,4 @@
+{
+  "_doc": "EMPTIED → ENFORCING. Report mode is over: the three red-gate scripts now ship in templates/scripts/, the pretooluse-red-gate.cjs hook row is now in the CLAUDE.md Phase-3 always-generated table, and templates/LICENSE now ships with owner-supplied placeholders, so the three-way --diff has ZERO findings and exits 0. With this baseline empty, ANY finding is now UNKNOWN → exit 1: the drift class that shipped a dormant red-gate is a red CI check, not a documented known gap. Re-populating this file to hide a real gap would defeat the instrument — a fix goes in the scaffold, never in the baseline.",
+  "gaps": []
+}

@@ -1,0 +1,50 @@
+# Categories for GitHub's automatically generated release notes.
+#
+# The generated notes are a raw list of merged changes. They are never the whole
+# story of a release: the hand-written summary in RELEASE-NOTES.md carries the
+# capabilities, the limitations, and the evidence, and it comes first. This file
+# only decides how the auto-generated list underneath it is grouped.
+#
+# Labels not named below fall through to the catch-all category at the end, so a
+# change can never be silently dropped from the notes for want of a label.
+
+changelog:
+  exclude:
+    labels:
+      - no-release-note
+      - duplicate
+      - invalid
+
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking
+
+    - title: Security
+      labels:
+        - security
+
+    - title: Enforcement — validators, hooks, and gates
+      labels:
+        - validator
+        - hook
+        - gate
+
+    - title: Bug fixes
+      labels:
+        - bug
+        - false-green
+        - bootstrap-failure
+
+    - title: New capabilities
+      labels:
+        - enhancement
+        - feature
+
+    - title: Documentation
+      labels:
+        - documentation
+
+    - title: Other changes
+      labels:
+        - "*"

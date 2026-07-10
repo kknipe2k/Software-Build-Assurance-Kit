@@ -1,0 +1,5 @@
+{
+  "cutover": null,
+  "note": "The retro-stamp grandfather baseline: retrospectives authored before a project adopted the binary verdict stamp, which keep their older stamp form and validate under the legacy rules. A NEW project has no pre-adoption history, so this list ships EMPTY and nothing is grandfathered — every retrospective speaks the verdict form from the first one. A file joins this list only via a reviewable diff.",
+  "files": []
+}

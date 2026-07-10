@@ -1,0 +1,38 @@
+# Read-first orientation list for ORCHESTRATOR sessions.
+#
+# Loaded by .claude/hooks/session-start-read-first.cjs when .claude/role
+# contains "orchestrator". The orchestrator role authors Phase docs / ADRs,
+# adjudicates build surfaces, routes Verifier findings, and runs PR/merge.
+#
+# This list loads ORCHESTRATOR.md FIRST (the orchestrator's operating manual),
+# then CLAUDE.md, then the standing methodology + the live milestone state.
+# Unlike the verifier list, this DOES include gap-analysis and the orchestrator
+# is expected to read the current milestone's retrospectives live (they can't
+# all be enumerated here — they accumulate per stage).
+#
+# To open an orchestrator session:
+#   1. Write "orchestrator" to .claude/role
+#   2. Open a fresh Claude Code session (the orchestrator's checkout — see
+#      ORCHESTRATOR.md §1 Topologies)
+#   3. The hook auto-loads this list
+#
+# When switching back to build/stage work:
+#   - Write "work" to .claude/role (or delete the file)
+#
+# ORCHESTRATOR.md is for orchestration sessions ONLY. It must never appear in
+# a stage prompt's <read_first>; the validator enforces that.
+#
+# Restructured under I8 (M20.5.A): ≤8 entries, the protocol spine
+# (BUILD-PLAYBOOK / STAGE-PROMPT-PROTOCOL) moved to the on-demand reference
+# index the SessionStart stamp emits. Documented exception to the top-3 core
+# rule: ORCHESTRATOR.md (this role's operating manual) keeps first position by
+# design — the universal core (CLAUDE.md / project-config.md / the Phase doc)
+# follows it.
+
+ORCHESTRATOR.md
+CLAUDE.md
+project-config.md
+docs/scope.md
+docs/build-prompts/M01-foundation.md
+docs/gap-analysis.md
+docs/app-map.md
