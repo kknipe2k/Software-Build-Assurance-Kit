@@ -5,8 +5,15 @@ name: ci
 # artifact. Every step below runs a checked-in script against checked-in fixtures:
 # no network, no secrets, no matrix. A few seconds on free ubuntu minutes.
 #
+# Layout note: this repository keeps the kit payload under sbak/ (the entry docs
+# live at the repository root), so every step runs from sbak/ via the
+# working-directory default below. The self-description step polices BOTH levels:
+# --surface resolves the root-level entry docs from the surface root.
+#
 # What each step proves:
-#   * stage-prompt schema — the XML stage prompts in any Phase doc validate.
+#   * stage-prompt schema — the XML stage-prompt examples the kit ships (the Phase
+#     doc template and the bug-fix worked template) validate. A fresh public repo
+#     has no authored Phase docs yet; the shipped templates are the real targets.
 #   * enumeration coherence — every shipped validators/*.cjs is catalogued in all
 #     three places that claim to list them; add a validator and forget a catalog
 #     and this fails.
@@ -32,6 +39,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    working-directory: sbak
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -44,14 +55,16 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Stage-prompt schema
-        run: node validators/validate-stage-prompts.cjs --all
+      - name: Stage-prompt schema — the shipped templates' XML validates
+        run: |
+          node validators/validate-stage-prompts.cjs --templates
+          node validators/validate-stage-prompts.cjs --allow-placeholders templates/BUGFIX-PHASE-DOC.md
 
       - name: Validator enumeration coherence
         run: node validators/validate-validator-enumeration.cjs
 
-      - name: Self-description — the docs' own numbers match the code
-        run: node validators/validate-entry-docs.cjs
+      - name: Self-description — the docs' own numbers match the code (both levels)
+        run: node validators/validate-entry-docs.cjs --surface
 
       - name: Seeded-defect calibration set
         run: node validators/validate-calibration.cjs --set prompts/calibration --catalog STAGE-PROMPT-PROTOCOL.md

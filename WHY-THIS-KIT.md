@@ -8,30 +8,43 @@
 
 ## What it does
 
-**1. Bake-tested enforcement — the gates are tested the way code is.** Most process frameworks
-are documents; agents demonstrably ignore documents. Here the floors are mechanical — 16
-validators, 4 hooks, committed git hooks — and the enforcement layer is itself
-regression-tested: a 1,250+ check smoke suite (a floor the suite enforces on itself), plus a
-bake harness that renders a real project and proves the inherited gates *fire* there (a planted
-pre-approval edit is blocked; a broken hook turns the baked project's own mini-smoke red).
-Presence is never taken for effectiveness: locks are mutation-killed — delete the teeth and a
-check goes red. The full protocol (currently protocol v1.9, with 5 schemas for stage prompts) is
-enforced by validators at pre-commit and CI, so sessions don't need it preloaded to obey it.
+### 1. Bake-tested enforcement — the gates are tested the way code is
 
-**2. Calibrated fresh-context verification.** Every milestone ends with a verifier session that
-starts *blind*: its read-first list structurally omits the builder's retrospectives (a bias
-guard the hooks enforce, not a convention). Before its findings count, it must pass a
-seeded-defect calibration — catch every planted escape, false-negative rate zero — so a
-rubber-stamping verifier is caught by construction. In the kit's own use to date, that
-calibration has run at a false-negative rate of zero at every live run. The gate line runs
-16 hard gates (G1–G16) plus 5 soft (S1–S5), and the human's stamp is binary: pass or fail,
-with an explicit fail forcing the friction-heavy outcome.
+Most process frameworks are documents; agents demonstrably ignore documents. Here the floors
+are mechanical — 16 validators, 4 hooks, committed git hooks — and the enforcement layer is
+itself regression-tested:
 
-**3. Tier calibration — the ceremony is priced, chosen, and revisable.** One interview sets the
-tier: Lite (~36 scaffold files, brief retros, CHANGELOG-only ledger), Standard (~68 files,
-two-axis retros, advisory append-only ledger), Full (~69 files, three-axis retros, CI-enforced
-ledger immutability). Re-tier any time via a logged override. New process mass is budgeted: a
-new gate requires a named real failure it would have caught plus a sweep-cost estimate (N5).
+- **A 1,250+ check smoke suite** (in the development repository) — a floor the suite enforces on itself.
+- **A bake harness** that renders a real project and proves the inherited gates *fire* there: a planted pre-approval edit is blocked; a broken hook turns the baked project's own mini-smoke red.
+- **Mutation-killed locks** — presence is never taken for effectiveness: delete the teeth and a check goes red.
+
+The full protocol (currently protocol v1.9, with 5 schemas for stage prompts) is enforced by
+validators at pre-commit and CI, so sessions don't need it preloaded to obey it.
+
+### 2. Calibrated fresh-context verification
+
+Every milestone ends with a verifier session that starts *blind*: its read-first list
+structurally omits the builder's retrospectives (a bias guard the hooks enforce, not a
+convention).
+
+Before its findings count, it must pass a seeded-defect calibration — catch every planted
+escape, false-negative rate zero — so a rubber-stamping verifier is caught by construction.
+In the kit's own use to date, that calibration has run at a false-negative rate of zero at
+every live run.
+
+The gate line runs 16 hard gates (G1–G16) plus 5 soft (S1–S5), and the human's stamp is
+binary: pass or fail, with an explicit fail forcing the friction-heavy outcome.
+
+### 3. Tier calibration — the ceremony is priced, chosen, and revisable
+
+One interview sets the tier:
+
+- **Lite** — ~36 scaffold files, brief retros, CHANGELOG-only ledger.
+- **Standard** — ~68 files, two-axis retros, advisory append-only ledger.
+- **Full** — ~69 files, three-axis retros, CI-enforced ledger immutability.
+
+Re-tier any time via a logged override. New process mass is budgeted: a new gate requires a
+named real failure it would have caught plus a sweep-cost estimate (N5).
 
 And the build tells its own story: normal sessions leave local event ledgers, and `node scripts/build-receipts.cjs render` turns them + committed history into a deterministic, evidence-linked report under `reports/` — gitignored as a default, not a wall (negate the entry to track a report deliberately).
 
@@ -103,6 +116,8 @@ The claims above lean on the sources the framework review verified, both directi
 ---
 
 *Counts on this page — 16 validators, 4 hooks, 8 shipped project scripts, 6 slash commands,
-16 hard + 5 soft gates, 5 schemas, protocol v1.9, ~36/~68/~69 scaffold files, the 1,250+ smoke
-floor, and the covered-stack set — are policed by `validators/validate-entry-docs.cjs` and the
-smoke suite against derived facts. Start at `QUICKSTART.md`; the loop lives in `STAGE-LOOP.md`.*
+16 hard + 5 soft gates, 5 schemas, protocol v1.9, ~36/~68/~69 scaffold files, and the
+covered-stack set — are policed by `validators/validate-entry-docs.cjs` against derived facts.
+The 1,250+ smoke floor is measured in the development repository (its full suite does not ship);
+`scripts/bake-and-test.cjs` is the effectiveness proof that does. Start at `QUICKSTART.md`; the
+loop lives in `STAGE-LOOP.md`.*

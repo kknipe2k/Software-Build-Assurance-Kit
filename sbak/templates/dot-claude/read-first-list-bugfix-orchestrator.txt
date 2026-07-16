@@ -1,0 +1,38 @@
+# Read-first orientation list for ORCHESTRATOR sessions in BUG_FIX projects
+# (operating_mode: bug_fix + role: orchestrator).
+#
+# Loaded by .claude/hooks/session-start-read-first.cjs when project-config.md
+# carries `operating_mode: bug_fix` AND .claude/role contains "orchestrator".
+# The hook composes the read-first list from BOTH axes, most-specific-wins:
+# this file is the <op>-<role> variant, so it beats read-first-list-bugfix.txt
+# for orchestrator sessions. Without it, an orchestrator session in a bug_fix
+# project resolves the builder-family list and never auto-loads its own
+# operating manual — the gap this file closes.
+#
+# WHY AN ORCHESTRATOR IN A BUG FIX AT ALL:
+#   The bug_fix shape has no milestones and no Phase-doc authoring, but the
+#   two-brain pattern still earns its keep at the same moments it does in a
+#   greenfield run — adjudicating the Phase-A red surface (does the reproducer
+#   fail for the RIGHT reason? is the impact list complete?), the Phase-B
+#   scope-lock read (is this the SMALLEST change? — G_BUGFIX_B1), routing the
+#   Phase-C findings per the merge gate, and drafting the CHANGELOG one-liner
+#   + PR. The session role axis is orthogonal to the operating mode by design;
+#   running an orchestrator session is a topology choice, never a mode change.
+#
+# WHAT IT KEEPS — the manual, the rules, and the bug's contract:
+#   - ORCHESTRATOR.md            : the decision index (this role's manual, first)
+#   - docs/bugfix/<bug-id>.md    : the bug contract (observed vs expected,
+#                                  reproducer, impact-analysis list, fix summary)
+#   - the playbook's bug_fix workflow (§3.7) and the do-not-commit discipline.
+# It omits the greenfield spec/scope/backlog/milestone reads for the same
+# reason read-first-list-bugfix.txt does: a bug fix has none.
+#
+# The bootstrap rewrites `docs/bugfix/<bug-id>.md` below to the actual bug id.
+# Cap still applies (read_first_cap in project-config.md); list in priority order.
+
+ORCHESTRATOR.md
+CLAUDE.md
+project-config.md
+sbak/BUILD-PLAYBOOK.md
+docs/bugfix/<bug-id>.md
+docs/gotchas.md

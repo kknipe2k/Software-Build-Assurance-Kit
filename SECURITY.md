@@ -17,7 +17,7 @@ Report it privately through GitHub Private Vulnerability Reporting:
 
 **[Open a private security advisory](https://github.com/kknipe2k/Software-Build-Assurance-Kit/security/advisories/new)**
 
-That channel is private between you and the maintainer until an advisory is published. It is the only reporting channel for vulnerabilities; conduct concerns go elsewhere, via [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+That channel is private between you and the maintainer until an advisory is published. It is the only reporting channel for vulnerabilities.
 
 Please include the version or commit you tested, the platform and Node.js version, what an attacker gains, and a reproducer if you have one.
 

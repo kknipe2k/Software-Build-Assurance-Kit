@@ -1,0 +1,184 @@
+#!/usr/bin/env sh
+# @kit-version 0.2.0
+# .githooks/pre-commit  —  fast checks only, for quick feedback.
+# The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
+#
+# Activated by: git config core.hooksPath .githooks
+#   (run `node scripts/install-hooks.cjs` once after cloning).
+# Cross-platform: POSIX sh; on Windows it runs under Git's bundled bash.
+# Emergency override: git commit --no-verify  (logged, never routine).
+set -e
+
+# --- staged-file enumeration (ONCE, fail-closed) ------------------------------
+# Enumerate the staged set a SINGLE time and check git's OWN exit EXPLICITLY: a
+# `git diff --cached` failure must ABORT the commit, never be swallowed to an empty
+# list that silently SKIPS the gates below (PC-1 — the shell-side sibling of the
+# ERR-004 fail-closed fix). `set -e` does NOT catch a failure hidden inside a
+# pipeline ending in `| grep … || true`, so that swallow had to go: capture first,
+# then check. The per-gate greps further down operate on this captured data, so their
+# own `|| true` now only absorbs grep's no-match — never a git error.
+staged_all=$(git diff --cached --name-only --diff-filter=ACMR) || {
+  echo "pre-commit: 'git diff --cached' failed — refusing to skip the staged-file gates (fail-closed, PC-1)." >&2
+  exit 1
+}
+
+# --- framework validators (only fire when relevant files are staged) ----------
+if [ -f validators/validate-stage-prompts.cjs ]; then
+  # docs/bugfix/ is the bug_fix mode's phase-doc home — same schema, different tree (UAT 2026-07).
+  staged_phase=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
+  if [ -n "$staged_phase" ]; then
+    node validators/validate-stage-prompts.cjs $staged_phase
+  fi
+fi
+if [ -f validators/validate-retrospective.cjs ]; then
+  # ERR-012: only spawn the retro validator when a real stage retro is actually
+  # staged (mirrors the stage-prompt sibling above + the ERR-013 precise matcher:
+  # excludes templates/ and retrospectives/audit/). A normal commit with no retro
+  # staged never invokes it, so a validator fault can't abort the commit before the
+  # project fast-check below. B[0-9]+ rides alongside M[0-9]{2}: a bug_fix retro
+  # named off-convention (B01.A…) must still trigger the stamp gate (UAT #14).
+  staged_retro=$(printf '%s\n' "$staged_all" | grep -E '^retrospectives/(M[0-9]{2}|B[0-9]+).*-retrospective\.md$' || true)
+  if [ -n "$staged_retro" ]; then
+    node validators/validate-retrospective.cjs --staged
+  fi
+fi
+
+if [ -f validators/validate-test-honesty.cjs ]; then
+  # G9 test-honesty: a v1.7+ work-stage Phase doc must carry a <test_honesty>
+  # slot (named mutation, or `n/a — no risk surface`), and no staged test may be
+  # assertion-free / exception-only. Risk-tiered + incremental — the validator filters
+  # the staged set itself and fails CLOSED on a git error. Severity follows test_honesty
+  # (FRAMEWORK-CONFIG §4.17): --warn = advisory (Lite/Standard default, shipped here);
+  # a Full project REMOVES --warn to BLOCK. Only spawn when a Phase doc or test file is
+  # actually staged (mirrors the ERR-012 conditional-spawn pattern above). STACK-AWARE
+  # (I12-2, M20.5.B): the spawn filter routes the per-language test shapes the validator
+  # now evaluates — Python test_*/_test.py, Go *_test.go, Rust tests/*.rs — plus the
+  # Ruby _spec/_test.rb shapes it visibly discloses.
+  staged_th=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*\.md|docs/bugfix/[^/]+\.md|.*\.(spec|test)\.[cm]?[jt]sx?|([^ ]*/)?(tests?|__tests__)/[^ ]*\.[cm]?[jt]sx?|([^ ]*/)?test_[^ /]*\.py|.*_test\.(py|go)|([^ ]*/)?tests?/[^ ]*\.rs|.*_(spec|test)\.rb)$' || true)
+  if [ -n "$staged_th" ]; then
+    node validators/validate-test-honesty.cjs --warn --staged
+  fi
+fi
+
+if [ -f validators/validate-reconciliation.cjs ]; then
+  # Evidence-retention + count-reconciliation: a closeout / findings file that
+  # states a count must RECOMPUTE it from the ledger (or fail), and an assurance verdict
+  # must retain reproducible evidence. Content-gated (a file with neither block is a
+  # no-op) + fail-closed on a git error. Only fires on the closeout / findings surfaces —
+  # CHANGELOG, the gap-analysis / audit ledgers, and the milestone retros/findings — never
+  # templates/ (whose example blocks carry placeholders by design). Severity follows the
+  # same model as test-honesty: --warn = advisory (shipped here); a Full project REMOVES
+  # --warn to BLOCK. Mirrors the ERR-012 conditional-spawn pattern above.
+  staged_rc=$(printf '%s\n' "$staged_all" | grep -E '^(CHANGELOG\.md|docs/gap-analysis\.md|docs/audit/.*\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
+  if [ -n "$staged_rc" ]; then
+    node validators/validate-reconciliation.cjs --warn $staged_rc
+  fi
+fi
+
+if [ -f validators/validate-risk-escalation.cjs ]; then
+  # G11 risk-overrides-tier: a staged project-config.md that declares a
+  # risk_triggers: token must carry a visible escalation record (the token `deep verification
+  # because:` bound to the trigger) in docs/gates.md, or BLOCK. Per-trigger AND-ed; fail-closed
+  # (a declared trigger + unreadable gates.md → non-zero; a no-trigger project no-ops). Severity
+  # follows risk_escalation (FRAMEWORK-CONFIG §4.19): --warn = advisory (Lite/Standard default,
+  # shipped here); a Full project REMOVES --warn to BLOCK. Only fires when project-config.md is
+  # staged (mirrors the ERR-012 conditional-spawn pattern above).
+  staged_re=$(printf '%s\n' "$staged_all" | grep -E '(^|/)project-config\.md$' || true)
+  if [ -n "$staged_re" ]; then
+    node validators/validate-risk-escalation.cjs --warn --staged
+  fi
+fi
+
+if [ -f validators/validate-destructive-op.cjs ]; then
+  # G12 destructive-op hard rule: when the staged set touches a destructive
+  # surface (restore/import/migrate/delete/replace/extract/unzip/backup — a test-block name or a
+  # code-file basename), it must carry BOTH a rollback test AND a confinement test exercising a
+  # REAL hostile path (../, encoded, symlink) — never a toy path. Tier-independent (alongside G1);
+  # fail-closed on a git error. Severity follows destructive_op (FRAMEWORK-CONFIG §4.17): --warn =
+  # advisory (Lite/Standard default, shipped here); a Full project REMOVES --warn to BLOCK. Only
+  # fires when a test file or a destructive-basename code file is staged (ERR-012 conditional-spawn).
+  staged_dop=$(printf '%s\n' "$staged_all" | grep -E '\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(restore|import|migrate|delete|replace|extract|unzip|backup)[^/]*\.([cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|cc|cpp|cxx|h|hpp|sh|bash|sql)$' || true)
+  if [ -n "$staged_dop" ]; then
+    node validators/validate-destructive-op.cjs --warn --staged
+  fi
+fi
+
+if [ -f validators/validate-risk-matrix.cjs ]; then
+  # G13 risk-matrix: a v1.8+ (or banner-LESS) work-stage Phase doc
+  # that DECLARES a risk surface (a <risk_declaration triggers="…"> slot) must address all 9
+  # matrix properties — each `covered-by: … — test: …` or an explicit `n/a`. Runs on the
+  # CHANGED set only (--staged), so a committed-but-untouched legacy banner-less doc is never
+  # retro-failed; fail-closed on a git error. Severity follows risk_matrix (FRAMEWORK-CONFIG
+  # §4.19): --warn = advisory (Lite/Standard default, shipped here); a Full project REMOVES
+  # --warn to BLOCK. Only fires when a Phase doc is staged (ERR-012 conditional-spawn pattern).
+  staged_rm=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
+  if [ -n "$staged_rm" ]; then
+    node validators/validate-risk-matrix.cjs --warn --staged
+  fi
+fi
+
+if [ -f validators/validate-calibration.cjs ]; then
+  # G14 verifier-proof: the seeded-defect calibration set + the
+  # recorded FNR are the verifier-proof. The STATIC FLOOR runs here — when the calibration set
+  # (prompts/calibration/**) or a *-findings.md is staged, validate-calibration.cjs checks the
+  # set shadows the full §8.5 catalog, every fixture is labeled + SEALED (no answer in the
+  # fixture), and a "Sound" findings file records a calibration block. Fail-closed on a git error.
+  # HONEST LOCUS: this floor only proves the harness is present + wired — the CATCH is the FNR
+  # recorded at V-time (agent judgment), NOT a pre-commit check (you can't run a judge in a smoke
+  # test). Severity follows the same model: --warn = advisory (shipped here); a Full project
+  # REMOVES --warn to BLOCK. Only fires when a calibration file or a findings file is staged.
+  staged_cal=$(printf '%s\n' "$staged_all" | grep -E '^prompts/calibration/|-findings\.md$' || true)
+  if [ -n "$staged_cal" ]; then
+    node validators/validate-calibration.cjs --warn --staged
+  fi
+fi
+
+if [ -f validators/validate-transition.cjs ]; then
+  # G15 transitions: (a) a durable-state write (.claude/role / .claude/active-mode / stage-active,
+  # a *-state.md ledger) must write-temp-rename, never truncate-then-write (the ERR-002 race);
+  # (b) a closeout/release ```rework block must carry the four fixed types and reconcile its
+  # total against the fix-commit evidence (no "0 rework" while fix commits exist). The validator
+  # SKIPS test/harness source files internally, so a state-named write in test code never blocks.
+  # Severity follows transition (FRAMEWORK-CONFIG §4.20): --warn = advisory (Lite/Standard default,
+  # shipped here); a Full project REMOVES --warn to BLOCK. Only fires when a source file (clause 1)
+  # or a closeout / release-state surface (clause 2) is staged (ERR-012 conditional-spawn pattern).
+  # STACK-AWARE (I12-2, M20.5.B, A-19): clause 1 evaluates JS/TS/JSX-TSX, Python, Go, and Rust
+  # (extension-keyed), so the spawn filter routes all six. This filter lives in TWO pre-commits
+  # (kit + template) — sweep both or ship a divergence.
+  staged_tr=$(printf '%s\n' "$staged_all" | grep -E '\.(c|m)?[jt]sx?$|\.(py|go|rs)$|^(CHANGELOG\.md|docs/release-state\.md|docs/gap-analysis\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
+  if [ -n "$staged_tr" ]; then
+    node validators/validate-transition.cjs --warn $staged_tr
+  fi
+fi
+
+if [ -f validators/validate-release-readiness.cjs ]; then
+  # G16 release-readiness: a docs/release-state.md entry reaching a gated state must
+  # be well-formed — (1) a public-distribution-ready claim cites an INDEPENDENT whole-product
+  # review record when the project declares capability triggers (risk_triggers:); (2) no ladder
+  # state is silently skipped (each intervening rung climbed or `n/a — <reason>`-exempted);
+  # (3) a release-end state (packaged/public) cites its SLSA build level (L1-L3 or `n/a —
+  # <reason>`). Stale manual-only / un-driven `verified` App-Map surfaces are FLAGGED
+  # (advisory). Honest locus: the record is required PRESENT (not judged good) and the SLSA level
+  # CITED (not that provenance was achieved — release.yml's attest step proves that at build).
+  # Severity follows release_readiness (FRAMEWORK-CONFIG §4.21): --warn = advisory (Lite/Standard
+  # default, shipped here); a Full project REMOVES --warn to BLOCK. Only fires when the release-
+  # state ledger is staged (ERR-012 conditional-spawn pattern).
+  staged_rr=$(printf '%s\n' "$staged_all" | grep -E '^docs/release-state\.md$' || true)
+  if [ -n "$staged_rr" ]; then
+    node validators/validate-release-readiness.cjs --warn $staged_rr
+  fi
+fi
+
+# --- I12-1 visible-skip, scope NARROWED by I12-2 (M20.5.B): the G9/G15 static floors now
+# evaluate JS/TS/JSX-TSX, Python, Go, and Rust (extension-keyed, A-19). DISCLOSE — never
+# silently skip — when staged GENUINELY-OTHER source files exist (rb/java/kt/…): those
+# stacks get neither the durable-state-write (G15) nor the assertion-honesty (G9) static
+# evaluation here; Stage V carries the check. Advisory: never aborts the commit (guarded `|| true`).
+staged_nonjs=$(printf '%s\n' "$staged_all" | grep -E '\.(rb|java|kt|kts|cs|cc|cpp|cxx|hpp|swift|scala|clj|ex|exs|php|sh|bash|sql)$' || true)
+if [ -n "$staged_nonjs" ]; then
+  n_nonjs=$(printf '%s\n' "$staged_nonjs" | grep -c .)
+  echo "NOTE  G9/G15 static floors cover JS/TS/JSX-TSX/Python/Go/Rust — $n_nonjs staged other-stack source file(s) not evaluated here; Stage V carries the check." >&2
+fi
+
+# --- project fast checks (lint + unit subset) ---------------------------------
+{{FAST_CHECK_COMMAND}}

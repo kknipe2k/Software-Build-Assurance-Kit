@@ -1,0 +1,39 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "rules": [
+            {
+              "id": "js/fixture-note",
+              "defaultConfiguration": { "level": "note" },
+              "properties": {}
+            },
+            {
+              "id": "js/fixture-low-sev",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "security-severity": "4.0" }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "js/fixture-note",
+          "ruleIndex": 0,
+          "level": "note",
+          "message": { "text": "fixture: note-level — below threshold, counted and printed" }
+        },
+        {
+          "ruleId": "js/fixture-low-sev",
+          "ruleIndex": 1,
+          "level": "warning",
+          "message": { "text": "fixture: security-severity 4.0 — below threshold, counted and printed" }
+        }
+      ]
+    }
+  ]
+}

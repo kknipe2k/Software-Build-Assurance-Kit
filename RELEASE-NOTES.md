@@ -1,8 +1,8 @@
-# Release notes — v0.1.0
+# Release notes — v0.2.0
 
-**This is an experimental release.** It is the first public version of the Software Build Assurance Kit. Interfaces, file layouts, and command names will break between 0.x releases without a deprecation period. Nothing here is stable yet, and nothing here should be assumed safe because it is published.
+**This is an experimental release.** It is the first release under the name Software Build Assurance Kit, and the second public cut of the kit. Interfaces, file layouts, and command names will break between 0.x releases without a deprecation period. Nothing here is stable yet, and nothing here should be assumed safe because it is published.
 
-Read this page before you adopt the kit for anything you care about. It says what works, what does not, and what evidence backs each claim.
+Read this page before you adopt the kit for anything you care about. It says what works, what does not, and what evidence backs each claim. The release history in the same shape is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Capabilities
 
@@ -12,9 +12,10 @@ What the kit does today, on any project you copy it into:
 - **Four operating modes.** `greenfield` builds something new. `bug_fix` reproduces a defect, fixes it minimally, and verifies once. `audit` reviews an existing codebase and produces findings rather than code. `research_publish` synthesizes sources into a paper plus an illustrative app, with every claim bound to a logged source.
 - **A red-first stage loop with teeth.** A hook blocks edits to implementation files while a stage is open and the failing test has not yet been approved by a human. Tests come before code because the tooling will not permit the reverse.
 - **Blind verification with a calibration gate.** Each milestone ends with a verifier session whose reading list structurally omits the builder's notes. Before its findings are counted, it must catch every defect in a seeded set. A verifier that misses seeded defects is not trusted with real ones.
-- **An enforcement layer that is itself tested.** 16 validators and 4 hooks, plus committed git hooks, guard the stage protocol, the retrospective stamp, test honesty, risk declarations, destructive operations, release readiness, and more. A regression suite proves each check still fires; remove a check's teeth and a test goes red.
+- **An enforcement layer that is itself tested.** 16 validators and 4 hooks, plus committed git hooks, guard the stage protocol, the retrospective stamp, test honesty, risk declarations, destructive operations, release readiness, and more. A regression suite in the development repository proves each check still fires (remove a check's teeth and a test goes red); `scripts/bake-and-test.cjs` ships as the effectiveness proof a reader can run.
 - **Evidence you can read.** Sessions leave append-only event ledgers. A collector turns those plus committed history into a deterministic report bound to real commits, showing findings, fixes, and rework — with unknown values reported as unknown rather than as zero.
 - **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag via `git archive`, never from a working tree. The same tag always produces the same hash.
+- **An entry you can evaluate in one sitting.** New at this release: [docs/what-this-is.md](docs/what-this-is.md) answers the is-it questions straight, [docs/positioning.md](docs/positioning.md) names where other tools are stronger, and [docs/limitations.md](docs/limitations.md) carries the boundary list the validators themselves disclose.
 
 ## Limitations
 
@@ -37,7 +38,7 @@ What backs the claims above, and how you can check it yourself:
 
 - **Continuous integration runs the kit's enforcement layer against the kit.** On every push and pull request: the stage-prompt schema check over every phase document; an enumeration check proving each shipped validator is catalogued everywhere that lists them; the seeded-defect calibration set, checked in both directions so no fixture leaks its own answer; a self-description check proving the numbers in the documentation match the code they describe; the golden-scaffold check, so a template edit cannot silently change what a bootstrapped project receives; and a bake harness that renders a real project, plants a violation, and requires the inherited validator to reject it. Presence is never taken for effectiveness.
 - **The build receipt is real.** `example-receipt.html` is derived by the collectors from this repository's own commits, findings, and rework. It is not a staged demonstration and it does not hide its gaps: intervals that are unknown are printed as unknown.
-- **Artifacts are verifiable.** `software-build-assurance-kit-v0.1.0-starter.zip` ships with a `.sha256`. It is built from the signed tag, not a working tree, and carries SLSA Level 2 build provenance. Building the same tag twice produces the same hash.
+- **Artifacts are verifiable.** `sbak-v0.2.0-starter.zip` ships with a `.sha256`. It is built from the signed tag, not a working tree, and carries SLSA Level 2 build provenance. Building the same tag twice produces the same hash.
 - **The claims in the documentation are machine-checked.** Counts, gate ranges, the protocol version, and the covered-language set are derived from the code and validated in CI. A number that drifts fails the build rather than quietly misleading a reader.
 - **The research behind the design, including the evidence against it,** is collected in `WHY-THIS-KIT.md` with citations pointing in both directions.
 

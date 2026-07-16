@@ -25,12 +25,14 @@ Please include your operating system, your Node.js version, the operating mode a
 
 ## Before any future pull request
 
-Should pull requests open in a later version, run the checks locally first. They are the same ones CI runs, they need no network and no secrets, and they take seconds:
+Should pull requests open in a later version, run the checks locally first. They are the same ones CI runs, they need no network and no secrets, and they take seconds. The kit payload lives under `sbak/` (CI sets the same working directory), so from the repository root:
 
 ```
-node validators/validate-stage-prompts.cjs --all
+cd sbak
+node validators/validate-stage-prompts.cjs --templates
+node validators/validate-stage-prompts.cjs --allow-placeholders templates/BUGFIX-PHASE-DOC.md
 node validators/validate-validator-enumeration.cjs
-node validators/validate-entry-docs.cjs
+node validators/validate-entry-docs.cjs --surface
 node validators/validate-calibration.cjs --set prompts/calibration --catalog STAGE-PROMPT-PROTOCOL.md
 node scripts/golden-bootstrap.cjs --check-manifest
 node scripts/golden-bootstrap.cjs --diff
@@ -41,7 +43,7 @@ A change that alters what a bootstrapped project receives will fail the golden c
 
 ## Conduct
 
-Participation in this project's spaces is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Be direct and be civil. Issues here are read by one maintainer, and a plain, respectful report is the fastest path to a fix.
 
 ## Security
 

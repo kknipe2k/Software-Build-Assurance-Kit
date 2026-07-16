@@ -1,0 +1,178 @@
+{
+  "fields": {
+    "command_count": {
+      "kind": "derived",
+      "source": "templates/dot-claude/commands/*.md glob",
+      "value": 6
+    },
+    "entry_docs": {
+      "kind": "derived",
+      "source": "validate-entry-docs.cjs ENTRY_DOCS (the policed entry-doc set)",
+      "value": [
+        "README.md",
+        "CLAUDE.md",
+        "QUICKSTART.md",
+        "QUICKSTART-COPILOT.md",
+        "STAGE-LOOP.md",
+        "HOW-IT-WORKS.html",
+        "validators/README.md",
+        "WHY-THIS-KIT.md",
+        "RELEASE-NOTES.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "CHANGELOG.md",
+        "docs/what-this-is.md",
+        "docs/positioning.md",
+        "docs/limitations.md",
+        "bootstrap/SCAFFOLD-TABLES.md",
+        "bootstrap/MODE-greenfield.md",
+        "bootstrap/MODE-bug_fix.md",
+        "bootstrap/MODE-research_publish.md",
+        "bootstrap/MODE-audit.md",
+        "bootstrap/PHASES.md"
+      ]
+    },
+    "gate_range": {
+      "kind": "bound",
+      "source": "composed from hard_gates (PROCESS-VALIDATION.md)",
+      "value": "G1–G16"
+    },
+    "hard_gates": {
+      "kind": "bound",
+      "source": "PROCESS-VALIDATION.md numbered universal line G1–GN",
+      "value": 16
+    },
+    "hook_count": {
+      "kind": "derived",
+      "source": "templates/dot-claude/hooks/*.cjs glob",
+      "value": 4
+    },
+    "interview_choice_count": {
+      "kind": "bound",
+      "source": "templates/CALIBRATION-INTERVIEW.md \"## Choice N\" headings",
+      "value": 5
+    },
+    "kit_version": {
+      "kind": "declared",
+      "source": "the release identity, stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
+      "value": "0.2.0"
+    },
+    "operating_mode_count": {
+      "kind": "bound",
+      "source": "templates/CALIBRATION-INTERVIEW.md operating_mode value list",
+      "value": 4
+    },
+    "product_name": {
+      "kind": "declared",
+      "source": "the product name — no machine source; the manifest is its canonical home and the product_name class polices the docs against it",
+      "value": "Software Build Assurance Kit"
+    },
+    "product_name_legacy": {
+      "kind": "declared",
+      "source": "the retired display + informal names (what the product_name class flags)",
+      "value": [
+        "Build Framework Starter Kit",
+        "bf-kit"
+      ]
+    },
+    "protocol_version": {
+      "kind": "derived",
+      "source": "STAGE-PROMPT-PROTOCOL.md ### Changelog (newest v)",
+      "value": "1.9"
+    },
+    "repo_slug": {
+      "kind": "declared",
+      "source": "the GitHub slug; clone URLs in the docs compare against THIS",
+      "value": "Software-Build-Assurance-Kit"
+    },
+    "role_names": {
+      "kind": "bound",
+      "source": "scripts/set-mode.cjs VALID_MODES (the role values — the axis rename never touches them)",
+      "value": [
+        "work",
+        "verifier",
+        "orchestrator",
+        "refactor"
+      ]
+    },
+    "scaffold_counts": {
+      "kind": "referenced",
+      "source": "golden-manifest.json tiers[tier].counts.rendered (read live)",
+      "value": {
+        "full": 69,
+        "lite": 36,
+        "standard": 68
+      }
+    },
+    "schema_count": {
+      "kind": "bound",
+      "source": "STAGE-PROMPT-PROTOCOL.md root-element catalog (<..._stage_prompt>/<..._pass_prompt>)",
+      "value": 5
+    },
+    "schema_names": {
+      "kind": "bound",
+      "source": "STAGE-PROMPT-PROTOCOL.md root-element catalog",
+      "value": [
+        "work_stage_prompt",
+        "closeout_stage_prompt",
+        "verifier_stage_prompt",
+        "refactor_stage_prompt",
+        "audit_pass_prompt"
+      ]
+    },
+    "script_count": {
+      "kind": "derived",
+      "source": "templates/scripts/*.cjs glob",
+      "value": 8
+    },
+    "soft_gates": {
+      "kind": "bound",
+      "source": "PROCESS-VALIDATION.md S1–SN",
+      "value": 5
+    },
+    "stack_coverage": {
+      "kind": "derived",
+      "source": "validators/validate-transition.cjs LANG_WRITE_CALLS ∩ validators/validate-test-honesty.cjs EVALUATED_LANGS (key sets must agree; display-mapped)",
+      "value": [
+        "JS/TS/JSX-TSX",
+        "Python",
+        "Go",
+        "Rust"
+      ]
+    },
+    "state_file": {
+      "kind": "declared",
+      "source": "the session-axis state file",
+      "value": ".claude/role"
+    },
+    "state_file_legacy": {
+      "kind": "declared",
+      "source": "the one-release read-compatible alias; legitimate only in the state-contract note + fallback comments",
+      "value": ".claude/active-mode"
+    },
+    "tier_names": {
+      "kind": "declared",
+      "source": "the unified tier vocabulary (what project-config.md persists)",
+      "value": [
+        "Lite",
+        "Standard",
+        "Full"
+      ]
+    },
+    "tier_names_legacy": {
+      "kind": "declared",
+      "source": "the retired interview labels (Light->Lite, Mid->Standard, Complex->Full)",
+      "value": [
+        "Light",
+        "Mid",
+        "Complex"
+      ]
+    },
+    "validator_count": {
+      "kind": "derived",
+      "source": "validators/*.cjs glob",
+      "value": 16
+    }
+  },
+  "note": "The kit's self-descriptive facts. DERIVED (machine source) / BOUND (re-parsed from a home doc's structure) / REFERENCED (read live from golden-manifest.json) / DECLARED (a decision with no machine source — the manifest is its canonical home; the identity classes police the docs against it) — never hand-stated twice. Regenerate: node validators/validate-entry-docs.cjs --write-manifest. Policed by validators/validate-entry-docs.cjs (the entry-doc set) + selfCheck (derived-vs-stored rot). scaffold_counts is read LIVE from golden-manifest.json, not copied."
+}

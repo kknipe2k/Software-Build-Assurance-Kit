@@ -1,0 +1,1419 @@
+{
+  "note": "Reference calibration: greenfield / hybrid locus / non-web. Rendered by scripts/golden-bootstrap.cjs - DERIVED, do not hand-edit; regenerate with: node scripts/golden-bootstrap.cjs --write-manifest. PLACEHOLDER-SCAN SCOPE (deliberate narrowing, honest locus): only render:wiring rows - .claude/settings.json, scripts/verify-local.cjs, .githooks/pre-commit, .github/workflows/pr-smoke.yml, .github/workflows/release.yml, LICENSE - are scanned for a surviving {{PLACEHOLDER}} and MUST be zero (these are the deterministic files the bootstrap is contractually required to fill from discovery answers - e.g. LICENSE from the owner-supplied holder/year/type). render:copy form/doc templates (identity, scope, the prompts/ retrospective + phase-doc templates, etc.) ship VERBATIM with their {{placeholders}} intact - they are filled DURING the build, not at scaffold time (the scaffold-not-interview honest locus, mirroring bake-and-test). ENCODING (UTF-8 no-BOM + mojibake) is scanned on EVERY rendered file regardless of render mode.",
+  "tiers": {
+    "full": {
+      "counts": {
+        "rendered": 69,
+        "rows": 69,
+        "unrendered": 0
+      },
+      "files": [
+        {
+          "bom": false,
+          "file": ".claude/commands/approve-red.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "cda24f2f51598cd0edfc47fd5699c4d065bf195f8d437a6721af8c24f9fded0d"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/closeout.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "1fbea326fb98b968ec3e19adb022873ca3639326e8249560c6ad5c67b889ceab"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/on-track.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e43bccc6361c4970d48174a81e3f4a39f3c3d87ef8aebb23c4821666654779bc"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/refactor.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "2c5e0c035665e6c9572c57756a9861e8fb8e1ce4e7f549d7f77a6375da8d5d57"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/stage.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6d43faa3728635a6d0e2a86ba9c663aad21a494faeebeec95f6c2e0737d97abf"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/verify.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5d7747250081ac45351d55064ca3e485ca84e96216494d2a15f4a55595889552"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/pretooluse-red-gate.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/receipts-lifecycle.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/session-start-read-first.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/user-prompt-submit-mode-check.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-orchestrator.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "89d87df370e5da1811e159daaee2b1b000aaf1b856c9466c9e366aa138babec6"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-refactor.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a441acb62f80fe7135d8b9a2bdd21d2fdc4ef5305d2ea64e9d162d0870d63c59"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-verifier.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "3d2afb8d601d9be9521420145714320ebc595e17b7047ba08fb5743ff08fd0cf"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ec67619e963d0adb6e0002840038fb7d02141ace1a8218259b3241d45a3be304"
+        },
+        {
+          "bom": false,
+          "file": ".claude/settings.json",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "dd84d3058bb01f56995445bc7e8229ba6e5b3018645a958672af4c6cc5572391"
+        },
+        {
+          "bom": false,
+          "file": ".gitattributes",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "24dbd9f4c99605c2672c8a832e2621620db0c68a7d8b8518bf4f80f788323511"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-commit",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-push",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
+        },
+        {
+          "bom": false,
+          "file": ".github/copilot-instructions.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "45970b5b29f086fda3a4a3b5782d8a421d789a97f81b61d2c7dd200dd3feac3d"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/append-only-ledger.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b10621e49dc97a80098ad25f9ad3779ddb21dfb0b8b01d1c555e6e660de826a7"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/pr-smoke.self-hosted.yml.example",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c1a87ae484ba9d810b434ea9d2bc224329a8602b34b4fa5debbdd7b2881d76da"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/pr-smoke.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "51edf56998446b97f9f7ad5dd41fc4826772dfffa5333357be3046aa9f048a0e"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/release.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "f2efdb213b38f34dc3c8e8b4296459b069096531f846bd7d939364860aa9496e"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/validate-stage-prompts.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
+        },
+        {
+          "bom": false,
+          "file": ".gitignore",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "19207eea4daad1eb249e411b840223fed2118cc5544d7640298f779f64f36192"
+        },
+        {
+          "bom": false,
+          "file": "CHANGELOG.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bom": false,
+          "file": "CLAUDE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
+        },
+        {
+          "bom": false,
+          "file": "LICENSE",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5eedb0f584c3e301f0f0851d56c8637f6421f10ee5652868606a29e875d19335"
+        },
+        {
+          "bom": false,
+          "file": "ORCHESTRATOR.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "114d330d3ecca3ffca5f77abdd29a124ba8dd0e58633c853973d617492dc0ea1"
+        },
+        {
+          "bom": false,
+          "file": "docs/adr/0000-template.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d762467feef2584107b446b2e049122e930764c63b2b7fafb2c0501155865e0a"
+        },
+        {
+          "bom": false,
+          "file": "docs/app-map.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "0171e297c0a20fbda89d455dda15c1d73bebd8ef0706e692e3819ce11fd5f047"
+        },
+        {
+          "bom": false,
+          "file": "docs/backlog.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
+        },
+        {
+          "bom": false,
+          "file": "docs/build-prompts/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4f612a945596de5c4c352c7d1ca0ac3f1aa1e0734a7f0326e799b8bd28a09ddd"
+        },
+        {
+          "bom": false,
+          "file": "docs/consultations.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "51a23e86e9bd236c0fd2636357e1cd88554c31110d4b15db94f8088b9d051632"
+        },
+        {
+          "bom": false,
+          "file": "docs/gap-analysis.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "22b52c61b742998968a8a68ec22937be19b6c120e910a77a5a47db1a4b9eb98e"
+        },
+        {
+          "bom": false,
+          "file": "docs/gates.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "06a76e2156e1cd4fc299ca924b06797ae87d1f4c040f7cfb95b1db7e9c062486"
+        },
+        {
+          "bom": false,
+          "file": "docs/gotchas.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c6d5ec5a06a5acf130d8e8fba5f0816a55680f2bacdd1862e2fbfd32363b1066"
+        },
+        {
+          "bom": false,
+          "file": "docs/identity.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6ea63a1108323922f4d5df3113bb335c2feb589eda9099cfc5ba798c94bfc6a8"
+        },
+        {
+          "bom": false,
+          "file": "docs/off-track-log.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "1287c462e443222a851b39b2bf6524dea5bc31e3a7ddb4bf774ef1dbef6329a4"
+        },
+        {
+          "bom": false,
+          "file": "docs/scope.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
+        },
+        {
+          "bom": false,
+          "file": "docs/sessions.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c56dae4a3915eefe262244d0ad4037e3558362120dd1bf830690db437c2ac18f"
+        },
+        {
+          "bom": false,
+          "file": "docs/style.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8eaf1bbcaf552e7566b228f46a4a77c1503d610b82d4c894044ae554670f28a1"
+        },
+        {
+          "bom": false,
+          "file": "docs/tech-debt.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "14f0dd94cae7a35501101018cc22bd292d2d98b24ff18ffcc85ae1d785880ca0"
+        },
+        {
+          "bom": false,
+          "file": "project-config.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
+        },
+        {
+          "bom": false,
+          "file": "prompts/PHASE-DOC-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a9fda93281a740925b45342c93133c74cf70238e770aa18f45e4f12ded6d82b6"
+        },
+        {
+          "bom": false,
+          "file": "prompts/REFACTOR-FINDINGS-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "cd6f6966bb2c04ffb72b0ae12e0e9ef3bcdfff9018417d3ac19f824b1ebcb676"
+        },
+        {
+          "bom": false,
+          "file": "prompts/REFACTOR-RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "200b5ccc6816904a04ab1db05bd9e9e2305d58d933ea0685fce387eccb05af28"
+        },
+        {
+          "bom": false,
+          "file": "prompts/RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6eca028f19760e36fe3c4fad819d21f63eabf9f1862761d6f1a78a417950f4cf"
+        },
+        {
+          "bom": false,
+          "file": "prompts/SUMMARY-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c9cc514c2576b2ae28ae3bd109885771e28292d9084725292efb19454c4a383f"
+        },
+        {
+          "bom": false,
+          "file": "prompts/VERIFIER-FINDINGS-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4d6a79dcde394e2e03ec0f431433cadc9410c3bc5aa86486a5daccbf4620f91e"
+        },
+        {
+          "bom": false,
+          "file": "prompts/VERIFIER-RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a38a5129dcffc994558002b7cb5e380be3f49605b9a34e17c5f487c3b35d3eb1"
+        },
+        {
+          "bom": false,
+          "file": "retrospectives/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "028b078e523d9b99ba19751ab3ab3e5dc25b811a69feec8030148543eb5efd14"
+        },
+        {
+          "bom": false,
+          "file": "scripts/approve-red.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
+        },
+        {
+          "bom": false,
+          "file": "scripts/build-receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
+        },
+        {
+          "bom": false,
+          "file": "scripts/install-hooks.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
+        },
+        {
+          "bom": false,
+          "file": "scripts/kit-update.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts-collect.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/sandbox.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
+        },
+        {
+          "bom": false,
+          "file": "scripts/set-mode.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
+        },
+        {
+          "bom": false,
+          "file": "scripts/smoke-project.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
+        },
+        {
+          "bom": false,
+          "file": "scripts/stage-active.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
+        },
+        {
+          "bom": false,
+          "file": "scripts/verify-local.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
+        },
+        {
+          "bom": false,
+          "file": "validators/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
+        },
+        {
+          "bom": false,
+          "file": "validators/lib/fenced-block.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-app-map.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "004f2d3d121d532964cea48f37cfd197a36ceea1fc66931dca116e3f81406460"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-retrospective.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "db7b3f825516ce701a494721f095b512701186b6a119b4d521518c5361adb3c9"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-stage-prompts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-test-honesty.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "823d6e7d99c27881c6290474b6cfd90ff4afaf9bce7cc34c6bb6963d94fb21cf"
+        }
+      ],
+      "tier": "full"
+    },
+    "lite": {
+      "counts": {
+        "rendered": 36,
+        "rows": 36,
+        "unrendered": 0
+      },
+      "files": [
+        {
+          "bom": false,
+          "file": ".claude/hooks/pretooluse-red-gate.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/receipts-lifecycle.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/session-start-read-first.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/user-prompt-submit-mode-check.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-orchestrator.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "89d87df370e5da1811e159daaee2b1b000aaf1b856c9466c9e366aa138babec6"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-refactor.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a441acb62f80fe7135d8b9a2bdd21d2fdc4ef5305d2ea64e9d162d0870d63c59"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-verifier.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "3d2afb8d601d9be9521420145714320ebc595e17b7047ba08fb5743ff08fd0cf"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ec67619e963d0adb6e0002840038fb7d02141ace1a8218259b3241d45a3be304"
+        },
+        {
+          "bom": false,
+          "file": ".claude/settings.json",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "dd84d3058bb01f56995445bc7e8229ba6e5b3018645a958672af4c6cc5572391"
+        },
+        {
+          "bom": false,
+          "file": ".gitattributes",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "24dbd9f4c99605c2672c8a832e2621620db0c68a7d8b8518bf4f80f788323511"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-commit",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-push",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
+        },
+        {
+          "bom": false,
+          "file": ".github/copilot-instructions.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "45970b5b29f086fda3a4a3b5782d8a421d789a97f81b61d2c7dd200dd3feac3d"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/validate-stage-prompts.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
+        },
+        {
+          "bom": false,
+          "file": ".gitignore",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "19207eea4daad1eb249e411b840223fed2118cc5544d7640298f779f64f36192"
+        },
+        {
+          "bom": false,
+          "file": "CHANGELOG.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bom": false,
+          "file": "CLAUDE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
+        },
+        {
+          "bom": false,
+          "file": "LICENSE",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5eedb0f584c3e301f0f0851d56c8637f6421f10ee5652868606a29e875d19335"
+        },
+        {
+          "bom": false,
+          "file": "docs/backlog.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
+        },
+        {
+          "bom": false,
+          "file": "docs/identity.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6ea63a1108323922f4d5df3113bb335c2feb589eda9099cfc5ba798c94bfc6a8"
+        },
+        {
+          "bom": false,
+          "file": "docs/scope.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
+        },
+        {
+          "bom": false,
+          "file": "project-config.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
+        },
+        {
+          "bom": false,
+          "file": "scripts/approve-red.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
+        },
+        {
+          "bom": false,
+          "file": "scripts/build-receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
+        },
+        {
+          "bom": false,
+          "file": "scripts/install-hooks.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
+        },
+        {
+          "bom": false,
+          "file": "scripts/kit-update.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts-collect.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/sandbox.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
+        },
+        {
+          "bom": false,
+          "file": "scripts/set-mode.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
+        },
+        {
+          "bom": false,
+          "file": "scripts/smoke-project.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
+        },
+        {
+          "bom": false,
+          "file": "scripts/stage-active.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
+        },
+        {
+          "bom": false,
+          "file": "scripts/verify-local.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
+        },
+        {
+          "bom": false,
+          "file": "validators/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
+        },
+        {
+          "bom": false,
+          "file": "validators/lib/fenced-block.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-stage-prompts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
+        }
+      ],
+      "tier": "lite"
+    },
+    "standard": {
+      "counts": {
+        "rendered": 68,
+        "rows": 68,
+        "unrendered": 0
+      },
+      "files": [
+        {
+          "bom": false,
+          "file": ".claude/commands/approve-red.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "cda24f2f51598cd0edfc47fd5699c4d065bf195f8d437a6721af8c24f9fded0d"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/closeout.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "1fbea326fb98b968ec3e19adb022873ca3639326e8249560c6ad5c67b889ceab"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/on-track.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e43bccc6361c4970d48174a81e3f4a39f3c3d87ef8aebb23c4821666654779bc"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/refactor.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "2c5e0c035665e6c9572c57756a9861e8fb8e1ce4e7f549d7f77a6375da8d5d57"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/stage.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6d43faa3728635a6d0e2a86ba9c663aad21a494faeebeec95f6c2e0737d97abf"
+        },
+        {
+          "bom": false,
+          "file": ".claude/commands/verify.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5d7747250081ac45351d55064ca3e485ca84e96216494d2a15f4a55595889552"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/pretooluse-red-gate.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/receipts-lifecycle.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/session-start-read-first.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
+        },
+        {
+          "bom": false,
+          "file": ".claude/hooks/user-prompt-submit-mode-check.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-orchestrator.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "89d87df370e5da1811e159daaee2b1b000aaf1b856c9466c9e366aa138babec6"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-refactor.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a441acb62f80fe7135d8b9a2bdd21d2fdc4ef5305d2ea64e9d162d0870d63c59"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list-verifier.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "3d2afb8d601d9be9521420145714320ebc595e17b7047ba08fb5743ff08fd0cf"
+        },
+        {
+          "bom": false,
+          "file": ".claude/read-first-list.txt",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ec67619e963d0adb6e0002840038fb7d02141ace1a8218259b3241d45a3be304"
+        },
+        {
+          "bom": false,
+          "file": ".claude/settings.json",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "dd84d3058bb01f56995445bc7e8229ba6e5b3018645a958672af4c6cc5572391"
+        },
+        {
+          "bom": false,
+          "file": ".gitattributes",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "24dbd9f4c99605c2672c8a832e2621620db0c68a7d8b8518bf4f80f788323511"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-commit",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
+        },
+        {
+          "bom": false,
+          "file": ".githooks/pre-push",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
+        },
+        {
+          "bom": false,
+          "file": ".github/copilot-instructions.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "45970b5b29f086fda3a4a3b5782d8a421d789a97f81b61d2c7dd200dd3feac3d"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/pr-smoke.self-hosted.yml.example",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c1a87ae484ba9d810b434ea9d2bc224329a8602b34b4fa5debbdd7b2881d76da"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/pr-smoke.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "51edf56998446b97f9f7ad5dd41fc4826772dfffa5333357be3046aa9f048a0e"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/release.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "f2efdb213b38f34dc3c8e8b4296459b069096531f846bd7d939364860aa9496e"
+        },
+        {
+          "bom": false,
+          "file": ".github/workflows/validate-stage-prompts.yml",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
+        },
+        {
+          "bom": false,
+          "file": ".gitignore",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "19207eea4daad1eb249e411b840223fed2118cc5544d7640298f779f64f36192"
+        },
+        {
+          "bom": false,
+          "file": "CHANGELOG.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "bom": false,
+          "file": "CLAUDE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
+        },
+        {
+          "bom": false,
+          "file": "LICENSE",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5eedb0f584c3e301f0f0851d56c8637f6421f10ee5652868606a29e875d19335"
+        },
+        {
+          "bom": false,
+          "file": "ORCHESTRATOR.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "114d330d3ecca3ffca5f77abdd29a124ba8dd0e58633c853973d617492dc0ea1"
+        },
+        {
+          "bom": false,
+          "file": "docs/adr/0000-template.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d762467feef2584107b446b2e049122e930764c63b2b7fafb2c0501155865e0a"
+        },
+        {
+          "bom": false,
+          "file": "docs/app-map.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "0171e297c0a20fbda89d455dda15c1d73bebd8ef0706e692e3819ce11fd5f047"
+        },
+        {
+          "bom": false,
+          "file": "docs/backlog.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
+        },
+        {
+          "bom": false,
+          "file": "docs/build-prompts/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4f612a945596de5c4c352c7d1ca0ac3f1aa1e0734a7f0326e799b8bd28a09ddd"
+        },
+        {
+          "bom": false,
+          "file": "docs/consultations.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "51a23e86e9bd236c0fd2636357e1cd88554c31110d4b15db94f8088b9d051632"
+        },
+        {
+          "bom": false,
+          "file": "docs/gap-analysis.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "22b52c61b742998968a8a68ec22937be19b6c120e910a77a5a47db1a4b9eb98e"
+        },
+        {
+          "bom": false,
+          "file": "docs/gates.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "06a76e2156e1cd4fc299ca924b06797ae87d1f4c040f7cfb95b1db7e9c062486"
+        },
+        {
+          "bom": false,
+          "file": "docs/gotchas.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c6d5ec5a06a5acf130d8e8fba5f0816a55680f2bacdd1862e2fbfd32363b1066"
+        },
+        {
+          "bom": false,
+          "file": "docs/identity.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6ea63a1108323922f4d5df3113bb335c2feb589eda9099cfc5ba798c94bfc6a8"
+        },
+        {
+          "bom": false,
+          "file": "docs/off-track-log.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "1287c462e443222a851b39b2bf6524dea5bc31e3a7ddb4bf774ef1dbef6329a4"
+        },
+        {
+          "bom": false,
+          "file": "docs/scope.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
+        },
+        {
+          "bom": false,
+          "file": "docs/sessions.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c56dae4a3915eefe262244d0ad4037e3558362120dd1bf830690db437c2ac18f"
+        },
+        {
+          "bom": false,
+          "file": "docs/style.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "8eaf1bbcaf552e7566b228f46a4a77c1503d610b82d4c894044ae554670f28a1"
+        },
+        {
+          "bom": false,
+          "file": "docs/tech-debt.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "14f0dd94cae7a35501101018cc22bd292d2d98b24ff18ffcc85ae1d785880ca0"
+        },
+        {
+          "bom": false,
+          "file": "project-config.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
+        },
+        {
+          "bom": false,
+          "file": "prompts/PHASE-DOC-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a9fda93281a740925b45342c93133c74cf70238e770aa18f45e4f12ded6d82b6"
+        },
+        {
+          "bom": false,
+          "file": "prompts/REFACTOR-FINDINGS-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "cd6f6966bb2c04ffb72b0ae12e0e9ef3bcdfff9018417d3ac19f824b1ebcb676"
+        },
+        {
+          "bom": false,
+          "file": "prompts/REFACTOR-RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "200b5ccc6816904a04ab1db05bd9e9e2305d58d933ea0685fce387eccb05af28"
+        },
+        {
+          "bom": false,
+          "file": "prompts/RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "6eca028f19760e36fe3c4fad819d21f63eabf9f1862761d6f1a78a417950f4cf"
+        },
+        {
+          "bom": false,
+          "file": "prompts/SUMMARY-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c9cc514c2576b2ae28ae3bd109885771e28292d9084725292efb19454c4a383f"
+        },
+        {
+          "bom": false,
+          "file": "prompts/VERIFIER-FINDINGS-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4d6a79dcde394e2e03ec0f431433cadc9410c3bc5aa86486a5daccbf4620f91e"
+        },
+        {
+          "bom": false,
+          "file": "prompts/VERIFIER-RETROSPECTIVE-TEMPLATE.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a38a5129dcffc994558002b7cb5e380be3f49605b9a34e17c5f487c3b35d3eb1"
+        },
+        {
+          "bom": false,
+          "file": "retrospectives/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "028b078e523d9b99ba19751ab3ab3e5dc25b811a69feec8030148543eb5efd14"
+        },
+        {
+          "bom": false,
+          "file": "scripts/approve-red.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
+        },
+        {
+          "bom": false,
+          "file": "scripts/build-receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
+        },
+        {
+          "bom": false,
+          "file": "scripts/install-hooks.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
+        },
+        {
+          "bom": false,
+          "file": "scripts/kit-update.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts-collect.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/receipts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/sandbox.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
+        },
+        {
+          "bom": false,
+          "file": "scripts/set-mode.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
+        },
+        {
+          "bom": false,
+          "file": "scripts/smoke-project.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
+        },
+        {
+          "bom": false,
+          "file": "scripts/stage-active.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
+        },
+        {
+          "bom": false,
+          "file": "scripts/verify-local.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
+        },
+        {
+          "bom": false,
+          "file": "validators/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
+        },
+        {
+          "bom": false,
+          "file": "validators/lib/fenced-block.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-app-map.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "004f2d3d121d532964cea48f37cfd197a36ceea1fc66931dca116e3f81406460"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-retrospective.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "db7b3f825516ce701a494721f095b512701186b6a119b4d521518c5361adb3c9"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-stage-prompts.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-test-honesty.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "823d6e7d99c27881c6290474b6cfd90ff4afaf9bce7cc34c6bb6963d94fb21cf"
+        }
+      ],
+      "tier": "standard"
+    }
+  }
+}
