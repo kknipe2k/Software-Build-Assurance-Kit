@@ -1,0 +1,105 @@
+name: release
+
+# Attests and verifies the starter archive for a tagged version. It does NOT build the
+# archive and it does NOT publish the release — both are the maintainer's, off GitHub,
+# per the publication runbook (RELEASE-PREP-EXECUTION-PLAN.md §4):
+#   * the archive is built from the signed workshop tag by scripts/build-release.cjs (the
+#     payload ZIP, sbak-<tag>-starter.zip) — never from this public repository's tree;
+#   * the maintainer creates a DRAFT release, attaches the asset + its .sha256, and
+#     publishes by hand after verification. Release immutability + Private Vulnerability
+#     Reporting are enabled on the repo FIRST, so the first published release is immutable
+#     with no legacy gotchas — a botched asset then means v0.2.1, not an edit.
+#
+# This workflow is the verification-and-attestation control the runbook invokes manually
+# (workflow_dispatch) against that draft. What it proves:
+#   * "built from a signed tag" — the named tag is refused unless it is annotated AND its
+#     signature verifies against the maintainer's public key (the RELEASE_SIGNING_PUBKEY
+#     repository variable; unset => the job FAILS). An unverifiable tag stops a release.
+#   * draft-first — it refuses to run unless a DRAFT release already exists for the tag,
+#     so it can never race ahead of, or publish over, the maintainer's runbook order.
+#   * asset integrity — it downloads the owner-attached sbak-<tag>-starter.zip and its
+#     .sha256 and verifies the checksum against the bytes before attesting.
+#   * "SLSA Level 2 build provenance" — it attests the DOWNLOADED asset (the runbook's
+#     artifact, so `gh attestation verify` on the shipped ZIP resolves to this record),
+#     on GitHub's hosted runner, with a workload identity this repository cannot forge.
+#
+# What it does NOT do: create or publish a release (no `gh release create`, no undraft),
+# archive this repository's tree (no `git archive`), or widen `contents` to write.
+#
+# Attest action: the runbook §4 step 5 names actions/attest@v4. This uses its purpose-
+# built wrapper actions/attest-build-provenance (SHA-pinned) — a DELIBERATE, recorded
+# deviation (M25.F retro): the base action would require hand-authoring the SLSA v1.0
+# provenance predicate the wrapper fills correctly; the SLSA level (Build L2) is identical.
+#
+# DEFERRED to the clean-environment verify at E (M25.F retro E-handoff): whether this job's
+# `contents: read` GITHUB_TOKEN can read a DRAFT release's assets. Draft releases are
+# visible only to accounts with push access; if `gh release view`/`download` 403s here, the
+# fallback (a short-lived elevated token, or passing the asset in as a workflow input) is an
+# OWNER decision surfaced at E as a numbered ask — never silently widened to contents: write.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The annotated, signed release tag to verify and attest (e.g. v0.2.0).
+        required: true
+
+# Least-privilege floor, widened only for what attestation needs — never contents: write.
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read         # read the tag + the draft release's asset (see the DEFERRED note)
+      id-token: write        # mint the OIDC token the attestation is bound to
+      attestations: write    # record the provenance statement
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+        with:
+          fetch-depth: 0            # tag objects and their signatures
+          persist-credentials: false
+
+      - name: Refuse a lightweight or unverified tag
+        env:
+          PUBKEY: ${{ vars.RELEASE_SIGNING_PUBKEY }}
+        run: |
+          set -euo pipefail
+          if [ "$(git cat-file -t "$TAG")" != "tag" ]; then
+            echo "::error::$TAG is a lightweight tag. A release tag must be annotated and signed: git tag -s $TAG" >&2
+            exit 1
+          fi
+          if [ -z "${PUBKEY:-}" ]; then
+            echo "::error::RELEASE_SIGNING_PUBKEY is unset, so the tag signature cannot be verified. Set the repository variable to the maintainer's public key. The release claims a signed tag; an unchecked signature is not one." >&2
+            exit 1
+          fi
+          printf '%s\n' "$PUBKEY" | gpg --batch --import
+          git verify-tag "$TAG"
+
+      - name: Require a draft release for the tag (draft-first — never publish, never race)
+        run: |
+          set -euo pipefail
+          isDraft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          if [ "$isDraft" != "true" ]; then
+            echo "::error::No DRAFT release exists for $TAG (isDraft=$isDraft). This workflow attests the maintainer's draft; it does not create or publish one. Create the draft and attach the asset first, per the runbook." >&2
+            exit 1
+          fi
+
+      - name: Download and checksum the owner-attached asset
+        run: |
+          set -euo pipefail
+          ASSET="sbak-${TAG}-starter.zip"
+          echo "ASSET=$ASSET" >> "$GITHUB_ENV"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$ASSET" --pattern "$ASSET.sha256"
+          # verify the maintainer's published checksum against the downloaded bytes
+          sha256sum -c "$ASSET.sha256"
+
+      - name: Attest build provenance of the asset (SLSA v1.0 Build L2)
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
+        with:
+          subject-path: ${{ env.ASSET }}
