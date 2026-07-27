@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /

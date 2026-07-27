@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // validators/validate-stage-prompts.js
 //
 // Validates stage prompts embedded in Phase docs against the schemas defined

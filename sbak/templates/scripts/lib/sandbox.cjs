@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // scripts/lib/sandbox.cjs
 //
 // The fixture-confinement primitive (M18.A, spec A-07/A-08). ONE module consumed by

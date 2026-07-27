@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // scripts/lib/receipts-collect.cjs
 //
 // The collectors (M20.6.C) — committed artifacts become receipts. This is the
@@ -46,7 +46,7 @@ const { spawnSync } = require('child_process');
 // the same way — "consume, don't fork"). No parallel parser in this file.
 const fenced = require('../../validators/lib/fenced-block.cjs');
 
-const COLLECTOR_VERSION = '1.0.0';
+const COLLECTOR_VERSION = '1.0.1';
 
 // A stage commit ships a surface: M<NN>[.<NN>...].<Stage>: <subject>.
 const STAGE_COMMIT_RE = /^M\d+(?:\.\d+)*\.[A-Za-z0-9]+:/;

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "product": "Software Build Assurance Kit",
   "slug": "sbak",
   "buildFrom": "tag",
@@ -45,6 +45,7 @@
     { "src": "scripts/golden-bootstrap.cjs", "dest": "sbak/scripts/golden-bootstrap.cjs", "class": "passthrough", "fileClass": "payload" },
     { "src": "scripts/bake-inheritance.cjs", "dest": "sbak/scripts/bake-inheritance.cjs", "class": "passthrough", "fileClass": "payload" },
     { "src": "scripts/lib/sandbox.cjs", "dest": "sbak/scripts/lib/sandbox.cjs", "class": "passthrough", "fileClass": "payload" },
+    { "src": "scripts/lib/stage-structure.cjs", "dest": "sbak/scripts/lib/stage-structure.cjs", "class": "passthrough", "fileClass": "payload" },
     { "src": "golden-manifest.json", "dest": "sbak/golden-manifest.json", "class": "passthrough", "fileClass": "payload" },
     { "src": "LICENSE", "dest": "LICENSE", "class": "passthrough", "fileClass": "repo-identity" },
     { "src": "LICENSE", "dest": "sbak/LICENSE-SBAK.txt", "class": "passthrough", "fileClass": "payload" },

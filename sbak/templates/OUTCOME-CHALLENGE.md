@@ -1,4 +1,4 @@
-<!-- @kit-version 1.0.0 -->
+<!-- @kit-version 1.0.1 -->
 <!-- templates/OUTCOME-CHALLENGE.md → docs/outcome-challenge.md (both tiers).
      The Outcome Challenge (companion §6, Workstream 3; M26.F): ONE contract-
      completeness challenge, scaled by risk — not a catalog of deliverable-

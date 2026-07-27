@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // validators/validate-test-honesty.cjs
 //
 // The G9 test-honesty gate, shipped framework-wide so every

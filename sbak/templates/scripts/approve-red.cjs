@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // scripts/approve-red.cjs
 //
 // The HUMAN's action — gate 2 of the three-gate loop (plan -> RED -> stage-end).

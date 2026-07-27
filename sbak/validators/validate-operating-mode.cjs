@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // validators/validate-operating-mode.cjs
 //
 // Pre-commit value check for the operating_mode dial.

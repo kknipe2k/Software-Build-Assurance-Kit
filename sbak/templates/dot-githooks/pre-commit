@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.0
+# @kit-version 1.0.1
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #

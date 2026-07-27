@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // validators/validate-app-map.cjs
 //
 // The App-Map currency primitive (M04) — sibling to check-append-only.cjs in

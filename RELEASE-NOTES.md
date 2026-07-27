@@ -1,4 +1,4 @@
-# Release notes — v1.0.0
+# Release notes — v1.0.1
 
 **This is the GA release of the Software Build Assurance Kit.** The 1.0 bar is an integrity bar, not a feature bar: five decision-record properties, each demonstrated absent-of-defect **by execution** on verifier-built fixtures, in the authoritative CI environment. The evidence trail for every claim below is public in this repository's checks and in `example-receipt.html`.
 
@@ -6,7 +6,7 @@ Read this page before you adopt the kit for anything you care about. It says wha
 
 ## What GA means here
 
-The v1.0.0 GA decision record required, and independent verification confirmed by execution:
+The v1.0.1 GA decision record required, and independent verification confirmed by execution:
 
 1. **Adoption never mutates outside the project root** — symlink escapes (external, internal, dangling) are refused at every install site, targets byte-untouched, loudly and non-zero.
 2. **Adoption never reports success with controls dormant** — hook wiredness is parsed, not pattern-matched; a fresh session proves the read-first stamp before success is claimed.
@@ -25,7 +25,7 @@ Each was verified twice: by the framework's own gates, and by an independent fre
 - **Verification lanes over one registry.** `verify-local --lane fast|integration|journey|release` — four filters over a single task registry, with `release` derived as the complete registry so omission is structurally impossible. Every run emits a deterministic JSON summary (verdicts, named skip reasons, durations in stated milliseconds, a registry hash). The bare invocation is the complete floor; the fast lanes are developer feedback and are never release evidence.
 - **An enforcement layer that is itself tested.** Validators and hooks guard the stage protocol, the retrospective stamp, test honesty, risk declarations, destructive operations, release readiness, entry-doc drift, spec-example coverage, and more — and an enumeration check in CI proves each shipped validator is catalogued everywhere that lists them. A regression suite proves each check still fires; `sbak/scripts/bake-inheritance.cjs` ships as the effectiveness proof a reader can run.
 - **Evidence you can read.** Sessions leave append-only event ledgers. A collector turns those plus committed history into a deterministic report bound to real commits, showing findings, fixes, and rework — with unknown values reported as unknown rather than as zero.
-- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifact is `sbak-v1.0.0-starter.zip`.
+- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifact is `sbak-v1.0.1-starter.zip`.
 - **Runs on a supported runtime.** CI and the generated workflows pin Node 24 (Active LTS), and a floor check derives the minimum Node the kit's own prescribed test form requires from the prescription itself — the pins and the prescription cannot silently diverge again.
 
 ## Limitations

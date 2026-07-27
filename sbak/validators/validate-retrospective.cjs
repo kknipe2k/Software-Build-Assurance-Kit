@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.0
+// @kit-version 1.0.1
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
