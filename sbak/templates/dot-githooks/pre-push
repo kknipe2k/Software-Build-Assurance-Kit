@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 0.2.0
+# @kit-version 1.0.0
 # .githooks/pre-push  —  the full local matrix (Linux-in-Docker + native).
 # Blocks the push on any failure. This is what replaces the per-push cloud test
 # matrix under verification_locus: local_first | hybrid.

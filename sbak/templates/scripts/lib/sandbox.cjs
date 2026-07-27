@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/lib/sandbox.cjs
 //
 // The fixture-confinement primitive (M18.A, spec A-07/A-08). ONE module consumed by
 // every fixture-creating site in the kit's test tooling — smoke.cjs (4 sites),
-// bake-and-test.cjs (2 sites), check-template-precommit.cjs (1 site, the site-7
+// bake-inheritance.cjs (2 sites), check-template-precommit.cjs (1 site, the site-7
 // rider) — extend-not-fork: a parallel guard copy is a defect.
 //
 // Why this exists (the A-08 incident, 2026-07-03): a linked-worktree pre-push hook

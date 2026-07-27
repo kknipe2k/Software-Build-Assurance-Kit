@@ -1,0 +1,4 @@
+{
+  "_doc": "The wiring-truth known-gaps baseline (M26.C). Same discipline as registry-known-gaps.json, and the same non-negotiable: a gap IN this baseline is reported KNOWN and the run still exits 0; a gap OUTSIDE it exits 1; a baseline entry that is NO LONGER observed (phantom) also exits 1, so a resolved claim cannot rot here unnoticed. THE BASELINE IS EMPTIED BY ADDING WIRES OR HONEST kit-only LABELS — NEVER by loosening the derivation (adding an entry to make a red run green is the exact move that let cluster C3 ship advertised-but-inert gates through a green suite). It is EMPTY on purpose: KF-22 was closed by WIRING validate-operating-mode into the project pre-commit, and KF-36 (validate-validator-enumeration) by LABELLING its claim kit-only — neither by baselining. An entry here would be a deferred wire-or-de-document decision recorded so it is made deliberately instead of by silence; there are none at M26.C.",
+  "gaps": []
+}

@@ -6,7 +6,7 @@
 
 ## Just get going
 
-In a hurry? One decision, one command, then the kit drives (you need Git, Node 18+, and Claude Code — §0):
+In a hurry? One decision, one command, then the kit drives (you need Git, Node 22+, and Claude Code — §0):
 
 1. **New project** — the clone *is* your project directory (§1). **Existing repo** — overlay the kit into it (§1's "already have files" steps; Windows variant included).
 2. Run `claude`. **The CLI waits for you to speak first** — your opening message can simply be what you want (*"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*) or just `go`. The kit takes it from there: it echoes your directory (confirm it), then asks what kind of work this is; everything else arrives one question at a time, at the moment the run needs it.
@@ -28,7 +28,7 @@ You need three things installed before anything below works:
 | Tool | Why | Check it's there |
 |---|---|---|
 | **Git** | To clone the kit and because the framework commits per stage | `git --version` |
-| **Node.js 18+** | Claude Code requires it; the SessionStart hook and the validator are Node scripts | `node --version` |
+| **Node.js 22+** | Claude Code requires it; the SessionStart hook and the validator are Node scripts. The floor is 22 rather than 18 because the test command this kit prescribes is a path-scoped glob (`node --test "tests/**/*.test.cjs"`), and glob positionals require Node 21 or newer — 22 is the lowest maintained line that runs it. CI pins 24 (Active LTS). | `node --version` |
 | **Claude Code** | This framework drives Claude Code. It is the CLI tool `claude` — *not* the claude.ai chat website. | `claude --version` |
 
 If `claude` is missing, install Claude Code per the official instructions (typically `npm install -g @anthropic-ai/claude-code`, but follow the current official docs as the authoritative source). The web app at claude.ai/code also works — same framework behavior, just sandboxed.
@@ -126,21 +126,19 @@ cd my-project
 claude
 ```
 
-The kit's `CLAUDE.md` auto-loads — but the CLI waits for you to speak first, so **type anything** (`go` works, or state what you want). Claude's **first response** is then the directory echo + calibration interview — five side-by-side option tables (project size / experience / approval cadence / deliverable type / verification & CI cost). If you do not see this as the first response, jump to Troubleshooting.
+The kit's `CLAUDE.md` auto-loads — but the CLI waits for you to speak first, so **type anything** (`go` works, or state what you want). Claude's **first response** is then the directory echo + calibration interview — 3 asks (operating mode / tier / risk triggers), then a confirmation turn that derives and explains everything else. If you do not see this as the first response, jump to Troubleshooting.
 
 ---
 
-## 3. Answer the 5 questions
+## 3. Answer the 3 asks
 
-| Question | You're choosing | Safe default if unsure |
+| Ask | You're choosing | Safe default if unsure |
 |---|---|---|
-| Project size / complexity | Lite / Standard / Full (how much process) | **Standard** |
-| Your experience with the stack | New / Familiar / Experienced (how much it explains) | **Familiar** |
-| Approval cadence | Minimum / Standard / Maximum (how often it stops for you) | **Standard** |
-| Deliverable type | CLI / Web-UI / Library / Service / Other (which gates apply) | usually inferred from your description |
-| Verification & CI cost | Local-first / Cloud / Local-only (where tests run, what CI costs) | usually inferred from repo visibility |
+| What kind of work is this? | greenfield / bug_fix / research_publish / audit | **greenfield** |
+| How much assurance? | Full / Lite (how much process) | **Full** (the default) |
+| Any risky surfaces? | the six risk triggers (destructive data ops, archives, untrusted writes, credentials, untrusted HTML, installers) | **none** — declaring one raises verification on that surface |
 
-You can answer directly ("Standard, Familiar, Standard, web"), describe your project and let Claude propose a calibration (it'll usually infer the deliverable type from the description), or say "pick something reasonable" and accept the safe-middle default. You can change any of these later — see `FRAMEWORK-CONFIG.md` §7.
+Everything else — deliverable type, where tests run, review cadence, validator severity — is **derived and confirmed back to you in plain English** (the confirmation turn), each value with a one-line why and an invitation to correct it. You can answer directly ("greenfield, Full, no risk surfaces"), describe your project and let Claude propose the calibration, or say "pick something reasonable." You can change any of these later — see `FRAMEWORK-CONFIG.md` §7.
 
 The deliverable type is the branch point that decides *which* gates apply: web/UI triggers a design brief (`docs/design.md`) authored before any UI code plus browser-load + design-conformance verification passes; library adds an API-surface contract; service adds endpoint contracts; CLI adds command-surface checks. It changes *what* the framework verifies, not how much ceremony.
 
@@ -148,7 +146,7 @@ The deliverable type is the branch point that decides *which* gates apply: web/U
 
 ## 4. Describe what you want to build
 
-A paragraph is enough. Claude runs bootstrap: discovery questions (depth depends on tier) → a spec → **(web/UI only) a design discovery interview + `docs/design.md` brief** → a milestone plan → scaffold files (~36 for Lite, ~68 for Standard, ~69 for Full — reference-calibration counts; see the counting note in `templates/CALIBRATION-INTERVIEW.md`). It surfaces each phase for your approval per the `pre_write_surface` toggle (default at Standard: surface spec + milestone plan pre-write; write scaffold + Phase docs directly with post-write review). Before any disk write, it states the blast radius — "I'll create ~N files across `.claude/`, `docs/`, `.github/`, …" — so you consent to the footprint up front.
+A paragraph is enough. Claude runs bootstrap: discovery questions (depth depends on tier) → a spec → **(web/UI only) a design discovery interview + `docs/design.md` brief** → a milestone plan → scaffold files (~44 for Lite, ~108 for Full — reference-calibration counts; see the counting note in `templates/CALIBRATION-INTERVIEW.md`). It surfaces each phase for your approval per the `pre_write_surface` toggle (default: surface spec + milestone plan pre-write; write scaffold + Phase docs directly with post-write review). Before any disk write, it states the blast radius — "I'll create ~N files across `.claude/`, `docs/`, `.github/`, …" — so you consent to the footprint up front.
 
 At the end of bootstrap, the kit's `CLAUDE.md` is **replaced** by your project's own `CLAUDE.md`. The `origin` remote is reset (it pointed at the kit; you choose local-only / your repo / `gh repo create`). Bootstrap is done. The build loop begins.
 
@@ -164,20 +162,20 @@ Each stage runs as its own agent: a fresh session in an enforced role.
 
 For **Lite tier**: just open a fresh session and say *"let's start M01."* Work from the markdown task list in `docs/build-prompts/M01-*.md`.
 
-For **Standard / Full tier** — the **three-gate per-stage loop** (when `red_review: on`, the Standard+ default):
+For **Full tier** — the **three-gate per-stage loop** (when `red_review: on`, the Full default):
 
 1. Open a fresh Claude session in the project (`claude`, or `/clear` in an existing one — both work; `STAGE-LOOP.md` is the home doctrine for the difference).
 2. **Verify the hook fired:** Claude's first response should include a line like `[read-first stamp] mode=work, loaded N files, M bytes`. If it doesn't, jump to Troubleshooting — orientation didn't load and the stage is unreliable.
-3. **Run the stage.** Easiest: type `/stage M01 A` — the slash command (installed at Standard+) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No copy-paste. (`/verify M01`, `/refactor M01`, and `/closeout M01` work the same way.) *Or* paste by hand: open `docs/build-prompts/M01-<title>.md`, find `### A.5 CLI Prompt`, copy the fenced ` ```xml ` block, paste it in.
+3. **Run the stage.** Easiest: type `/stage M01 A` — the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No copy-paste. (`/verify M01`, `/refactor M01`, and `/closeout M01` work the same way.) *Or* paste by hand: open `docs/build-prompts/M01-<title>.md`, find `### A.5 CLI Prompt`, copy the fenced ` ```xml ` block, paste it in.
 4. **Gate 1 — plan approval.** Claude states its deliverable + test plan and waits. Confirm or correct.
 5. **Gate 2 — red-stop.** Claude writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. Approve the test design (or send it back). This catches shallow/wrong-contract tests at the cheapest moment — especially valuable on weaker models. Skip this gate per project by setting `red_review: off`. **In the two-brain flow the release rides the orchestrator's verdict packet (M22 ruling 5):** it ends with the explicit line `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs`, and Claude acts only on that line — approval language without it **is not a release** (Claude stops and tells you `/approve-red` is required).
 6. **Gate 3 — stage-end.** Claude implements to green, runs gates, fills a retrospective (incl. a required **user friction stamp** you fill: `verdict: pass|fail` + an optional sentence — the independent check on the agent's self-grade; default is pass, and an explicit fail forces the Friction-heavy outcome), and surfaces: diff + gate results + retro + draft commit. It says *"I will not commit until you approve."* The retro's user-stamp slot is enforced by a pre-commit validator — an empty stamp fails the commit.
 7. Review. Approve → it commits. Do **not** expect it to commit before you approve — gate G1, the framework's single most important rule. If it ever commits without approval, that's a bug; surface it.
 8. Open a fresh session for the next stage. Repeat through stages, then the **Verifier** (`/verify M01` in a verifier session — set `node scripts/set-mode.cjs verifier` first; the UserPromptSubmit hook blocks mode mismatches), the **Refactor** check when triggered (`/refactor M01` in a refactor session — `node scripts/set-mode.cjs refactor`), then **Closeout** (`/closeout M01` — surfaces the explicit *continue / ship v1 here / pause to re-tier* choice), then the milestone PR.
 
-### Two roles — orchestrator + build (Standard &amp; Full)
+### Two roles — orchestrator + build (Full)
 
-At Standard and Full tier the agent runs as **two distinct session types**, never sharing a session:
+At Full tier the agent runs as **two distinct session types**, never sharing a session:
 
 - **Orchestrator** — authors Phase docs / ADRs, adjudicates the build's surfaces, routes Verifier findings, runs PR/merge. Governed by `ORCHESTRATOR.md`.
 - **Build** — executes one stage from a pasted §X.5 prompt. Governed by `CLAUDE.md` + the stage prompt; never reads `ORCHESTRATOR.md`.
@@ -187,6 +185,7 @@ At Standard and Full tier the agent runs as **two distinct session types**, neve
 How to host the two roles (`ORCHESTRATOR.md` §1 has the full table):
 
 - **Recommended — two CLIs + git worktrees, one machine.** From the repo root: `git worktree add ../build-wt <milestone-branch>`. Run the **build** with `claude` inside `../build-wt`; run the **orchestrator** with `claude` in the main checkout. Shared `.git`, isolated working trees, no cross-machine drift.
+  **`worktree-after-first-commit`:** a freshly bootstrapped project has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD** — so use "two CLIs, same directory" (below) until M01.A's first commit lands, then create the worktree and move the build session into it.
 - **Web orchestrator + local CLI build** — valid only if the build genuinely runs on a separate machine; then the cross-machine pre-flight in `ORCHESTRATOR.md §3` is mandatory.
 - **Two CLIs, same directory** — simplest; fine because you serialize the two roles.
 
@@ -223,7 +222,7 @@ Read these when you need them. You do **not** need to read them all up front; th
 | File | Read it for |
 |---|---|
 | `QUICKSTART.md` (this file) | The shortest path to a running build loop |
-| `WALKTHROUGH.md` | A complete Standard-tier build narrated end to end — see the framework actually run. Artifacts the run produced are at `examples/task-cli-standard/artifacts/`. Intro / how-to-read at `EXAMPLE.md`. |
+| `WALKTHROUGH.md` | A complete Full-machinery build narrated end to end — see the framework actually run. Artifacts the run produced are at `examples/task-cli-standard/artifacts/`. Intro / how-to-read at `EXAMPLE.md`. |
 | `HOW-IT-WORKS.html` | Visual overview — open in a browser; good for explaining to others |
 | `README.md` | Full prose overview: what it is, tiers, what's in the box, when to use which tier |
 
@@ -242,9 +241,9 @@ Read these when you need them. You do **not** need to read them all up front; th
 | File | Read it for |
 |---|---|
 | `CLAUDE.md` | The bootstrap orchestration. Auto-loaded on first session; replaced by your project's own at end of bootstrap. You normally don't edit this. |
-| `templates/CALIBRATION-INTERVIEW.md` | The exact text of the 5-question interview (tier / expertise / cadence / deliverable_type / verification) + smell-flagging + toggle mapping |
+| `templates/CALIBRATION-INTERVIEW.md` | The exact text of the 3-ask interview (mode / tier / risk triggers) + the confirmation turn + smell-flagging + toggle mapping |
 | `templates/PROJECT-CLAUDE.md` | What `CLAUDE.md` becomes after bootstrap — your project's standing execution rules (read by both session types) |
-| `templates/ORCHESTRATOR.md` | The orchestration operating manual — installed as `ORCHESTRATOR.md` at Standard+. Decision index for authoring / adjudication / routing + topology table + consultation protocol + pushback authority. Build sessions ignore it. |
+| `templates/ORCHESTRATOR.md` | The orchestration operating manual — installed as `ORCHESTRATOR.md` at Full. Decision index for authoring / adjudication / routing + topology table + consultation protocol + pushback authority. Build sessions ignore it. |
 | `templates/SPEC-TYPE-SECTIONS.md` | Per-deliverable-type contract section appended to the spec (cli command surface / library API surface / service endpoint contracts / web design.md pointer + visual acceptance) |
 | `templates/DESIGN-DISCOVERY-INTERVIEW.md` | Used only when `deliverable_type: web` — the Phase 1.5 interview script (Path A imports from Claude Design; B1 from-scratch; B2 from community template) |
 | `templates/design.md` | The 9-section `docs/design.md` brief (visual theme / color tokens / typography / components / layout / depth / do's-don'ts / responsive / agent prompt guide) — generated for web/UI projects, read before any UI code |
@@ -254,7 +253,7 @@ Read these when you need them. You do **not** need to read them all up front; th
 | File | Read it for |
 |---|---|
 | `validators/validate-stage-prompts.cjs` | XML schema validator for Phase docs. Runs at pre-commit + CI. Warns when a Phase doc exceeds 600 lines. |
-| `validators/validate-retrospective.cjs` | User friction-stamp gate (Standard+). Pre-commit fails on an empty/placeholder stamp in a staged retrospective (`verdict: pass\|fail`); an explicit fail is accepted with an advisory NOTE that the outcome is forced to Friction-heavy. |
+| `validators/validate-retrospective.cjs` | User friction-stamp gate (Full). Pre-commit fails on an empty/placeholder stamp in a staged retrospective (`verdict: pass\|fail`); an explicit fail is accepted with an advisory NOTE that the outcome is forced to Friction-heavy. |
 | `validators/README.md` | Validator usage + combined pre-commit recipe |
 | `scripts/verify-local.cjs` | The kit's one local verification entrypoint (pre-push + CI). A full run takes roughly 2–4 minutes — measured ~125 seconds on the reference machine (approximate, higher under load) — and prints per-phase elapsed seconds — size any wrapping tool's command budget *above* that (the measured ~125 s run already overruns a 120 s timeout, whose SIGTERM kills it mid-run; fixture work is sandbox-confined, so re-run the push). |
 | `scripts/lib/sandbox.cjs` | The fixture-confinement primitive: sandbox roots, fail-closed path guard, pinned fixture git env — why an interrupted or worktree-orchestrated suite run cannot mutate the repo it lives in. |

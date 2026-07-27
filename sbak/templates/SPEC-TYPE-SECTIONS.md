@@ -3,6 +3,8 @@
 > Per-type addendum to the base spec (`spec/project-spec.md`). The base spec structure (Identity / Scope / Architecture / Engineering charter / Open questions) is the same for every deliverable; this file defines the **one contract section each type adds** — the thing that type lives or dies on. At Phase 1, after the base spec, the agent appends the section matching `deliverable_type` from `project-config.md`.
 >
 > One file instead of six full template variants: the base is shared; only the contract section differs. Maintain the delta here, not six copies of the whole spec.
+>
+> **Examples must be structurally marked** — `validators/validate-spec-examples.cjs` demands that every literal example in the spec appears in at least one test fixture, and it reads **structure**, not prose. Put examples under an **`## Examples`** heading, in a fenced block tagged ```` ```example ````, or under a bolded **`**Example**`** list label (the `Examples` bullets below are that third form). A backticked token in an ordinary requirements sentence is *not* an example and is never demanded — that exclusion is deliberate (a gate that demanded every flag name and file path become a fixture would be switched off within a day), but it does mean an example written that way escapes the gate entirely. If an example genuinely should not have a fixture, waive it in place with `harvest-waiver: <reason>`; the reason is required and every waiver prints on every run.
 
 ---
 

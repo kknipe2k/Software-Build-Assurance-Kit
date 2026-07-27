@@ -98,15 +98,15 @@ Then **File → Open Folder → pick this directory** (not `code .` — see the 
 
    > I want to build a small CLI todo app. Please load orientation and start.
 
-5. The agent reads `.github/copilot-instructions.md` (auto-loaded as system context), then reads `CLAUDE.md` and `templates/CALIBRATION-INTERVIEW.md` per the shim's directive, then echoes `[orientation loaded: kit bootstrap mode]`, then presents the **5-question calibration interview** as its first response.
+5. The agent reads `.github/copilot-instructions.md` (auto-loaded as system context), then reads `CLAUDE.md` and `templates/CALIBRATION-INTERVIEW.md` per the shim's directive, then echoes `[orientation loaded: kit bootstrap mode]`, then presents the **3-ask calibration interview** as its first response.
 
 If you do **not** see the orientation-loaded line in the first response, the shim wasn't picked up. Jump to Troubleshooting.
 
 ---
 
-## 3. Answer the 5 questions
+## 3. Answer the 3 asks
 
-Same as `QUICKSTART.md` §3 — Lite / Standard / Full × New / Familiar / Experienced × Minimum / Standard / Maximum × CLI / Web-UI / Library / Service / Other × Local-first / Cloud / Local-only. Safe middle if unsure: **Standard + Familiar + Standard** (deliverable type + verification posture usually inferred from your description and repo visibility). The deliverable type determines which gates apply: `web` turns on the design brief (`docs/design.md`, authored in a new Phase 1.5/1.6) plus browser-load + design-conformance verifier passes.
+Same as `QUICKSTART.md` §3 — 3 asks: operating mode (greenfield / bug_fix / research_publish / audit) × tier (Full / Lite) × the six risk triggers; everything else (deliverable type, verification locus, cadence, severity) is derived and confirmed back to you. Default if unsure: **greenfield + Full, no declared risk**. The deliverable type determines which gates apply: `web` turns on the design brief (`docs/design.md`, authored in a new Phase 1.5/1.6) plus browser-load + design-conformance verifier passes.
 
 ## 4. Describe what to build
 
@@ -140,7 +140,7 @@ Context is cleared between stages on purpose. To start a fresh stage:
 
 - Click **+ New Chat** in the Copilot Chat panel (or `/new`), OR
 - Open a second VS Code window for the build, OR
-- Use **git worktrees** (recommended for Standard+ orchestrator/build split — see §5.5).
+- Use **git worktrees** (recommended for the Full-tier orchestrator/build split — see §5.5).
 
 The new chat re-reads `.github/copilot-instructions.md` automatically (it's project-scoped instructions, always injected).
 
@@ -154,7 +154,7 @@ Without that stamp, the stage runs on stale or partial context. Don't proceed.
 
 ### Paste the stage's XML prompt
 
-For **Standard / Full tier**:
+For **Full tier**:
 
 1. Open the Phase doc — `docs/build-prompts/M01-<title>.md`.
 2. Find the current stage's section (e.g., `### A.5 CLI Prompt`).
@@ -163,7 +163,7 @@ For **Standard / Full tier**:
 
 For **Lite tier**: just say *"let's start M01"* — Lite uses markdown task lists, not XML stage prompts.
 
-### The work loop — three gates (Standard+ default, `red_review: on`)
+### The work loop — three gates (the Full default, `red_review: on`)
 
 The agent runs the same three-gate per-stage loop as the CLI track. Honor-system in Copilot — the framework's `.claude/hooks` don't fire here — but the shim instructs it explicitly:
 
@@ -177,13 +177,13 @@ For new stages, use the slash-style invocation the shim teaches: type `Stage M01
 
 Open a new chat for the next stage and repeat.
 
-### 5.5 The two roles in Copilot (Standard / Full only)
+### 5.5 The two roles in Copilot (Full only)
 
-The framework splits the agent into two session types at Standard+. In Copilot, that maps to two Chats:
+The framework splits the agent into two session types at Full. In Copilot, that maps to two Chats:
 
-**Topology D from `ORCHESTRATOR.md` §1 — canonical for Standard+ on Copilot.** Two VS Code windows, each with its own Copilot Chat. The build window opens on a `git worktree` of the milestone branch. Shared `.git`, isolated working trees, no file-race risk.
+**Topology D from `ORCHESTRATOR.md` §1 — canonical for Full on Copilot.** Two VS Code windows, each with its own Copilot Chat. The build window opens on a `git worktree` of the milestone branch. Shared `.git`, isolated working trees, no file-race risk.
 
-Set up from the repo root:
+**`worktree-after-first-commit` — not on day one.** A freshly bootstrapped project has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD**. Until M01.A's first commit lands, run both chats against the single checkout (one role at a time, mode stated in each chat's first message). After that commit, set up from the repo root:
 
 ```
 git worktree add ../build-wt <milestone-branch>
@@ -200,8 +200,8 @@ Each window has independent VS Code state (editor tabs, terminal) and an indepen
 The framework has three modes — **work**, **verifier**, **orchestrator** — each with its own read-first list at `.claude/read-first-list*.txt`. In Claude Code the SessionStart hook switches automatically; **in Copilot you tell the agent which mode at the start of each chat**:
 
 - **Work / build session** — your default. Say nothing special; the shim instructs the agent to read `.claude/read-first-list.txt`.
-- **Verifier session** (Standard+ only) — start the chat with: *"This is a verifier session. Read `.claude/read-first-list-verifier.txt` only. Do NOT read prior retrospectives — that is the bias guard."* The agent then loads the verifier list and asks for the V.5 prompt.
-- **Orchestrator session** (Standard+ only) — start with: *"This is an orchestrator session. Read `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`."*
+- **Verifier session** (Full only) — start the chat with: *"This is a verifier session. Read `.claude/read-first-list-verifier.txt` only. Do NOT read prior retrospectives — that is the bias guard."* The agent then loads the verifier list and asks for the V.5 prompt.
+- **Orchestrator session** (Full only) — start with: *"This is an orchestrator session. Read `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`."*
 
 Verify each by checking the `[orientation loaded: mode=<...>, model=<...>]` stamp.
 
@@ -272,7 +272,7 @@ Read these when you need them. The shim handles auto-loading the essentials; the
 | File | Read it for |
 |---|---|
 | `QUICKSTART-COPILOT.md` (this file) | The Copilot path |
-| `WALKTHROUGH-COPILOT.md` | A complete Standard-tier build narrated for Copilot in VS Code. Artifacts at `examples/task-cli-standard/artifacts/`. Intro / how-to-read at `EXAMPLE.md`. |
+| `WALKTHROUGH-COPILOT.md` | A complete Full-machinery build narrated for Copilot in VS Code. Artifacts at `examples/task-cli-standard/artifacts/`. Intro / how-to-read at `EXAMPLE.md`. |
 | `HOW-IT-WORKS.html` | Visual overview — open in a browser |
 | `README.md` | Full prose overview |
 

@@ -2,7 +2,7 @@
 
 > The build prompt for milestone M[NN]. Markdown wrapper for human readability + XML stage CLI prompts (per `sbak/STAGE-PROMPT-PROTOCOL.md`) for paste-into-session execution. Authored at the prior milestone's closeout (or at project bootstrap for M01).
 >
-> **Roles (Standard+):** this Phase doc is authored by the **orchestrator** role (see `ORCHESTRATOR.md` §3); the §X.5 XML stage prompts inside it are executed by **build** sessions. The orchestrator never lists `ORCHESTRATOR.md` in a stage prompt's `<read_first>` — build sessions don't read it. At Lite tier the roles collapse and there is no separate orchestrator.
+> **Roles (Full):** this Phase doc is authored by the **orchestrator** role (see `ORCHESTRATOR.md` §3); the §X.5 XML stage prompts inside it are executed by **build** sessions. The orchestrator never lists `ORCHESTRATOR.md` in a stage prompt's `<read_first>` — build sessions don't read it. At Lite tier the roles collapse and there is no separate orchestrator.
 
 **Protocol version:** v1.9 (per `sbak/STAGE-PROMPT-PROTOCOL.md` changelog).
 
@@ -412,7 +412,7 @@ Gates passing: {{list}}
 
 ---
 
-## Stage V — Verifier *(Standard and Full tiers)*
+## Stage V — Verifier *(Full tier)*
 
 > Skip if `verifier_mode: skip` in `project-config.md`. For `pass_1_only` (Lite), this section has only V.1, V.2, V.3 inventory pass, V.5, V.6.
 
@@ -429,7 +429,7 @@ Fresh-context contract-fidelity check against the milestone's deliverables. The 
 
 ### V.3 Verification passes
 
-For `verifier_mode: pass_1_2_4` (Standard default):
+For `verifier_mode: pass_2_4` (the Full default):
 
 1. **Inventory.** For each "ship X" claim in this Phase doc, confirm file exists with expected shape.
 2. **Hooks.** For each wire claim (e.g., "X reads Y from Z"), run 5-step trace: spec claim → source event → projector → consumer wire → verify consumer reads what projector writes. No-consumer or ambiguous-consumer = 🔴.
@@ -552,7 +552,7 @@ https://claude.ai/code/session_<id>
 
 ---
 
-## Stage R — Refactor health check *(Standard and Full tiers; trigger-based)*
+## Stage R — Refactor health check *(Full tier; trigger-based)*
 
 > Optional and trigger-based — include this section only when `refactor_mode` is not `skip`. Stage R runs when `docs/tech-debt.md` has ≥ the threshold count OR the milestone interval has elapsed, whichever first (`sbak/FRAMEWORK-CONFIG.md` §4.11, `sbak/BUILD-PLAYBOOK.md` §3.4.5). Parallel to Stage V but asks **"is the code maintainable?"** against the *cumulative* codebase, not "did this milestone do what was promised?"
 
@@ -569,7 +569,7 @@ Fresh-context structural assessment of the cumulative codebase since the last St
 
 ### R.3 Refactor passes
 
-For Standard (`trigger_n5`): **Duplication + Drift** (add Complexity only if a linter integration is named in `docs/gates.md`).
+For the Full default (`trigger_n5`): **Duplication + Drift** (add Complexity only if a linter integration is named in `docs/gates.md`).
 
 1. **Duplication.** ≥3 similar code blocks overdue for extraction (acceptable at 2; flagged at 3+).
 2. **Drift.** Dead code (no callers), dead dependencies (no imports), version drift, schema drift.
@@ -614,7 +614,7 @@ Output: `retrospectives/M[NN].R-findings.md` using `sbak/templates/REFACTOR-FIND
   <refactor_passes>
     <pass name="duplication"/>
     <pass name="drift"/>
-    <!-- Add complexity for Full tier (or Standard with a named linter): -->
+    <!-- Add complexity when a linter is named in docs/gates.md (or under an explicit escalation): -->
     <!-- <pass name="complexity" linter="{{eslint --rule complexity}}"/> -->
   </refactor_passes>
 
@@ -700,7 +700,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
 - **Milestone summary** — `retrospectives/M[NN]-summary.md`. Aggregate per-stage retrospectives; score axes across stages; mark verdict.
 - **Gap-analysis entry** — append to `docs/gap-analysis.md`. Six required sections. Carry-forward addresses prior milestones' open items.
 - **PR description** — draft only. Do not open the PR until user approves the three-artifact review.
-- **Off-track check (full path; gate G8)** — re-read `docs/backlog.md` against everything M[NN] shipped, re-confirm the ranking reflects the user's priorities (do not re-rank it yourself — flag a stale ranking for the user), and run the off-track check (`sbak/BUILD-PLAYBOOK.md` §3.5). A standing unjustified priority inversion (a lower-ranked story built ahead of a higher-ranked backlogged one with no build-sequence necessity logged in `docs/off-track-log.md`) **blocks the PR at Full / warns at Standard**. Any resulting backlog edit is HITL co-authored — proposed by the agent, ratified by the human.
+- **Off-track check (full path; gate G8)** — re-read `docs/backlog.md` against everything M[NN] shipped, re-confirm the ranking reflects the user's priorities (do not re-rank it yourself — flag a stale ranking for the user), and run the off-track check (`sbak/BUILD-PLAYBOOK.md` §3.5). A standing unjustified priority inversion (a lower-ranked story built ahead of a higher-ranked backlogged one with no build-sequence necessity logged in `docs/off-track-log.md`) **blocks the PR under `off_track_check: enforced` / warns under the Full default (`advisory`)**. Any resulting backlog edit is HITL co-authored — proposed by the agent, ratified by the human.
 
 ### E.4 Acceptance criteria
 
@@ -712,7 +712,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
 4. Three-artifact surface ready: cumulative diff + summary + gap-analysis entry
 5. PR description drafted, not yet pushed
 6. `docs/identity.md` Status section updated
-7. Off-track check run against `docs/backlog.md` (gate G8): no standing unjustified priority inversion — or one is surfaced (warning at Standard / PR-blocking at Full), with any backlog edit human-ratified
+7. Off-track check run against `docs/backlog.md` (gate G8): no standing unjustified priority inversion — or one is surfaced (warning under the Full default `advisory` / PR-blocking under `enforced`), with any backlog edit human-ratified
 
 ### E.5 CLI Prompt
 
@@ -788,7 +788,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
   <off_track_check gate="G8" ref="sbak/BUILD-PLAYBOOK.md" section="3.5">
     <step>re-read docs/backlog.md against everything M[NN] shipped; re-confirm the ranking reflects the user's priorities (do NOT re-rank it yourself — flag a stale ranking for the user)</step>
     <step>run the full off-track check: was the highest-priority unblocked, in-scope story the one M[NN] built?</step>
-    <on_standing_unjustified_inversion>blocks the PR at Full / warns at Standard; resolve via a human-ratified re-prioritization (override-logged) or a build-sequence justification appended to docs/off-track-log.md</on_standing_unjustified_inversion>
+    <on_standing_unjustified_inversion>blocks the PR under enforced / warns under the Full default (advisory); resolve via a human-ratified re-prioritization (override-logged) or a build-sequence justification appended to docs/off-track-log.md</on_standing_unjustified_inversion>
     <hitl_co_authorship>any docs/backlog.md edit is proposed by the agent and ratified by the human — never folded silently into the closeout commit (G8 clause b)</hitl_co_authorship>
   </off_track_check>
 

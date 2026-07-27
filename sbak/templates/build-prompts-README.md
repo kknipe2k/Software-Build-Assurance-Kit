@@ -29,7 +29,7 @@ Templates and framework references live elsewhere:
 - `sbak/PROCESS-VALIDATION.md` (repo root) — framework for evaluating whether the prompt-driven pattern works
 - `sbak/persistence-architecture.md` (repo root) — layer model: how memory/instructions persist across sessions
 - `retrospectives/` — per-stage retrospectives Claude fills in during/after every milestone; see `retrospectives/README.md`
-- `docs/gap-analysis.md` — **live, append-only** cumulative product↔spec audit. Every parent milestone appends one entry in its Phase Closeout (final stage) per `CLAUDE.md` §20. **Prior entries are immutable** — CI enforces.
+- `docs/gap-analysis.md` — **live, append-only** cumulative product↔spec audit. Every parent milestone appends one entry in its Phase Closeout (final stage) per `CLAUDE.md` §20. **Prior entries are immutable** — by Hard Rule always, and by CI diff check when a declared risk trigger arms `.github/workflows/append-only-ledger.yml`.
 
 ## How to use a milestone document
 

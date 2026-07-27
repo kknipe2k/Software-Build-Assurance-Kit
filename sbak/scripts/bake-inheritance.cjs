@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/bake-and-test.cjs
+// scripts/bake-inheritance.cjs
 //
 // THE INHERITANCE HARNESS — the G10 irony closed.
 //
@@ -18,6 +18,17 @@
 //     NOT bake the conversational calibration interview: that is AGENT BEHAVIOR, not a
 //     deterministic render. So this proves the WIRING inherits, not that the bootstrap
 //     CONVERSATION reliably produces the wiring.
+//   • WHERE THE BAKED FILES COME FROM (stated, because getting this wrong hid KF-01 for a
+//     whole release). `prompts/calibration/` and the golden leg's rendered tree are sourced
+//     from the ROW-SET (scripts/fixtures/golden-bootstrap/rows.json, overridable with --rows)
+//     — the same contract a bootstrapped project is generated from, so a missing generation
+//     row turns this harness RED. `validators/*.cjs` and `templates/dot-claude/hooks/*` are
+//     still copied from the KIT TREE, because only the headline validators carry rows (the
+//     rest are clone-inherited by design — see rows.json's ENUMERATION MODEL note). Read that
+//     honestly: for those two sets this harness proves the gates FIRE once present, and
+//     `validate-validator-enumeration.cjs` — not this file — is what proves they are
+//     CATALOGUED. A kit-tree copy standing in for a generation row is exactly the mask that
+//     let cluster C1 ship green; it is now confined to the sets named in this bullet.
 //   • A CI INHERITANCE CHECK, NOT A NUMBERED GATE. It runs in the kit's CI
 //     (.github/workflows/bake-and-test.yml), the append-only-ledger / app-map-currency
 //     class — never on the per-stage numbered G-line.
@@ -48,7 +59,7 @@
 //   app-map (G10 STATIC floor)      — a `verified` entry citing a dead test-id
 //
 // Usage:
-//   node scripts/bake-and-test.cjs [--root <dir>] [--neuter <validator.cjs>] [--omit <v.cjs>] [--keep]
+//   node scripts/bake-inheritance.cjs [--root <dir>] [--neuter <validator.cjs>] [--omit <v.cjs>] [--keep]
 //     --root <dir>      source root to render from (default: the kit root). A nonexistent /
 //                       unreadable root → fail-closed exit 2.
 //     --neuter <v.cjs>  after baking, overwrite the named validator in the BAKED copy with a
@@ -56,6 +67,10 @@
 //                       falsifiability self-proof (effectiveness, not presence).
 //     --omit <v.cjs>    after baking, DELETE the named validator from the baked copy → the
 //                       presence check fails → harness non-zero.
+//     --rows <rows.json> the row-set the baked project's generated artifacts are sourced from
+//                       (default: <root>/scripts/fixtures/golden-bootstrap/rows.json). Mirrors
+//                       golden-bootstrap's --rows so ONE mutated row-set drives every consumer;
+//                       dropping the prompts/calibration/ rows must turn this harness RED.
 //     --keep            do not delete the baked temp dir (debug).
 //
 // Exit 0 = clean bake: every gate FIRED + the full validator set + hooks + calibration set
@@ -286,6 +301,23 @@ const g16WrongReason = argv.includes('--g16-wrong-reason');
 // NAMED visible coverage-gap finding (turns never complete). A leg that stays green with a
 // dead registration is the silent-pass theater the inheritance-teeth lock exists to kill.
 const receiptsNoStop = argv.includes('--receipts-no-stop');
+// --rows <rows.json> — the row-set the bake sources its generated artifacts from. Mirrors
+// golden-bootstrap's own --rows (and validate-validator-enumeration's), so ONE mutated rows.json
+// drives the golden --diff, the enumeration lock AND this harness — the calibration-set
+// mutation is the same file in all three. Resolved against `root` so a --root fixture tree brings
+// its own row-set. Declared EXPLICITLY rather than leaning on golden-bootstrap picking --rows out
+// of this process's shared argv: that leak works, but an undeclared dependency is not a contract.
+const rowsPath = path.resolve(flagValue('--rows') || path.join(root, 'scripts/fixtures/golden-bootstrap/rows.json'));
+
+// The calibration rows, read from the row-set — the ONLY source of the baked seeded-defect set.
+// Fail-soft to []: a missing/unreadable row-set means the set does not render, which the presence
+// check below reports as the finding it is. Never falls back to a kit-root copy (that was the mask).
+function calibrationRows() {
+  try {
+    const gb = require(path.join(KIT_ROOT, 'scripts/golden-bootstrap.cjs')); // require.main-guarded → pure import
+    return gb.loadRows(rowsPath).filter((r) => /^prompts\/calibration\//.test(r.file || '') && gb.applicable(r, 'full')); // two tiers post-collapse — 'full' is the merged default
+  } catch (_) { return []; }
+}
 
 function failClosed(msg) {
   process.stderr.write(
@@ -323,9 +355,26 @@ try {
   failClosed(`cannot enumerate ${srcValidators}: ${e && e.message ? e.message : 'unknown error'}`);
 }
 
-// validators/*.cjs → baked/validators/ (copied unchanged, per the scaffold tables)
+// The two-tier collapse (gate-1 hand-off 2, ratified): the KIT-SELF validators do NOT ship to projects —
+// validate-validator-enumeration.cjs (dereferences templates/PROJECT-CLAUDE.md, absent in every
+// project — the KF-36 defect mechanism) and validate-entry-docs.cjs (anchored to the kit's own
+// entry-doc set). A project inheriting validators it can never run as gates is the
+// unconsumed-artifact class. The exclusion list is MACHINE-READ from calibration-core.json
+// kit_only_validators (a hand list here would be the C4 hand-carried-fact class); fail-closed —
+// a bake without the core cannot know what ships, so it refuses rather than guesses.
+let kitOnly;
+try {
+  kitOnly = JSON.parse(fs.readFileSync(path.join(KIT_ROOT, 'calibration-core.json'), 'utf8')).kit_only_validators || [];
+} catch (e) {
+  failClosed(`calibration-core.json unreadable at kit root (${e && e.message}) — cannot derive the kit-only validator exclusion.`);
+}
+const shippedToProject = shipped.filter((n) => !kitOnly.includes(n));
+
+// validators/*.cjs → baked/validators/ (copied unchanged, per the scaffold tables; minus the
+// kit-only pair above — the baked count is len(all .cjs) - len(kit_only), honestly derived,
+// never a frozen integer)
 fs.mkdirSync(path.join(baked, 'validators'), { recursive: true });
-for (const n of shipped) fs.copyFileSync(path.join(srcValidators, n), path.join(baked, 'validators', n));
+for (const n of shippedToProject) fs.copyFileSync(path.join(srcValidators, n), path.join(baked, 'validators', n));
 
 // The shared validators/lib/ (fenced-block.cjs and kin) rides along so the baked
 // validators can require the primitive they now CONSUME (extend-not-fork). Without it a
@@ -338,15 +387,34 @@ if (fs.existsSync(srcValidatorsLib)) copyTree(srcValidatorsLib, path.join(baked,
 const srcHooks = path.join(root, 'templates', 'dot-claude', 'hooks');
 try { copyTree(srcHooks, path.join(baked, '.claude', 'hooks')); } catch (_) { /* presence check reports it */ }
 
-// prompts/calibration/ → baked/prompts/calibration/ (the seeded-defect set the V inherits)
-const srcCalibration = path.join(root, 'prompts', 'calibration');
-try { copyTree(srcCalibration, path.join(baked, 'prompts', 'calibration')); } catch (_) { /* presence check reports it */ }
+// prompts/calibration/ → baked/prompts/calibration/ (the seeded-defect set the V inherits),
+// SOURCED FROM THE ROW-SET — never a kit-root tree-copy.
+//
+// THE MASK THIS REPLACES. This was once `copyTree(root/prompts/calibration, baked/…)`: a
+// direct kit-root copy that bypassed the row-set entirely. It handed the baked project an artifact
+// NO bootstrap step delivers, so the harness proved G14 fires against a set a real project never
+// receives — a green bake coexisting with the sole blocks-any-release finding, for as long as the
+// row was missing. Presence was inherited from the kit's own tree, not from the scaffold contract.
+//
+// Now the set arrives exactly as a bootstrapped project's does: via its generation rows. A dropped
+// row therefore reaches the presence check below and the harness goes RED —
+// `bake-inheritance.cjs --rows <rows-without-calibration>` is the standing mutation that proves it.
+// This is also what makes the header's "renders the files the scaffold-generation tables copy to
+// disk" claim TRUE of the calibration set, not just of the wiring.
+for (const row of calibrationRows()) {
+  const src = path.join(root, row.template);
+  const dest = path.join(baked, row.file);
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+  } catch (_) { /* presence check reports it */ }
+}
 
 // ---- apply sabotage (the falsifiability self-proof) ----
 if (neuter) {
   const p = path.join(baked, 'validators', neuter);
   // present-but-dead: a no-op that always passes. file-exists stays TRUE; the gate dies.
-  fs.writeFileSync(p, '#!/usr/bin/env node\n// NEUTERED by bake-and-test --neuter (present-but-dead)\nprocess.exit(0);\n');
+  fs.writeFileSync(p, '#!/usr/bin/env node\n// NEUTERED by bake-inheritance --neuter (present-but-dead)\nprocess.exit(0);\n');
 }
 if (omit) {
   try { fs.rmSync(path.join(baked, 'validators', omit), { force: true }); } catch (_) { /* fine */ }
@@ -355,9 +423,18 @@ if (omit) {
 const findings = [];
 
 // ---- PRESENCE (necessary, not sufficient) ----
-for (const n of shipped) {
+// The asserted set is shippedToProject — all validators/*.cjs MINUS the two kit-self
+// validators the core names kit-only (validate-validator-enumeration.cjs, validate-entry-docs.cjs
+// — hand-off 2, ratified). The count TIGHTENED honestly: the kit-only pair must be ABSENT from
+// the bake (shipping them would be the unconsumed-artifact class reborn), never silently loosened.
+for (const n of shippedToProject) {
   if (!fs.existsSync(path.join(baked, 'validators', n))) {
     findings.push(`missing validator ${n} — the baked project does not carry a shipped validators/*.cjs (inheritance broken).`);
+  }
+}
+for (const n of kitOnly) {
+  if (fs.existsSync(path.join(baked, 'validators', n))) {
+    findings.push(`kit-only validator ${n} leaked into the baked project — calibration-core.json kit_only_validators excludes it from the scaffold (the calibration-core kit_only exclusion).`);
   }
 }
 if (!fs.existsSync(path.join(baked, '.claude', 'hooks', 'session-start-read-first.cjs'))) {
@@ -423,7 +500,7 @@ function g16ValidClimb() {
     const releaseEnd = st === 'packaged-release-ready' || st === 'public-distribution-ready';
     s += `## 2026-06-2${i} — reached \`${st}\` (climb step ${i})\n`;
     if (i > 0) s += `- Prior state: \`${G16_LADDER[i - 1]}\`\n`;
-    if (releaseEnd) s += '- SLSA build level: L2\n';
+    if (releaseEnd) { s += '- SLSA build level: L2\n'; s += '- Rendered receipt: .claude/receipts/climb.html\n'; } // SLSA + receipt cited so ONLY the review is missing (KF-40 clause 4)
     // the final public-distribution-ready entry deliberately OMITS the independent-review record.
     s += `- Evidence: run https://ci/run/${i}\n`;
   }
@@ -691,7 +768,7 @@ try {
   const gb = require(path.join(KIT_ROOT, 'scripts/golden-bootstrap.cjs')); // require.main-guarded → pure import
   const goldenRoot = sandbox.sandboxRoot('kit-golden-leg-');
   process.on('exit', () => { if (keep) return; try { fs.rmSync(goldenRoot, { recursive: true, force: true }); } catch (_) { /* best effort */ } });
-  gb.renderTier('standard', goldenRoot); // render the deterministic Standard scaffold into its own tree
+  gb.renderTier('full', goldenRoot); // render the deterministic Full (merged default) scaffold into its own tree
 
   const implRel = 'src/feature-impl.cjs'; // an IMPLEMENTATION path (not test/doc/.claude) → gated
   const implAbs = path.join(goldenRoot, implRel);
@@ -826,7 +903,7 @@ try {
   }
   // present-but-dead red-gate hook -> the mini-smoke's failing-case teeth must go RED.
   fs.writeFileSync(path.join(goldenRoot, '.claude', 'hooks', 'pretooluse-red-gate.cjs'),
-    '#!/usr/bin/env node\n// broken by bake-and-test (present-but-dead)\nprocess.exit(0);\n');
+    '#!/usr/bin/env node\n// broken by bake-inheritance (present-but-dead)\nprocess.exit(0);\n');
   msr = miniSmoke();
   if (msr.status === 0) {
     findings.push(
@@ -847,6 +924,197 @@ try {
   }
   const legRes = receiptsLeg(goldenRoot);
   for (const lf of legRes.findings) findings.push(lf);
+
+  // ---- SPEC-EXAMPLE HARVEST LEG (KF-53 instance 1; the baked-inheritance pin) ----
+  // The trial's ONLY wrong-result escape was the spec's own literal example — nested
+  // emphasis, `**bold *italic* code***` — missed by BOTH arms and caught only by held-back
+  // fixtures. The gate that closes it is worth nothing as a workshop script: it has to
+  // enforce in the GENERATED project, which is the KF-48 lesson. So this leg runs the BAKED
+  // project's OWN copy against a planted violation in the baked tree.
+  //
+  // Mutation targets, both required by the harvest gate's own RED contract:
+  //   • drop the validators/validate-spec-examples.cjs row from rows.json → the structural
+  //     pin below REDs (the baked project never receives the gate), and
+  //   • --neuter validate-spec-examples.cjs → the planted example sails through → RED.
+  //     The top-of-file sabotage writes into `baked`, which is materialised BEFORE this
+  //     rendered tree exists, so it never reached this copy; the leg re-applies it to its
+  //     own tree. Without that, a present-but-dead validator would read green here — the
+  //     exact presence-for-effectiveness theatre the whole harness exists to kill.
+  {
+    const specExRel = path.join('validators', 'validate-spec-examples.cjs');
+    const specExAbs = path.join(goldenRoot, specExRel);
+    if (!fs.existsSync(specExAbs)) {
+      findings.push(
+        'spec-example harvest leg — the baked project does NOT carry validators/validate-spec-examples.cjs ' +
+        '(the KF-53.1 harvest gate has no rows.json row); its spec examples are demanded by nothing, which ' +
+        'is the state the md2page escape happened in.'
+      );
+    } else {
+      if (neuter === 'validate-spec-examples.cjs') {
+        fs.writeFileSync(specExAbs,
+          '#!/usr/bin/env node\n// NEUTERED by bake-inheritance --neuter (present-but-dead)\nprocess.exit(0);\n');
+      }
+      // The planted violation IS the trial's escaped shape: a literal example under an
+      // Examples heading, absent from a real, otherwise-passing test surface.
+      const escaped = '**bold *italic* code***';
+      fs.mkdirSync(path.join(goldenRoot, 'spec'), { recursive: true });
+      fs.mkdirSync(path.join(goldenRoot, 'tests'), { recursive: true });
+      fs.writeFileSync(path.join(goldenRoot, 'spec', 'project-spec.md'),
+        '# baked project — spec\n\n## Examples\n\n'
+        + '- `' + escaped + '` renders as bold containing italic.\n'
+        + '- `# Heading` renders as an h1.\n', 'utf8');
+      fs.writeFileSync(path.join(goldenRoot, 'tests', 'render.test.cjs'),
+        "const assert = require('assert');\n"
+        + "assert.strictEqual(render('# Heading'), '<h1>Heading</h1>');\n", 'utf8');
+      const hv = spawnSync('node', [specExAbs],
+        { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+      const hvOut = String(hv.stdout || '') + String(hv.stderr || '');
+      if (hv.status === 0 || !/MISSING/.test(hvOut) || hvOut.indexOf(escaped) === -1) {
+        findings.push(
+          `spec-example harvest leg — the BAKED validators/validate-spec-examples.cjs did not block the ` +
+          `planted unfixtured spec example (exit ${hv.status}, named the example ${hvOut.indexOf(escaped) !== -1}). ` +
+          `The generated copy must demand that a spec's literal examples reach the test surface (KF-53.1); ` +
+          `a present-but-dead gate here reproduces the trial's only wrong-result escape.`
+        );
+      }
+      // Clean up the plant so no later leg inherits a spec/tests tree it never expected.
+      try { fs.rmSync(path.join(goldenRoot, 'spec'), { recursive: true, force: true }); } catch (_) { /* best effort */ }
+      try { fs.rmSync(path.join(goldenRoot, 'tests'), { recursive: true, force: true }); } catch (_) { /* best effort */ }
+    }
+  }
+
+  // ---- SETTINGS-MERGE LEG (KF-56; the baked-inheritance pin) ----
+  // The baked project's OWN scripts/kit-update.cjs must perform the verified
+  // settings merge: plant a user settings file, adopt with the kit as template
+  // source, and require a NON-EMPTY derived kit registration set plus a
+  // byte-exact archive — an empty derivation that silently merges nothing is
+  // the fail-open class this leg exists to catch. Cross-platform (JSON
+  // semantics). Runs after the receipts leg (which needs the rendered
+  // settings.json untouched) and before the terminal hook-chmod leg.
+  // Mutation target: drop the scripts/lib/settings-merge.cjs row from rows.json
+  // → the structural pin REDs AND the baked kit-update crashes on require → RED.
+  {
+    if (!fs.existsSync(path.join(goldenRoot, 'scripts', 'lib', 'settings-merge.cjs'))) {
+      findings.push(
+        'settings-merge leg — the baked project does NOT carry scripts/lib/settings-merge.cjs (the KF-56 ' +
+        'merge helper has no rows.json row); its kit-update cannot perform the verified settings merge ' +
+        '(or crashes on require) exactly where the activation gap lives.'
+      );
+    }
+    const bakedUserSettings = '{\n  "_marker": "baked-user-settings",\n  "permissions": { "allow": ["Bash(npm test)"] }\n}\n';
+    const spr = path.join(goldenRoot, '.claude', 'settings.json');
+    fs.writeFileSync(spr, bakedUserSettings, 'utf8');
+    fs.copyFileSync(path.join(KIT_ROOT, 'release-manifest.json'), path.join(goldenRoot, 'release-manifest.json'));
+    const kuS = spawnSync('node', [path.join(goldenRoot, 'scripts', 'kit-update.cjs'), '--adopt', '--kit', KIT_ROOT],
+      { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+    let mergedS = null;
+    try { mergedS = JSON.parse(fs.readFileSync(spr, 'utf8')); } catch (_) { mergedS = null; }
+    const mergedCmds = new Set();
+    for (const ev of Object.keys((mergedS && mergedS.hooks) || {})) {
+      for (const grp of mergedS.hooks[ev] || []) {
+        for (const h of (grp && grp.hooks) || []) {
+          if (h && typeof h.command === 'string') mergedCmds.add(h.command.trim().replace(/\s+/g, ' '));
+        }
+      }
+    }
+    const archDirS = path.join(goldenRoot, '.claude', 'settings.archive');
+    const archivedS = fs.existsSync(archDirS)
+      && fs.readdirSync(archDirS).some((n) => /\.settings\.json$/.test(n)
+        && fs.readFileSync(path.join(archDirS, n), 'utf8') === bakedUserSettings);
+    if (!(kuS.status === 0 && mergedCmds.size >= 4 && mergedS && mergedS._marker === 'baked-user-settings' && archivedS)) {
+      findings.push(
+        `settings-merge leg — the BAKED scripts/kit-update.cjs --adopt did not perform the verified merge ` +
+        `(exit ${kuS.status}, distinct hook commands ${mergedCmds.size} — need >=4 = a NON-EMPTY derived set, ` +
+        `user key survived ${!!(mergedS && mergedS._marker === 'baked-user-settings')}, byte-exact archive ${archivedS}). ` +
+        `The generated copy must derive the kit registration set in ITS OWN layout and merge recoverably (KF-56); ` +
+        `an empty derivation that merges nothing is the fail-open class.`
+      );
+    }
+  }
+
+  // ---- HOOK-CHMOD CONFINEMENT LEG (KF-55; the baked-inheritance pin) ----
+  // Baked inheritance is a PIN, not parity prose: the BAKED project's own generated
+  // install-hooks.cjs + kit-update.cjs must refuse a planted .githooks symlink — the
+  // generated copies, not workshop bytes. Runs LAST (terminal leg): it git-inits the
+  // rendered tree and plants symlinks, mutations no earlier leg may observe.
+  // Mutation target: drop the scripts/lib/hook-chmod.cjs row from rows.json → the
+  // structural pin REDs AND the baked happy-path run crashes MODULE_NOT_FOUND → RED.
+  {
+    if (!fs.existsSync(path.join(goldenRoot, 'scripts', 'lib', 'hook-chmod.cjs'))) {
+      findings.push(
+        'hook-chmod leg — the baked project does NOT carry scripts/lib/hook-chmod.cjs (the KF-55 ' +
+        'confinement helper has no rows.json row); its install-hooks/kit-update would chmod ' +
+        'unconfined (or crash on require) exactly where the fix is needed most.'
+      );
+    }
+    if (process.platform === 'win32') {
+      process.stdout.write(
+        'note  hook-chmod leg: behavioral symlink-refusal SKIPPED on win32 (no POSIX symlink/exec-bit ' +
+        'semantics) — Linux CI (bake-and-test.yml) carries this leg; the structural row pin above still ran.\n'
+      );
+    } else {
+      const ghDir = path.join(goldenRoot, '.githooks');
+      fs.mkdirSync(ghDir, { recursive: true });
+      const extRoot = sandbox.sandboxRoot('kit-bake-hookchmod-ext-');
+      process.on('exit', () => { if (keep) return; try { fs.rmSync(extRoot, { recursive: true, force: true }); } catch (_) { /* best effort */ } });
+      const mkVictim = (name) => {
+        const p = path.join(extRoot, name);
+        fs.writeFileSync(p, '#!/bin/sh\nexit 0\n');
+        fs.chmodSync(p, 0o644);
+        return p;
+      };
+      const mode = (p) => fs.statSync(p).mode & 0o7777;
+      // install-hooks needs a real repo for `git config` — terminal-leg mutation, stated above.
+      spawnSync('git', ['init', '-q'], { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+
+      // (a) BAKED install-hooks: refuse the planted external symlink, target byte-unchanged.
+      const victimA = mkVictim('victim-install.sh');
+      fs.rmSync(path.join(ghDir, 'pre-commit'), { force: true });
+      fs.symlinkSync(victimA, path.join(ghDir, 'pre-commit'));
+      const ih = spawnSync('node', [path.join(goldenRoot, 'scripts', 'install-hooks.cjs')],
+        { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+      const ihOut = String(ih.stdout || '') + String(ih.stderr || '');
+      if (!(ih.status !== 0 && /refus/i.test(ihOut) && /symlink/i.test(ihOut) && mode(victimA) === 0o644)) {
+        findings.push(
+          `hook-chmod leg — the BAKED scripts/install-hooks.cjs did NOT refuse a planted external ` +
+          `.githooks/pre-commit symlink (exit ${ih.status}, refusal-line ${/refus/i.test(ihOut) && /symlink/i.test(ihOut)}, ` +
+          `external target mode 0o${mode(victimA).toString(8)}, expected 0o644 unchanged). The generated copy ` +
+          `must carry the KF-55 confinement, not just the workshop bytes.`
+        );
+      }
+      // (b) BAKED install-hooks happy path: clean managed hook → exit 0 (this run is the
+      // row-drop mutation detector — a missing helper crashes require → non-zero here).
+      fs.rmSync(path.join(ghDir, 'pre-commit'), { force: true });
+      fs.copyFileSync(path.join(KIT_ROOT, 'templates', 'dot-githooks', 'pre-commit'), path.join(ghDir, 'pre-commit'));
+      fs.chmodSync(path.join(ghDir, 'pre-commit'), 0o644);
+      const ih2 = spawnSync('node', [path.join(goldenRoot, 'scripts', 'install-hooks.cjs')],
+        { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+      if (!(ih2.status === 0 && (mode(path.join(ghDir, 'pre-commit')) & 0o111) !== 0)) {
+        findings.push(
+          `hook-chmod leg — the BAKED scripts/install-hooks.cjs happy path failed (exit ${ih2.status}, ` +
+          `pre-commit mode 0o${mode(path.join(ghDir, 'pre-commit')).toString(8)}): a clean managed hook must be ` +
+          `repaired and the run exit 0. (A MODULE_NOT_FOUND here = the helper row was dropped — the fix did not travel.)`
+        );
+      }
+      // (c) BAKED kit-update --adopt (--kit → the workshop tree as the template source):
+      // the planted pre-push symlink must be refused, non-zero, target byte-unchanged.
+      const victimB = mkVictim('victim-adopt.sh');
+      fs.rmSync(path.join(ghDir, 'pre-push'), { force: true });
+      fs.symlinkSync(victimB, path.join(ghDir, 'pre-push'));
+      fs.copyFileSync(path.join(KIT_ROOT, 'release-manifest.json'), path.join(goldenRoot, 'release-manifest.json'));
+      const ku = spawnSync('node', [path.join(goldenRoot, 'scripts', 'kit-update.cjs'), '--adopt', '--kit', KIT_ROOT],
+        { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
+      const kuOut = String(ku.stdout || '') + String(ku.stderr || '');
+      if (!(ku.status !== 0 && /refus/i.test(kuOut) && /symlink/i.test(kuOut) && mode(victimB) === 0o644)) {
+        findings.push(
+          `hook-chmod leg — the BAKED scripts/kit-update.cjs --adopt did NOT refuse a planted external ` +
+          `.githooks/pre-push symlink (exit ${ku.status}, refusal-line ${/refus/i.test(kuOut) && /symlink/i.test(kuOut)}, ` +
+          `external target mode 0o${mode(victimB).toString(8)}, expected 0o644 unchanged). Adoption must never ` +
+          `exercise chmod authority outside the project — in the generated copy too.`
+        );
+      }
+    }
+  }
 } catch (e) {
   findings.push(
     `golden leg — could not render/exercise the Standard red-gate: ${e && e.message ? e.message : e}. ` +
@@ -867,7 +1135,7 @@ if (findings.length === 0) {
     `the receipts leg proves the baked pipeline end-to-end — synthesized adapter payloads feed the EVENT ` +
     `sections and the bounded fixture-history synthesizer feeds the COLLECTOR sections — with --check green ` +
     `and a deleted Stop registration going RED as a named coverage gap (--receipts-no-stop); ` +
-    `${shipped.length} validators + hooks + calibration set present.\n` +
+    `${shippedToProject.length} validators (all ${shipped.length} kit .cjs minus the ${kitOnly.length} kit-only: ${kitOnly.join(', ')}) + hooks + calibration set present.\n` +
     `      (honest scope: the deterministic SCAFFOLD inherits — not the conversational interview; ` +
     `G10 assembled-execution is proven by presence + CI-wiring, not bake-fired.)\n`
   );

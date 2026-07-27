@@ -12,6 +12,6 @@ Arguments: `$ARGUMENTS` (the milestone id, e.g. `M01`).
 Steps:
 
 1. Open the milestone Phase doc `docs/build-prompts/<milestone>-*.md` and find its Stage V section — the `<verifier_stage_prompt>` block.
-2. Run the verification passes named there at the project's `verifier_mode` (default Standard = inventory + hooks + behavior + security + code_quality; add `design` when `deliverable_type: web`; Full adds multi-call). For `deliverable_type: web`, Pass 4 requires a literal observed-running step and Pass 5 the design-conformance check against `docs/design.md`.
+2. Run the verification passes named there at the project's `verifier_mode` (default Standard `pass_2_4` = hooks + behavior + security + code_quality — **no inventory pass** (§X.2 is advisory at Standard); add `design` when `deliverable_type: web`; Full `pass_1_2_3_4` adds inventory + multi-call). For `deliverable_type: web`, Pass 4 requires a literal observed-running step and Pass 5 the design-conformance check against `docs/design.md`.
 3. Write findings to the findings file using `prompts/VERIFIER-FINDINGS-TEMPLATE.md`, including the mandatory tier-coverage caveat.
 4. Do **not** fix anything — the Verifier produces findings; remediation is the build session's job via the D.fix loop.

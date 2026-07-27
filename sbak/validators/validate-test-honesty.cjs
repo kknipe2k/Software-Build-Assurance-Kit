@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-test-honesty.cjs
 //
 // The G9 test-honesty gate, shipped framework-wide so every
@@ -291,14 +291,25 @@ function checkPhaseDoc(file, text) {
 }
 
 // Findings for one test file: each it()/test() block must contain an assertion call.
+//
+// COMMENTS STRIPPED FIRST (M26.B / KF-31) — the JS/TS path was the ONE evaluated language
+// reading raw text while checkPyTests / checkGoTests / checkRustTests all stripped, which is
+// exactly the substring-theater guard those three carry. Both directions were live:
+//   • FAIL-OPEN (the serious half): an assertion-free test whose comment merely MENTIONS
+//     `expect(` satisfied ASSERTION_PATTERNS and passed — the validator certified an
+//     assertion-free test as honest. Confirmed on shipped bytes by the T3b run; ledgered
+//     as KF-44 because it shipped, not because it survived.
+//   • FALSE-FLAG: a commented-out `it(` was scanned as a live test block and reported.
+// Stripping fixes both, and makes the four language paths one rule instead of three-plus-one.
 function checkTestFile(file, text) {
   const findings = [];
+  const src = stripSlashComments(text.replace(/\r\n?/g, '\n'));
   const blockRe = /\b(?:it|test)\s*\(/g;
   const starts = [];
   let m;
-  while ((m = blockRe.exec(text)) !== null) starts.push(m.index);
+  while ((m = blockRe.exec(src)) !== null) starts.push(m.index);
   for (let i = 0; i < starts.length; i++) {
-    const slice = text.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : text.length);
+    const slice = src.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : src.length);
     const hasAssertion = ASSERTION_PATTERNS.some((re) => re.test(slice));
     if (!hasAssertion) {
       const nameM = /\b(?:it|test)\s*\(\s*['"`]([^'"`]*)/.exec(slice);

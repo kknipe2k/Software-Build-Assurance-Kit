@@ -11,11 +11,11 @@
 
 Read these seven files in order before engaging with the user beyond the greeting:
 
-1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — **read first**. The verbatim text and five side-by-side option tables you present as your first response. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
+1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — **read first**. The verbatim text — 3 asks (each with its option table) + the confirmation turn — you present as your first response. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
 2. **`sbak/BUILD-PLAYBOOK.md`** — the methodology. Defines the four layers (Project / Milestone / Stage / Step), the three load-bearing constraints, the per-stage loop, the closeout protocol, the gates, the retrospective protocol, the gap-analysis protocol. **Part 0** defines the tier model.
-3. **`sbak/FRAMEWORK-CONFIG.md`** — the tier and toggle reference. Three tiers (Lite / Standard / Full), a separate expertise dimension (Novice / Intermediate / Expert), and a toggle schema (approval cadence, retrospective depth, ledger discipline, web-verify, read-first cap, research mode, escalation, hook enforcement, explanation mode). This file is what you'll read most carefully — bootstrap is largely a calibration exercise.
+3. **`sbak/FRAMEWORK-CONFIG.md`** — the tier and toggle reference. Two tiers (Full the default / Lite the low-ceremony escape; the third tier retired at M26.D), the machine-readable calibration core (`calibration-core.json` — the asks, per-tier toggles, severity, and derivation rules), and the toggle schema (retrospective depth, ledger discipline, web-verify, read-first cap, research mode, escalation, hook enforcement, explanation mode). This file is what you'll read most carefully — bootstrap is largely a calibration exercise.
 4. **`sbak/persistence-architecture.md`** — the layer model. Where each artifact lives (Layers 1–5), who reads/writes when, the mutability matrix, the audit trail.
-5. **`sbak/PROCESS-VALIDATION.md`** — the scoring framework. Three axes (process / artifact / forward-readiness), threshold gates (16 hard + 5 soft), outcome matrix, and the tier-conditional retrospective shape (Lite: brief / Standard: two-axis / Full: three-axis).
+5. **`sbak/PROCESS-VALIDATION.md`** — the scoring framework. Three axes (process / artifact / forward-readiness), threshold gates (16 hard + 5 soft), outcome matrix, and the tier-conditional retrospective shape (Lite: brief / Full: two-axis).
 6. **`sbak/STAGE-PROMPT-PROTOCOL.md`** — the XML schema for stage CLI prompts that go inside Phase docs (currently v1.9 — the authoritative version is the newest entry in that file's own `### Changelog`; the smoke suite binds this pin to it so it can't silently re-stale).
 7. **`sbak/templates/PROJECT-CLAUDE.md`** — the per-project execution-rules template you'll customize and install as the project's own `CLAUDE.md` at the end of bootstrap.
 
@@ -27,9 +27,9 @@ Once you've read these, you understand the framework. The bootstrap workflow bel
 
 This is one-line consent on *location* — distinct from the calibration interview (which is about *what to build*) and the Phase-3 pre-flight disclosure (which is the full footprint just before disk writes). It catches the footgun where a user runs `claude` from the wrong place and only discovers it after investing time in calibration + discovery.
 
-If in bootstrap mode and the user has not yet stated what they want to build, present the **calibration interview** from `sbak/templates/CALIBRATION-INTERVIEW.md` as your *second* response (after the directory confirmation above). Read that file first; it contains the verbatim text to surface, five side-by-side option tables (project size, experience, approval cadence, deliverable type, verification & CI cost), and the smell-flagging rules. Don't paraphrase the option tables — the trade-offs only land if the user sees them side by side.
+If in bootstrap mode and the user has not yet stated what they want to build, present the **calibration interview** from `sbak/templates/CALIBRATION-INTERVIEW.md` as your *second* response (after the directory confirmation above). Read that file first; it contains the verbatim text to surface — the 3 asks (operating mode, tier, risk triggers), each with its option table, and the confirmation turn that surfaces every derived value — plus the smell-flagging rules. Don't paraphrase the option tables — the trade-offs only land if the user sees them side by side.
 
-The interview is what makes the calibration **explicit and user-facing** instead of buried in agent instructions. The user picks from the five choices, OR describes the project and lets you propose a calibration with rationale (the deliverable type and verification posture are usually inferred — from the description and repo visibility), OR punts and accepts the safe-middle default (Standard + Familiar + Standard, type + verification inferred). The interview maps to `project-config.md` toggles via the table at the bottom of `CALIBRATION-INTERVIEW.md`.
+The interview is what makes the calibration **explicit and user-facing** instead of buried in agent instructions. The user answers the three asks, OR describes the project and lets you propose the calibration with rationale (deliverable type and verification locus are always derived — from the description, repo visibility, and ship targets — and confirmed, never quizzed), OR punts and accepts the default (greenfield + Full, no declared risk; everything else derived and confirmed). The interview maps to `project-config.md` toggles via the table at the bottom of `CALIBRATION-INTERVIEW.md`.
 
 After the user answers (or you propose and they confirm), proceed to Phase 0 Step 0.2 below — the tier-conditional discovery questions. Don't lock the calibration to `project-config.md` yet; Phase 1 may surface complexity that bumps tier upward.
 
@@ -37,21 +37,19 @@ After the user answers (or you propose and they confirm), proceed to Phase 0 Ste
 
 `operating_mode` is **orthogonal to the session-scoped `role`** (the 3-brain `{work, verifier, orchestrator, refactor}` axis): the SessionStart hook composes the read-first list from both. A pre-commit value check (`validators/validate-operating-mode.cjs`) rejects any `operating_mode` outside the four values. If the user doesn't pick, default to `greenfield` — never error a project for an unset mode.
 
-**Step 0.1 — Calibration interview (every project, all tiers).** Present the canonical interview from `sbak/templates/CALIBRATION-INTERVIEW.md` as your first user-facing response. Five choices:
+**Step 0.1 — Calibration interview (every project, both tiers).** Present the canonical interview from `sbak/templates/CALIBRATION-INTERVIEW.md`. **3 asks + 1 confirmation turn** (M26.D — the ratified shape; authority: `calibration-core.json`):
 
-1. **Project size / complexity** — Lite / Standard / Full (the project `tier`, per `sbak/FRAMEWORK-CONFIG.md` §3)
-2. **Your experience with this stack and frameworks like this one** — New / Familiar / Experienced (maps to expertise: Novice / Intermediate / Expert per `sbak/FRAMEWORK-CONFIG.md` §2.5)
-3. **Approval cadence** — Minimum / Standard / Maximum (maps to `approval_cadence` per `sbak/FRAMEWORK-CONFIG.md` §4.1)
-4. **Deliverable type** — CLI / Web-UI / Library / Service / Other (maps to `deliverable_type`; selects spec + phase-doc templates and verification passes). Orthogonal to tier — it changes *which* gates apply, not *how much* ceremony. Usually inferred from the project description and proposed, not asked outright.
-5. **Verification & CI cost** — Local-first (hybrid) / Cloud / Local-only (maps to `verification_locus` per `sbak/FRAMEWORK-CONFIG.md` §4.14). Where tests run and what GitHub Actions costs: public repos → cloud is free + unlimited; private repos → hybrid keeps minutes near-zero (full suite local at pre-push, one ubuntu PR smoke check, macOS + full matrix on tags only). Orthogonal to tier. Usually proposed from repo visibility + the macOS-ship audit, like deliverable type.
+1. **Tier** — Full (default) / Lite (the project `tier`, per `sbak/FRAMEWORK-CONFIG.md` §3). *(The mode ask precedes this one — Step 0.0 above.)*
+2. **Risk triggers** — the six enumerated risk surfaces (`sbak/FRAMEWORK-CONFIG.md` §4.19); `[]` is fine and common. Risk overrides tier; at Full a declared trigger arms the append-only-ledger CI workflow.
+3. **The confirmation turn** — run `node sbak/scripts/calibration-derive.cjs` on the answers and surface EVERY derived value in plain English with its one-line why (deliverable type from the description; verification locus from repo visibility + ship targets, never tier — KF-28; the per-stage cadence disclosure + fence; validator severity — Lite warns, Full blocks; the tier toggle set; the derived scaffold count), inviting correction. Nothing is locked until the user nods.
 
-Present the five side-by-side option tables verbatim from `CALIBRATION-INTERVIEW.md`. Don't paraphrase or compress them — seeing the trade-offs in a table is the whole point. The user can answer three ways: direct (e.g., "Standard, Familiar, Standard, web"), describe (you propose a calibration including the inferred deliverable type), or punt (you default to Standard + Familiar + Standard and infer the type).
+Present the ask tables verbatim from `CALIBRATION-INTERVIEW.md`. Don't paraphrase or compress them — seeing the trade-offs in a table is the whole point. The user can answer direct ("greenfield, Full, no risk surfaces"), describe (you propose the calibration), or punt (greenfield + Full, everything else derived).
 
-**Pacing + menu discipline (every Phase-0 exchange — the mode question, the interview, and discovery alike).** Ask **one question per turn**, then WAIT for the answer before asking the next — never batch the interview into a wall of questions. Lead each question with **numbered recommendations** inferred from the repo and the user's description, so the user can answer **accept-by-number** or override in their own words. Numbered options draw ONLY from documented dials (tier, expertise, cadence, deliverable type, verification locus, `details`, defer) — **never offer to disable a named control** (a hook, a validator, a gate, the fence). Skips are user-initiated only and carry their stated cost — when the user asks to skip, state that cost in one line before honoring the skip.
+**Pacing + menu discipline (every Phase-0 exchange — the mode question, the interview, and discovery alike).** Ask **one question per turn**, then WAIT for the answer before asking the next — never batch the interview into a wall of questions. Lead each question with **numbered recommendations** inferred from the repo and the user's description, so the user can answer **accept-by-number** or override in their own words. Numbered options draw ONLY from documented dials (mode, tier, risk triggers, `details`, defer) — **never offer to disable a named control** (a hook, a validator, a gate, the fence). Skips are user-initiated only and carry their stated cost — when the user asks to skip, state that cost in one line before honoring the skip.
 
-After the user answers, **flag any toggle smells** per `CALIBRATION-INTERVIEW.md`'s smells section. Common ones: Lite + New + Minimum approval (fast + learning is risky); Full + Experienced + Minimum approval (Full ceremonies need per-stage review); Lite + audit need (audit overrides time horizon).
+After the user answers, **flag any toggle smells** per `CALIBRATION-INTERVIEW.md`'s smells section. Common ones: Lite + audit/compliance need (audit overrides time horizon); Full + throwaway prototype (over-tiered — apply the downshift rule); `bug_fix` + multi-week horizon (re-ask the mode).
 
-Confirm the calibration in plain English ("Standard project, Familiar, Standard approval — that means per-stage retrospectives covering process + product, append-only ledger documented but not CI-enforced, ~68 scaffold files…"). User confirms or revises.
+Confirm the calibration in plain English (the confirmation turn — "Full tier, greenfield, no declared risk: two-axis retrospectives, blocking validators, local-first tests native-only since nothing ships to Linux, ~108 scaffold files…"). User confirms or revises.
 
 **Don't lock the calibration to `project-config.md` yet** — that happens at end of Phase 1 (after the spec lands). The spec may surface complexity that bumps the project upward; bumping tier *before* generating scaffolds is cheap.
 
@@ -61,7 +59,7 @@ Confirm the calibration in plain English ("Standard project, Familiar, Standard 
 
 ## The `details` protocol (full text)
 
-**If the user types `details`:** read out the canonical scaffold from `sbak/bootstrap/SCAFFOLD-TABLES.md` *verbatim* — the three Markdown tables (Always-generated, Standard and Full only, Full only) plus the Web/UI-only table when applicable. **Do not synthesize a tier comparison from memory** — paraphrasing has produced miscategorizations (e.g., listing `ORCHESTRATOR.md` as Full-only when it's actually Standard+). Quote the tables; let the canonical text speak.
+**If the user types `details`:** read out the canonical scaffold from `sbak/bootstrap/SCAFFOLD-TABLES.md` *verbatim* — the three Markdown tables (Always-generated, Full-only, Risk-armed) plus the Web/UI-only table when applicable. **Do not synthesize a tier comparison from memory** — paraphrasing has produced miscategorizations (e.g., mislabeling `ORCHESTRATOR.md`'s tier condition). Quote the tables; let the canonical text speak.
 
 ## Phase 1 — Spec authoring (full text)
 
@@ -75,7 +73,7 @@ Generate `spec/project-spec.md` from the discovery answers. Depth scales by tier
 - §2 Scope (what's in v1; what's deferred)
 - §3 Success criteria (3–5 bullets)
 
-**Standard:** ~2–3 pages.
+**Full:** ~2–3 pages.
 
 - §1 Identity
 - §2 Scope matrix (in / out / deferred — with version markers)
@@ -87,7 +85,11 @@ Generate `spec/project-spec.md` from the discovery answers. Depth scales by tier
 
 **Deliverable-type contract section (all tiers).** After the base spec, append the section matching `deliverable_type` from `sbak/templates/SPEC-TYPE-SECTIONS.md` — the contract that type lives on: `cli` → Command surface (args / exit codes / stdout); `library` → API surface (public exports / semver); `service` → Endpoint contracts (routes / auth / health); `web` → a pointer to `docs/design.md` + Visual acceptance criteria (authored at Phase 1.5/1.6); `other` → nearest fit + an Open-Questions flag that the type contract isn't specialized. This section drives the type-specific gates in `docs/gates.md` and the matching Verifier passes.
 
-After the spec lands, **revisit tier and expertise**: did the spec surface complexity that pushes tier up? An "audit needs" requirement that wasn't obvious in Phase 0? Adjust before Phase 2 if so.
+**IRL/HITL plan section (all tiers) — authored WITH the spec, never later.** Also append `sbak/templates/IRL-HITL-PLAN.md`: the drive moments per milestone boundary, what the human verifies **by hand** at each one, and — the column that gets dropped — **where each answer gets typed**. The obligations already exist scattered across the lifecycle (the close-gate drive, the App-Map, the Verifier behaviour pass, the friction stamp); authoring them here is what stops them ambushing the operator at a closeout menu, which is exactly what happened in a live build trial. If the milestone boundaries are not known yet, write the section with `TBD — set at Phase 2` in the boundary column and fill it at Phase 2; an honest interim beats an empty section.
+
+**Write the spec's examples in a form the harvest gate can read.** `validators/validate-spec-examples.cjs` demands that every literal example in the spec appears in at least one test fixture — the escape it closes is a spec example that no test ever met, which was the one wrong result to survive both arms of a controlled build trial. It recognizes **three structural forms**, so use them: an **`## Examples`** heading, a fenced block tagged ```` ```example ````, or a bolded **`**Example**`** list label. Prose is deliberately never harvested, so an example written as a bare backticked token in a requirements sentence is invisible to the gate — which is a limit of the gate, not a licence to write examples that way.
+
+After the spec lands, **revisit tier**: did the spec surface complexity that pushes tier up? An "audit needs" requirement that wasn't obvious in Phase 0? Adjust before Phase 2 if so.
 
 Surface for review. Iterate until accepted.
 
@@ -100,7 +102,7 @@ Surface for review. Iterate until accepted.
 A web/UI build authors a design brief *before* any interface code, so the UI is consistent and actually designed rather than raw browser defaults (the framework's worst observed failure was a web app that passed every engineering gate and shipped unusable). Present the interview from `sbak/templates/DESIGN-DISCOVERY-INTERVIEW.md`. It opens with the gate question — **does the user have Claude Design?** — and routes three ways:
 
 - **Path A (has Claude Design):** the user authors the system externally and drops the exported `design.md` into `docs/design.md`. Validate it has the 9 sections; skip the interview.
-- **Path B1 (from scratch):** run the question set at tier-conditional depth (Lite ~8–10 starred questions / Standard ~25–30 / Full ~50–70).
+- **Path B1 (from scratch):** run the question set at tier-conditional depth (Lite ~8–10 starred questions / Full ~25–30).
 - **Path B2 (community template):** the user starts from an `awesome-claude-design` template and the agent runs only the ~10 delta questions.
 
 ### Phase 1.6 — design.md authoring (web/UI only)
@@ -114,8 +116,7 @@ Synthesize the Phase 1.5 answers into `docs/design.md` using the 9-section struc
 From the spec, propose milestones. Count and depth scale by tier:
 
 - **Lite:** 1–3 milestones; each is a single feature increment, no formal closeout, ~3–5 day estimate
-- **Standard:** 3–6 milestones; each has staged work (A, B, C) and runs Stage E closeout — append-only ledger advisory (generated and written, but honor-system, not CI-enforced), 1–2 weeks each
-- **Full:** 3–8 milestones; each has full staging (A, B, C, D + E closeout), 1–2 weeks each
+- **Full:** 3–6 milestones; each has staged work (A, B, C — add D only when the milestone genuinely splits further) and runs Stage E closeout, 1–2 weeks each. **Stage count is a per-milestone judgment recorded in the Phase doc, not a tier constant** (KF-19 resolved at M26.D).
 
 Each milestone (regardless of tier):
 
@@ -128,7 +129,7 @@ Surface for review. User confirms or revises milestone count, scope, ordering.
 
 **Single-feature calibration: propose ONE milestone.** Under the existing-repo, single-feature calibration (Phase 0.2), the milestone-count guidance above is for full products — propose a one-milestone plan (stage A, plus B only if the work genuinely splits, then V and E) and let the user ratify it. If the feature genuinely needs multiple milestones, say so plainly — that is a real project, not the shortcut.
 
-**Draft the ranked backlog (`docs/backlog.md`) from this breakdown.** The milestone plan already *implies* a priority order — Phase 2 makes it explicit and ranked. Synthesize the spec's scope + the milestone ordering into a first-draft ranked list of user stories in `docs/backlog.md` (from `sbak/templates/backlog.md`, tier-scaled: Lite `# / story / status`; Standard adds `Depends on`; Full adds the re-rank override-log). This is the artifact the off-track check (G8) measures against, so it must be **surfaced explicitly for human ratification** — the backlog is HITL co-authored, and the agent only *drafts/proposes* the ranking (no AI-only edits, ever — `sbak/FRAMEWORK-CONFIG.md` §4.15). The actual file is written in Phase 3 with the rest of the scaffold; here you draft the *content* (the ranked stories) and get the user's sign-off on the ordering. Add it to the work read-first list (it already is in `sbak/templates/dot-claude/read-first-list.txt`).
+**Draft the ranked backlog (`docs/backlog.md`) from this breakdown.** The milestone plan already *implies* a priority order — Phase 2 makes it explicit and ranked. Synthesize the spec's scope + the milestone ordering into a first-draft ranked list of user stories in `docs/backlog.md` (from `sbak/templates/backlog.md`, tier-scaled: Lite `# / story / status`; Full adds `Depends on` + the re-rank override log). This is the artifact the off-track check (G8) measures against, so it must be **surfaced explicitly for human ratification** — the backlog is HITL co-authored, and the agent only *drafts/proposes* the ranking (no AI-only edits, ever — `sbak/FRAMEWORK-CONFIG.md` §4.15). The actual file is written in Phase 3 with the rest of the scaffold; here you draft the *content* (the ranked stories) and get the user's sign-off on the ordering. Add it to the work read-first list (it already is in `sbak/templates/dot-claude/read-first-list.txt`).
 
 ## Phase 4 — First Phase doc (full text)
 
@@ -138,17 +139,16 @@ Generate the first milestone Phase doc. Depth and shape are tier-conditional:
 
 **Lite:** a single markdown file at `docs/build-prompts/M01-<title>.md` with a brief structure (Background / Scope / Tasks list / Definition of done). No XML stage prompts; the agent works from the markdown directly.
 
-**Standard:** the full Phase doc structure but with reduced stage count (typically A and B only, no closeout E).
+**Full:** the full Phase doc structure —
 
 - Background / Scope / References / Document structure / Implementation Workflow
 - Per-stage sections (X.1 Problem / X.2 Files / X.3 Detailed changes / X.4 Tests / X.5 CLI Prompt / X.6 Commit Message)
-- XML stage prompts validating against `sbak/STAGE-PROMPT-PROTOCOL.md`
-
-**Full:** the original full structure (Stages A, B, C, D + E closeout; full XML schema; pre-authored commit messages per stage).
+- XML stage prompts validating against `sbak/STAGE-PROMPT-PROTOCOL.md`; pre-authored commit messages per stage
+- Staged work matching the Phase-2 plan (A, B, C — D only when the milestone genuinely splits) + Stage E closeout. **Stage count is a per-milestone judgment, not a tier constant** (KF-19 resolved at M26.D).
 
 **Brownfield Stage-A shape (single-feature calibration).** When the project came through the existing-repo, single-feature path (Phase 0.2), the M01 Phase doc's Stage A carries a `<fan_out_grep>` block over the feature's named surface (the "where does it live" answer) and an **impact-analysis step**: record the existing tests that cover the "must not change" behaviors in the Phase doc, and re-run that list at stage end alongside the stage's own gates. This is authoring discipline on an existing optional prompt slot — no new schema, no new mode, no new gate.
 
-Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Standard and Full) must validate against `sbak/STAGE-PROMPT-PROTOCOL.md`.
+Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Full) must validate against `sbak/STAGE-PROMPT-PROTOCOL.md`.
 
 ## Phase 5 — Handoff (full text)
 
@@ -156,7 +156,7 @@ Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Standa
 
 The bootstrap is complete. Surface the final state:
 
-- All scaffold files generated and listed (with realistic counts: ~36 for Lite, ~68 for Standard, ~69 for Full — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
+- All scaffold files generated and listed (with realistic counts: ~44 for Lite, ~108 for Full (the unarmed reference; +1 when a risk trigger arms the ledger workflow) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
 - `CLAUDE.md` replaced with the project version
 - `project-config.md` written with the agreed tier and toggles
 - `.claude/` hooks installed; SessionStart hook will auto-load the read-first list on the next session
@@ -167,8 +167,16 @@ The bootstrap is complete. Surface the final state:
   - **Existing empty GitHub repo:** `git remote add origin https://github.com/<user>/<repo>.git` then `git push -u origin <branch>`.
   - **Create a new GitHub repo (needs `gh` authenticated):** `gh repo create <name> --private --source=. --remote=origin --push`.
   Don't guess the user's choice — ask. If the user defers, leaving `origin` unset is the safe state (a later push errors clearly instead of silently targeting the kit).
-- **Next action:** open a fresh Claude Code session in this directory; the new `CLAUDE.md` will take over as the auto-loaded entry point, and the SessionStart hook will inject the read-first list. For Lite, just say "let's start M01"; for Standard and Full, paste the M01.A stage prompt from the Phase doc to begin Stage A.
-- **Two-terminal topology (Standard and Full) — instruct it explicitly:** **Terminal 1 = orchestrator** (`node scripts/set-mode.cjs orchestrator`, then `claude`); carry every surface — gate packets, RED summaries, stage-end packets, retrospectives — THERE for adjudication. Terminal 2 = the builder/verifier session that runs the stage prompts. Adjudication belongs inside the fenced orchestrator session, not with whatever capable agent sits nearby; repeat this reminder at every stage boundary.
+- **Next action:** open a fresh Claude Code session in this directory; the new `CLAUDE.md` will take over as the auto-loaded entry point, and the SessionStart hook will inject the read-first list. For Lite, just say "let's start M01"; for Full, paste the M01.A stage prompt from the Phase doc to begin Stage A.
+- **Two-terminal topology (Full) — instruct it explicitly:** **Terminal 1 = orchestrator** (`node scripts/set-mode.cjs orchestrator`, then `claude`); carry every surface — gate packets, RED summaries, stage-end packets, retrospectives — THERE for adjudication. Terminal 2 = the builder/verifier session that runs the stage prompts. Adjudication belongs inside the fenced orchestrator session, not with whatever capable agent sits nearby; repeat this reminder at every stage boundary.
+- **Sequencing — `worktree-after-first-commit` (check this, don't let the user discover it).** G1 ("never commit without approval") holds all the way through bootstrap, so **the project's first commit is M01.A's** — nothing before it. Whether Topology A can exist right now therefore depends on how the project started: a **kit clone** inherits the kit's history and is fine; a project that arrived as a **ZIP into a fresh `git init`** has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD**. Don't guess — run the check and say which case you are in:
+  ```
+  git rev-parse --verify HEAD
+  ```
+  - **Non-zero exit (unborn HEAD → no commits yet).** Run both roles in **this** checkout until M01.A's first commit lands: two terminals, one directory (Topology C), switching `node scripts/set-mode.cjs <role>` before each session's first prompt. Only one role acts at a time; the mode-check hook catches a mismatched paste. **After that first commit:** `git worktree add ../build-wt <milestone-branch>`, move the build session into `../build-wt`, keep the orchestrator in the main checkout — Topology A for the rest of the project.
+  - **Exit 0 (a commit exists).** Topology A can be created immediately, as described above.
+
+  This was found the hard way in a live build trial: the handoff instructed Topology A unconditionally, the repo was empty, and the operator had to invent an undocumented interim mid-milestone. The interim is legitimate — leaving it unwritten is not.
 
 After handoff, this bootstrap CLAUDE.md no longer exists — the project's own CLAUDE.md is the entry point.
 
@@ -186,7 +194,7 @@ If the user wants to skip the tier inference entirely ("just use Full / just use
 
 ## Operating modes (the leading dial)
 
-The bootstrap asks the **leading `operating_mode` question first** (Phase 0 Step 0.0) — *"what kind of work is this?"* — before the five calibration choices. All four modes are live:
+The bootstrap asks the **leading `operating_mode` question first** (Phase 0 Step 0.0) — *"what kind of work is this?"* — before the calibration asks. All four modes are live:
 
 Each mode's summary + full Phase-0 playbook lives in its `sbak/bootstrap/MODE-<name>.md` file (all four **Implemented**), loaded one-per-session at Step 0.0.
 
@@ -205,7 +213,7 @@ Each mode's summary + full Phase-0 playbook lives in its `sbak/bootstrap/MODE-<n
 - synthesize literature/data into a paper + an interactive illustrative app
 - review an existing codebase; the deliverable is a findings report + remediation backlog, not new code
 - Six phases. Each phase has explicit deliverables. Surface to the user at each phase boundary; do not proceed without approval. **The depth of each phase is tier-conditional** — the tier you and the user agreed in Phase 0 determines how heavy each subsequent phase gets.
-- Goal: pick a tier, expertise level, and approval cadence, then understand the project well enough to draft a v1 spec at the depth the tier warrants.
+- Goal: pick a mode and tier, confirm the derived toggles, then understand the project well enough to draft a v1 spec at the depth the tier warrants.
 - (it carries the Step-0.2 greenfield discovery playbook). This is the path the framework handles best.
 - (the reduced 3-phase shape; replaces the greenfield discovery and Phases 1–2 + 4).
 - (Phase R → explicit user re-tier → Phase A).
@@ -213,4 +221,4 @@ Each mode's summary + full Phase-0 playbook lives in its `sbak/bootstrap/MODE-<n
 - , read at Step 0.0 when the mode resolved to `greenfield`
 - ; the other three stay unread this session:**
 - Generate the project's directory structure and companion docs from `sbak/templates/`. Replace `{{PLACEHOLDER}}` values with project's actual values. **Scaffold contents are tier-conditional**:
-- It carries, verbatim, the canonical tier tables (Always-generated / Standard-and-Full-only / Full-only / Web-UI-only), the full validator set, and the permission-fence, verification-locus, and App-Map conditional notes.
+- It carries, verbatim, the canonical tier tables (Always-generated / Full-only / Risk-armed / Web-UI-only), the full validator set, and the permission-fence, verification-locus, and App-Map conditional notes.

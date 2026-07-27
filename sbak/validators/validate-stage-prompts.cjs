@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-stage-prompts.js
 //
 // Validates stage prompts embedded in Phase docs against the schemas defined
@@ -30,6 +30,13 @@ const path = require('path');
 // matched the tag anywhere in the raw text). Required-tag / named-pass presence is now checked
 // against the comment/CDATA-stripped XML, so a commented-out tag is NOT a live element.
 const { stripInertXml } = require('./lib/fenced-block.cjs');
+
+// The ONE stage-structure reader, shared with the UserPromptSubmit mode-check hook (M27.C,
+// KF-57). This validator's structural read IS the source the hook consumes — a second
+// ad-hoc classifier in the hook is exactly the drift KF-57 was filed for. It lives in
+// scripts/lib/ rather than validators/lib/ because `kit-update --adopt` installs
+// scripts/ but not validators/, and the hook must work in an adopted repo.
+const { classifyStagePrompt, STAGE_ROOTS } = require(path.join(__dirname, '..', 'scripts', 'lib', 'stage-structure.cjs'));
 
 const SCHEMAS = {
   work_stage_prompt: {
@@ -113,6 +120,22 @@ const SCHEMAS = {
   },
 };
 
+// LOCKSTEP (M27.C): the shared module owns the stage-root NAME set; this table owns each
+// root's required TAGS and the hook owns each root's ROLE. The three key sets must agree —
+// a schema added here without a matching entry in the module (and therefore in the hook)
+// ships a root the role guard cannot see. Fail closed rather than validate half a grammar.
+{
+  const want = STAGE_ROOTS.slice().sort().join(',');
+  const have = Object.keys(SCHEMAS).sort().join(',');
+  if (want !== have) {
+    console.error('validate-stage-prompts: SCHEMAS keys have drifted from scripts/lib/stage-structure.cjs STAGE_ROOTS (fail-closed).');
+    console.error(`  SCHEMAS:     ${have}`);
+    console.error(`  STAGE_ROOTS: ${want}`);
+    console.error('  Add the root in all three places: STAGE_ROOTS, this SCHEMAS table, and the mode-check hook\'s ROOT_TO_MODE.');
+    process.exit(2);
+  }
+}
+
 // v1.9: the strict stage-id grammar admits ONE optional dotted-minor
 // milestone segment, so a ratified minor milestone like M20.5 can express its stage
 // ids (M20.5.A). Exactly one segment — a sub-sub milestone (M20.5.1.A) stays illegal
@@ -134,6 +157,10 @@ function extractXmlBlocks(content) {
   return blocks;
 }
 
+// The raw first line-anchored element. NOT a stage-structure reader — since M27.C that is
+// scripts/lib/stage-structure.cjs, shared with the hook. This survives for ONE job: naming
+// the offending tag in the "unknown root element <foo>" diagnostic when the block contains
+// no stage element at all. Do not grow it back into a classifier.
 function findRootElement(xml) {
   const re = /^\s*<(\w+)([^>]*)>/m;
   const match = re.exec(xml);
@@ -163,19 +190,47 @@ function validateBlock(block, filePath, { allowPlaceholders }) {
   // from the raw xml (a real root is never inside a comment).
   const liveXml = stripInertXml(xml);
 
-  const root = findRootElement(xml);
-  if (!root) {
-    errors.push({ file: filePath, line: startLine, message: 'no root element found in xml block' });
+  // The SHARED structural read (M27.C): the same module, on the same bytes, that the
+  // mode-check hook consumes — so a block the validator calls a work prompt can never be a
+  // verifier prompt to the hook. The raw first-element scan below is only a diagnostic aid
+  // for blocks with no stage element at all.
+  const structure = classifyStagePrompt(xml, { allowPlaceholders });
+
+  if (structure.state === 'invalid') {
+    errors.push({ file: filePath, line: startLine, message: structure.reason });
     return { errors, warnings };
   }
 
-  if (!SCHEMAS[root.tag]) {
+  if (structure.state === 'none') {
+    const raw = findRootElement(xml);
+    if (!raw) {
+      errors.push({ file: filePath, line: startLine, message: 'no root element found in xml block' });
+    } else {
+      errors.push({
+        file: filePath, line: startLine,
+        message: `unknown root element <${raw.tag}>. valid: ${Object.keys(SCHEMAS).join(', ')}`,
+      });
+    }
+    return { errors, warnings };
+  }
+
+  // ONE ROOT PER BLOCK. The protocol has required this since v1.0 ("Confirm one and only
+  // one root element per block") and nothing enforced it — a block carrying a quoted
+  // example BESIDE its root validated as whichever one the old reader happened to pick.
+  // `structure.roots` is the top-level element list, independent of which one the shared
+  // precedence chose, so this fires on the ambiguous shape AND on the same-kind shape the
+  // hook is content to enforce.
+  if (structure.state === 'ambiguous' || (structure.roots && structure.roots.length > 1)) {
+    const listed = structure.roots.map((r) => `<${r}>`).join(', ');
     errors.push({
       file: filePath, line: startLine,
-      message: `unknown root element <${root.tag}>. valid: ${Object.keys(SCHEMAS).join(', ')}`,
+      message: `more than one stage root in this xml block (${listed}) — the protocol requires `
+        + `exactly one root element per block; move quoted examples inside the prompt body or into their own block`,
     });
     return { errors, warnings };
   }
+
+  const root = { tag: structure.root, attrs: structure.attrs || '' };
 
   const id = extractAttribute(root.attrs, 'id');
   const idPattern = allowPlaceholders ? ID_PATTERN_TEMPLATE : ID_PATTERN_STRICT;

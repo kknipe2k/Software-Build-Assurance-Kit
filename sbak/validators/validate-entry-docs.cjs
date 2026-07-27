@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-entry-docs.cjs
 //
 // THE DOC-SYNC ENGINE — one source of truth for what the kit SAYS about
@@ -226,10 +226,10 @@ function bindSchemas(root) {
   return { count: seen.length, names: seen };
 }
 // BOUND: CALIBRATION-INTERVIEW.md's "## Choice N —" headings.
-function bindInterviewChoices(root) {
+function bindInterviewAsks(root) {
   const t = readIf(path.join(root, 'templates/CALIBRATION-INTERVIEW.md'));
   if (!t) return null;
-  const m = normalize(t).match(/^##\s+Choice\s+\d+\b/gim);
+  const m = normalize(t).match(/^##\s+Ask\s+\d+\b/gim); // M26.D: the 3+1 interview — '## Choice N' retired
   return m ? m.length : null;
 }
 // BOUND: the operating-mode value list ("(`greenfield` / `bug_fix` / `audit` / `research_publish`)").
@@ -255,7 +255,9 @@ function bindRoleNames(root) {
 function referenceScaffoldCounts(root) {
   try {
     const g = JSON.parse(readIf(path.join(root, 'golden-manifest.json')));
-    return { lite: g.tiers.lite.counts.rendered, standard: g.tiers.standard.counts.rendered, full: g.tiers.full.counts.rendered };
+    const out = {};
+    for (const k of Object.keys(g.tiers).sort()) out[k] = g.tiers[k].counts.rendered;
+    return out; // keys derive from the manifest's own tier set (M26.D: lite/full)
   } catch (_) { return null; }
 }
 
@@ -300,7 +302,7 @@ function deriveManifest(root) {
     hook_count: { value: globCount(root, 'templates/dot-claude/hooks', /\.cjs$/), kind: 'derived', source: 'templates/dot-claude/hooks/*.cjs glob' },
     script_count: { value: globCount(root, 'templates/scripts', /\.cjs$/), kind: 'derived', source: 'templates/scripts/*.cjs glob' },
     command_count: { value: globCount(root, 'templates/dot-claude/commands', /\.md$/), kind: 'derived', source: 'templates/dot-claude/commands/*.md glob' },
-    interview_choice_count: { value: bindInterviewChoices(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md "## Choice N" headings' },
+    interview_ask_count: { value: bindInterviewAsks(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md "## Ask N" headings (M26.D: 3 asks + 1 confirmation turn; the 5-choice shape retired)' },
     operating_mode_count: { value: bindOperatingModes(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md operating_mode value list' },
     scaffold_counts: { value: referenceScaffoldCounts(root), kind: 'referenced', source: 'golden-manifest.json tiers[tier].counts.rendered (read live)' },
     entry_docs: { value: ENTRY_DOCS.slice(), kind: 'derived', source: 'validate-entry-docs.cjs ENTRY_DOCS (the policed entry-doc set; shrunk EXPLICITLY at M19.C — guarded by entryDocSetConsistency)' },
@@ -314,8 +316,8 @@ function deriveManifest(root) {
     product_name: { value: 'Software Build Assurance Kit', kind: 'declared', source: 'the product name — no machine source; the manifest is its canonical home and the product_name class polices the docs against it' },
     product_name_legacy: { value: ['Build Framework Starter Kit', 'bf-kit'], kind: 'declared', source: 'the retired display + informal names (what the product_name class flags)' },
     repo_slug: { value: 'Software-Build-Assurance-Kit', kind: 'declared', source: 'the GitHub slug; clone URLs in the docs compare against THIS' },
-    tier_names: { value: ['Lite', 'Standard', 'Full'], kind: 'declared', source: 'M20 I9: the unified tier vocabulary (what project-config.md persists)' },
-    tier_names_legacy: { value: ['Light', 'Mid', 'Complex'], kind: 'declared', source: 'M20 I9: the retired interview labels (Light->Lite, Mid->Standard, Complex->Full)' },
+    tier_names: { value: ['Lite', 'Full'], kind: 'declared', source: 'M26.D (the ratified collapse, calibration-core.json tiers): two tiers — Full the merged default, Lite the low-ceremony escape; what project-config.md persists' },
+    tier_names_legacy: { value: ['Light', 'Mid', 'Complex', 'Standard'], kind: 'declared', source: 'the retired tier labels: Light/Mid/Complex retired at M20 I9; Standard retired at M26.D (the two-tier collapse — merged into Full, fork ruling 1)' },
     role_names: { value: bindRoleNames(root), kind: 'bound', source: 'scripts/set-mode.cjs VALID_MODES (the role values — the axis rename never touches them)' },
     state_file: { value: '.claude/role', kind: 'declared', source: 'M20 I9: the renamed session-axis state file (was .claude/active-mode)' },
     state_file_legacy: { value: '.claude/active-mode', kind: 'declared', source: 'M20 I9: the one-release read-compatible alias (removal milestone named at B); legitimate only in the state-contract note + fallback comments (the alias-window carve-out)' },
@@ -496,6 +498,9 @@ const CALIB_TUPLE = (line) => /[+,]/.test(line) && CALIB_AXIS.test(line) && /\b(
 // the declared alias-window carve-out: `active-mode` on a line B marks `alias-window` (the one
 // state-contract note + fallback comments) is legitimate during the one-release window.
 const ROLE_ALIAS_MARKER = /alias-window/i;
+// M26.D: a RETIRED tier name (now incl. "Standard") on a line that marks itself as history is
+// a record, not drift — the same marker set the workshop smoke sweep exempts.
+const TIER_LEGACY_MARKER = /legacy|retired|formerly|was Standard|superseded|pre-M26|M26\.D|erratum|historical/i;
 
 // ── STACK-COVERAGE DOC-SET: the surfaces that STATE the stack-coverage boundary. The class
 // polices each signal line against the DERIVED stack_coverage fact — the two pre-commits'
@@ -566,7 +571,7 @@ const VALUE_CLASSES = [
     foundStr: (hit) => hit.value + ' schemas',
   },
   {
-    name: 'question_count', field: 'interview_choice_count', docSet: ENTRY_DOCS,
+    name: 'question_count', field: 'interview_ask_count', docSet: ENTRY_DOCS,
     find(text) {
       const out = [];
       eachLine(text, (line, ln) => {
@@ -574,7 +579,7 @@ const VALUE_CLASSES = [
         // so "N discovery questions" (a tier-conditional DISCOVERY count) never matches here — no
         // separate guard needed, and a blunt line-level /discovery/ guard would false-NEGATIVE a
         // line that names both (e.g. "the 3 questions, then tier-conditional discovery").
-        const re = /(\d+)[\s-]questions?\b|\b(\d+)-question\b/gi; let m;
+        const re = /(\d+)[\s-](?:questions?|asks?)\b|\b(\d+)-question\b/gi; let m; // M26.D: 'asks' joined
         while ((m = re.exec(line)) !== null) {
           const num = parseInt(m[1] || m[2], 10);
           out.push({ line: ln, value: num, quoted: hitQuoted(line, m[0]) });
@@ -582,12 +587,12 @@ const VALUE_CLASSES = [
       });
       return out;
     },
-    predicate: (hit, mf) => hit.value !== mf.interview_choice_count,
-    expected: (mf) => mf.interview_choice_count + ' choices (mode + 5)',
-    foundStr: (hit) => hit.value + ' questions',
+    predicate: (hit, mf) => hit.value !== mf.interview_ask_count,
+    expected: (mf) => mf.interview_ask_count + ' asks (mode, tier, risk) + 1 confirmation turn',
+    foundStr: (hit) => hit.value + ' questions/asks',
   },
   {
-    name: 'option_table', field: 'interview_choice_count', docSet: ENTRY_DOCS,
+    name: 'option_table', field: 'interview_ask_count', docSet: ENTRY_DOCS,
     find(text) {
       const out = [];
       eachLine(text, (line, ln) => {
@@ -600,9 +605,30 @@ const VALUE_CLASSES = [
       });
       return out;
     },
-    predicate: (hit, mf) => hit.value !== mf.interview_choice_count,
-    expected: (mf) => mf.interview_choice_count + ' option tables',
+    predicate: (hit, mf) => hit.value !== mf.interview_ask_count,
+    expected: (mf) => mf.interview_ask_count + ' option tables (one per ask)',
     foundStr: (hit) => hit.value + ' option tables',
+  },
+  // SCAFFOLD-COUNT CLAIMS (M26.D — the schema→prose parity engine's count half; see the
+  // workshop engine for the full rationale). Tight patterns: number adjacent to a file-word
+  // or a tier name; '~30 min' / '~85k tokens' never match (disclosed locus).
+  {
+    name: 'scaffold_count', field: 'scaffold_counts', docSet: ENTRY_DOCS, // entry docs only — the interview's counts are policed by the smoke-side parity pin (the count classes never scope to templates/, the M19 scope rule)
+    find(text) {
+      const out = [];
+      eachLine(text, (line, ln) => {
+        const re = /~(\d+)(?:[\s-]file\b|[\s-]files\b|\s+scaffold\s+files\b|\s+for\s+(?:Lite|Full)\b)/g; let m;
+        while ((m = re.exec(line)) !== null) out.push({ line: ln, value: parseInt(m[1], 10), quoted: hitQuoted(line, m[0]) });
+      });
+      return out;
+    },
+    predicate: (hit, mf) => {
+      const sc = mf.scaffold_counts;
+      if (!sc || typeof sc !== 'object') return false;
+      return !Object.values(sc).includes(hit.value);
+    },
+    expected: (mf) => 'a derived reference count (' + Object.entries(mf.scaffold_counts || {}).map(([k, v]) => k + '=' + v).join(', ') + ' — golden-manifest.json, row-derived)',
+    foundStr: (hit) => '~' + hit.value + ' (scaffold-count claim)',
   },
   {
     name: 'hook_count', field: 'hook_count', docSet: ENTRY_DOCS,
@@ -661,7 +687,8 @@ const VALUE_CLASSES = [
       const out = [];
       eachLine(text, (line, ln) => {
         if (/session-start-read-first\.sh/.test(line)) out.push({ line: ln, value: '.sh hook mislabel (is .cjs)', quoted: false });
-        if (/gap-analysis[^\n]*Full only/.test(line)) out.push({ line: ln, value: 'gap-analysis "Full only" (is Standard-advisory)', quoted: false });
+        // M26.D: the gap-analysis "Full only" mislabel rule RETIRED — the tier collapse made
+        // Full-only (advisory by default) the true condition; the mislabel class is gone.
         if (/Done when M11 ships/.test(line)) out.push({ line: ln, value: 'M11 dogfood residue in a generic doc', quoted: false });
         if (/\b\d+\s+checks\b/.test(line) && /validator|smoke|regression/i.test(line)) out.push({ line: ln, value: 'hand-stated smoke check-count (route: the smoke suite / derive at render)', quoted: false });
       });
@@ -680,6 +707,7 @@ const VALUE_CLASSES = [
     find(text) {
       const out = [];
       eachLine(text, (line, ln) => {
+        if (TIER_LEGACY_MARKER.test(line)) return; // history speaks (M26.D)
         if (!(TIER_SIGNAL.test(line) || LEGACY_TIER_TRIPLE.test(line) || CALIB_TUPLE(line))) return; // tier context: keyword, legacy triple, or calibration tuple
         const re = /\b(Lite|Standard|Full|Light|Mid|Complex)\b/g; let m; // CASE-SENSITIVE (names are capitalized)
         while ((m = re.exec(line)) !== null) out.push({ line: ln, value: m[1], quoted: hitQuoted(line, m[0]) });
@@ -798,6 +826,7 @@ function scanTree(root, opts) {
   root = root || KIT_ROOT;
   opts = opts || {};
   const surface = !!opts.surface;
+  const docRoot = opts.docRoot || null; // M26.D --root: read policed docs from a fixture tree; facts stay payload-derived
   const mf = {};
   const mo = deriveManifest(root);
   for (const [k, v] of Object.entries(mo.fields)) mf[k] = v.value;
@@ -807,7 +836,7 @@ function scanTree(root, opts) {
   for (const cls of VALUE_CLASSES) {
     for (const rel of cls.docSet) {
       if (!docActive(rel, surface)) { skippedSurface.add(rel); continue; } // surface-gated, flag off
-      const text = readIf(docAbs(rel, root)); // surface-root files resolve one level up
+      const text = readIf(docRoot ? path.join(docRoot, rel) : docAbs(rel, root)); // surface-root files resolve one level up; --root reads the fixture tree flat
       if (text == null) continue; // absent doc (e.g. before consolidation adds it) -> skip, not fail
       findings.push(...scanDocClass(cls, rel, text, mf));
     }
@@ -882,6 +911,18 @@ function humanReport(rep) {
 
 function main() {
   const argv = process.argv.slice(2);
+  // STRICT ARGS (KF-45, M26.D): an unknown flag is a usage error, never silently ignored
+  // (the shipped v0.2.0 engine swallowed unknown flags — fail closed now).
+  const KNOWN = ['--report', '--check', '--json', '--self-check', '--write-manifest', '--surface', '--root'];
+  let rootArg = null;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--root') { rootArg = argv[++i]; if (!rootArg) { process.stderr.write('validate-entry-docs: --root requires a directory\n'); process.exit(1); } continue; }
+    if (!KNOWN.includes(a)) {
+      process.stderr.write('validate-entry-docs: unknown argument "' + a + '" — known: ' + KNOWN.join(', ') + '\n');
+      process.exit(1);
+    }
+  }
   const has = (f) => argv.includes(f);
   const json = has('--json');
   const manifestOut = path.join(KIT_ROOT, 'framework-manifest.json');
@@ -910,14 +951,18 @@ function main() {
   // --report (reconcile vs baseline) OR default/--check (strict: baseline STILL reconciled, but at
   // B the baseline is empty so any finding is UNKNOWN -> fail). Same path; the baseline size is the
   // only difference between report-mode-at-A and enforcing-at-B.
-  const scan = scanTree(KIT_ROOT, { ledger: true, surface });
+  // --root <dir> (M26.D): scan the policed docs under <dir> (absent members skipped) while the
+  // facts derive from the payload tree — the mutation-harness / fixture seam. Under --root the
+  // staged-ledger + set-consistency + surface modes are off (disclosed, never silent).
+  const scan = scanTree(KIT_ROOT, { ledger: !rootArg, surface: surface && !rootArg, docRoot: rootArg ? path.resolve(rootArg) : null });
   const findings = scan.findings;
-  const baseline = loadBaseline(KIT_ROOT);
+  const baseline = rootArg ? [] : loadBaseline(KIT_ROOT); // a fixture scan reconciles against NOTHING
   const rec = reconcile(findings, baseline);
   // Set-consistency is part of the enforcing floor: a dangling set entry or a silently-narrowed
   // HTML fails the build alongside any value-class drift. Report-mode surfaces it too (it is not
   // baseline-reconciled — a structural set defect is never a "known drift").
-  const setViolations = entryDocSetConsistency(KIT_ROOT, { surface });
+  const setViolations = rootArg ? [] : entryDocSetConsistency(KIT_ROOT, { surface });
+  if (rootArg && !json) process.stderr.write('  (scanning docs under --root ' + rootArg + ' — facts from the payload tree; set-consistency + staged-ledger + surface modes off)\n');
   const exit = (rec.unknown.length === 0 && rec.phantom.length === 0 && setViolations.length === 0) ? 0 : 1;
   const rep = { ...rec, setViolations, exit };
   if (!json) {
@@ -939,7 +984,7 @@ module.exports = {
   KIT_ROOT, ENTRY_DOCS, LEDGER_FILES, EXEMPTIONS, VALUE_CLASSES,
   deriveManifest, selfCheck, entryDocSetConsistency, findInText, scanTree, scanDocClass, reconcile, loadBaseline,
   // derivations/bindings exposed for targeted unit tests
-  deriveProtocolVersion, bindGates, bindSchemas, bindInterviewChoices, bindOperatingModes, referenceScaffoldCounts,
+  deriveProtocolVersion, bindGates, bindSchemas, bindInterviewAsks, bindOperatingModes, referenceScaffoldCounts,
 };
 
 if (require.main === module) {

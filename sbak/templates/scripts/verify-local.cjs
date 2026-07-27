@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid).
@@ -37,6 +37,11 @@ const CONFIG = {
   // Docker image mirroring the GitHub ubuntu-latest toolchain for this stack.
   dockerImage: '{{DOCKER_IMAGE}}',              // e.g. 'node:20-bookworm'
   // The full test command, run inside the Linux container.
+  // PATH-SCOPE it when the suite is Node's built-in runner (KF-48 instance 3, M27.D): a bare
+  // `node --test` auto-discovers every Node-test-pattern file anywhere under the repo —
+  // vendored trees like sbak/ included — polluting both the suite and the coverage
+  // denominator. Use a QUOTED GLOB: node --test "tests/**/*.test.cjs". A bare directory
+  // positional (`node --test tests`) is not a scoped run; current Node fails on it.
   linuxTestCommand: '{{LINUX_TEST_COMMAND}}',   // e.g. 'npm ci && npm test'
   // The full test command, run natively on this dev machine.
   nativeTestCommand: '{{NATIVE_TEST_COMMAND}}', // e.g. 'npm test'

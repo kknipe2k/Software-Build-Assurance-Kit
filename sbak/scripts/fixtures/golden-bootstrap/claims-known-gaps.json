@@ -1,0 +1,4 @@
+{
+  "_doc": "The generated-docs CI-claims known-gaps baseline (M27.D, KF-48 instance 2). Same discipline as its three siblings: a gap IN this baseline is reported KNOWN and the run still exits 0; a gap OUTSIDE it exits 1; a declared entry no longer observed (phantom) also exits 1, so a fixed claim cannot rot here unnoticed. THE BASELINE IS EMPTIED BY WIRING THE GATE OR NARROWING THE CLAIM — never by loosening the derivation. It opened at SIX findings and closed at zero in the same stage: one unwired ledger (docs/sessions.md, promised CI enforcement in two generated docs and absent from LEDGERS — the KF-48 instance the md2page trial's verifier found) and five claims that stated a RISK-ARMED workflow's enforcement unconditionally. A conditional truth stated unconditionally is the same lie with better manners, which is why it fails here rather than warning. Entry shape: { file, line, subject, spec_item, why }.",
+  "gaps": []
+}

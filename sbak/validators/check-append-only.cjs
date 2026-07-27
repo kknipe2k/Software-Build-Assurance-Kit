@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/check-append-only.cjs
 //
 // Byte-prefix append-only validator — the shared primitive the kit's ledgers

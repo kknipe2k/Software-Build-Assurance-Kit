@@ -19,13 +19,13 @@ In a kitted project (bootstrapped or adopted), the installed per-project rig:
 node scripts/smoke-project.cjs
 ```
 
-Runs synthetic regression tests against the four installed hooks (SessionStart, UserPromptSubmit, PreToolUse red-gate, receipts-lifecycle) and the wired validators in seconds — CRLF Phase docs, UTF-16LE+BOM `role`, mode-guard cases, retro-stamp enforcement. Exit 0 = all green. The kit's own full rig (`scripts/smoke.cjs`, 1,250+ checks) runs in the development repository and is not part of this snapshot; the shipped effectiveness proof is `scripts/bake-and-test.cjs`, whose dead-validator control renders a real project and proves the inherited gates fire there.
+Runs synthetic regression tests against the four installed hooks (SessionStart, UserPromptSubmit, PreToolUse red-gate, receipts-lifecycle) and the wired validators in seconds — CRLF Phase docs, UTF-16LE+BOM `role`, mode-guard cases, retro-stamp enforcement. Exit 0 = all green. The kit's own full rig (`scripts/smoke.cjs`, 1,250+ checks) runs in the development repository and is not part of this snapshot; the shipped effectiveness proof is `scripts/bake-inheritance.cjs`, whose dead-validator control renders a real project and proves the inherited gates fire there.
 
 **Proves:** the safety nets still fire correctly. **Does not prove:** output quality — that needs a walkthrough.
 
 ## The validator set (complete)
 
-Every `validators/*.cjs` shipped, with its tier condition. `validate-validator-enumeration.cjs` enforces that this list, the Phase-3 scaffold tables (`bootstrap/SCAFFOLD-TABLES.md` — re-homed there out of the bootstrap `CLAUDE.md`; in a generated project, where no `bootstrap/` exists, the probe falls back to the project's `CLAUDE.md`), and `templates/PROJECT-CLAUDE.md` all enumerate the full set — a shipped validator absent from any of the three blocks the commit. The count is **never hand-stated here**: the check discovers the set by glob (`validators/*.cjs`), so this table is the catalog it reconciles, not a number to keep in sync. The `tier condition` column states *when a validator activates* (Lite / Standard+ / mode-gated); every validator is still listed in **every** catalog regardless of its tier — "all tiers" in a row means "catalogued at all tiers", not "runs at all tiers". The two original gates (`validate-stage-prompts`, `validate-retrospective`) are documented in detail in the sections below; the rest carry their full usage in their own file headers.
+Every `validators/*.cjs` shipped, with its tier condition. `validate-validator-enumeration.cjs` — a **kit-only** check that runs in the kit's own CI, not a generated project — reconciles this list, the Phase-3 scaffold tables (`bootstrap/SCAFFOLD-TABLES.md` — re-homed there out of the bootstrap `CLAUDE.md`; in a generated project, where no `bootstrap/` exists, the probe falls back to the project's `CLAUDE.md`), and `templates/PROJECT-CLAUDE.md` so all three enumerate the full set — in the kit, a shipped validator absent from any of the three blocks the commit. Since M26.D the two kit-self validators (this one and `validate-entry-docs.cjs`) are **not copied into projects** at all (`calibration-core.json` `kit_only_validators`; a project must never inherit a validator it can never run as a gate). The count is **never hand-stated here**: the check discovers the set by glob (`validators/*.cjs`), so this table is the catalog it reconciles, not a number to keep in sync. The `tier condition` column states *when a validator activates* (Lite / Full / mode-gated); every validator is still listed in **every** catalog regardless of its tier — "all tiers" in a row means "catalogued at all tiers", not "runs at all tiers". The two original gates (`validate-stage-prompts`, `validate-retrospective`) are documented in detail in the sections below; the rest carry their full usage in their own file headers.
 
 **Four artifact classes, per-class catalogs (M19.C / I10, the A-05 "Option E" model).** `validate-validator-enumeration.cjs` reconciles four shipped classes against their own catalog sets, because the classes are catalogued in different places:
 
@@ -38,25 +38,28 @@ Every `validators/*.cjs` shipped, with its tier condition. `validate-validator-e
 
 ¹ The `CLAUDE.md` catalog is a **probed sentinel**: it resolves to `bootstrap/SCAFFOLD-TABLES.md` where that file exists (the kit repo, since the tables re-homed out of the bootstrap `CLAUDE.md`) and to the root `CLAUDE.md` otherwise (a generated project, whose `CLAUDE.md` — rendered from `PROJECT-CLAUDE.md` — carries the validator list).
 
-The **bake-vs-golden divergence** this formalizes rather than papers over: the bake (`scripts/bake-and-test.cjs`) copies **all** of `validators/` into a project wholesale, while the golden bootstrap **renders only the headline validator rows** in `rows.json` (the rest inherited). So `rows.json` is the full catalog for hooks/scripts/commands (each a 1:1 render row) but is **not** a full-validator catalog — validators reconcile against the three doc catalogs above, where this README + the `CLAUDE.md`/`PROJECT-CLAUDE.md` enumeration blockquotes carry the full set. Adding a full validator render row to `rows.json` would change the rendered scaffold count, so it's deliberately not done. The same divergence is stated in `rows.json`'s own header.
+**The bake-vs-golden divergence is CLOSED (M27.D, KF-48 instance 1).** It used to read: the bake copies all of `validators/` wholesale, the golden row-set renders only the *headline* rows, and adding the rest "would change the rendered scaffold count, so it's deliberately not done." The md2page trial showed what that cost — a generated project whose own `.githooks/pre-commit` **named twelve validators by name** while its scaffold shipped four, with the hook's `[ -f ]` guards turning the other eight into **silent passes**. A count is not a reason to ship a project a gate it cannot run. **Every validator any generated artifact references now carries a generation row**, at the tier that claims it, and the property is enforced mechanically in the development repository by `node scripts/golden-bootstrap.cjs --generated-refs` — DERIVED from what the generated layer itself names, so a new referencing artifact fails the check without anyone editing a list. The scaffold count moved with it (Full ~107 / Lite ~43): that growth **is** the fix, not a side effect. The two **kit-only** validators stay out by their own honestly-labelled reference lines — the label is the de-documentation, and it is read at the reference site rather than hand-declared in a baseline. `rows.json` remains the catalog `validate-validator-enumeration.cjs` reconciles hooks/scripts/commands against; validators still reconcile against the three doc catalogs above.
 
 | Validator | Gate / role | Tier condition |
 |---|---|---|
 | `validate-stage-prompts.cjs` | stage-prompt schema check (pre-commit + CI) | all tiers |
-| `validate-retrospective.cjs` | user-friction-stamp gate | Standard+ |
+| `validate-retrospective.cjs` | user-friction-stamp gate | Full |
 | `validate-operating-mode.cjs` | rejects an out-of-range `operating_mode` | all tiers |
-| `validate-app-map.cjs` | App-Map currency primitive + G10 assembled-execution cluster-gate | Standard+, `app_map: on` |
-| `validate-test-honesty.cjs` | G9 test-honesty (slot + assertion-honesty) | Standard+ |
-| `validate-risk-escalation.cjs` | G11 risk-overrides-tier escalation record | Standard+ |
-| `validate-destructive-op.cjs` | G12 destructive-op rollback + confinement | Standard+ |
-| `validate-risk-matrix.cjs` | G13 9-property risk matrix | Standard+ |
-| `validate-calibration.cjs` | G14 verifier-proof / seeded-defect calibration set | Standard+ |
-| `validate-reconciliation.cjs` | closeout count reconciliation | Standard+ |
-| `validate-transition.cjs` | G15 transitions: atomic durable-state writes + honest four-type rework reconciliation; the six-state release ladder | Standard+ |
-| `validate-release-readiness.cjs` | G16 release-readiness: capability-triggered independent whole-product review + ladder well-formedness + the SLSA-level cite at the release end; the manual-aging flag | Standard+ |
+| `validate-app-map.cjs` | App-Map currency primitive + G10 assembled-execution cluster-gate | Full, `app_map: on` |
+| `validate-test-honesty.cjs` | G9 test-honesty (slot + assertion-honesty) | Full |
+| `validate-risk-escalation.cjs` | G11 risk-overrides-tier escalation record | Full |
+| `validate-destructive-op.cjs` | G12 destructive-op rollback + confinement | Full |
+| `validate-risk-matrix.cjs` | G13 9-property risk matrix | Full |
+| `validate-calibration.cjs` | G14 verifier-proof / seeded-defect calibration set | Full |
+| `validate-reconciliation.cjs` | closeout count reconciliation | Full |
+| `validate-carry-forward.cjs` | the V-🟡 carry-forward landing slot (BUILD-PLAYBOOK §3.4): every 🟡 finding in the prior milestone's `retrospectives/M[NN].V-findings.md` must appear in the next Phase doc — in scope or explicitly deferred. Honest locus: it checks the finding **landed**, not that the treatment is adequate; what it removes is silence | Full |
+| `validate-transition.cjs` | G15 transitions: atomic durable-state writes + honest four-type rework reconciliation; the six-state release ladder | Full |
+| `validate-release-readiness.cjs` | G16 release-readiness: capability-triggered independent whole-product review + ladder well-formedness + the SLSA-level cite at the release end; the manual-aging flag | Full |
+| `validate-outcome-challenge.cjs` | Outcome Challenge shape check (companion §6 A–D — parts present, six-dimensions / risk-scaling / before-implementation anchors intact, a missing part NAMED; pre-commit when `docs/outcome-challenge.md` is staged) | all tiers (Full BLOCK / Lite warn) |
+| `validate-spec-examples.cjs` | the spec-example harvest gate: every literal example in the spec must appear in at least one test fixture. Three structural openers only (an `example` info-string fence, a fence/span under an Examples heading, a fence/span under a bolded **Example** list label) — prose is never harvested. Waivers go beside the example in the spec (`harvest-waiver: <reason>`, reason required) and print on every run. Honest locus: it proves the example **reached** the test surface, not that the test asserts the right output. With no test files yet it is a visible skip, never a first-commit block | all tiers (Full BLOCK / Lite warn) |
 | `validate-sources.cjs` | source-registry binding | `research_publish` mode |
 | `check-append-only.cjs` | append-only ledger byte-prefix check (the `append-only-ledger.yml` engine) | Full |
-| `validate-validator-enumeration.cjs` | enumeration coherence, extended to **four artifact classes** (validators / hooks / scripts / commands) each against its own catalogs (see the per-class table above) — a CI / pre-commit inheritance check, not a numbered gate | all tiers |
+| `validate-validator-enumeration.cjs` | enumeration coherence, extended to **four artifact classes** (validators / hooks / scripts / commands) each against its own catalogs (see the per-class table above) — a **kit-only** check (reconciles the kit's catalogs in the kit's CI; a project inherits the file but does not run it), not a project gate | kit-only |
 | `validate-entry-docs.cjs` | the doc-sync engine: derives/binds the kit's self-descriptive facts into `framework-manifest.json` and polices the entry-doc set for drifted self-claims, including the identity classes (`tier_terms`/`role_terms`/`product_name`). **Disclosed locus:** value-class doc-sets are curated file arrays, not directory globs — a NEW file bearing a policed name/term must be added to its class's list. A kit self-sync inheritance check, not a numbered gate | all tiers |
 
 > **Shared library (not a validator):** `validators/lib/fenced-block.cjs` — the line-anchored, block-bound fence/field extractor. Consumed by the presence-gate validators (`validate-reconciliation` / `validate-calibration` / `validate-risk-matrix` / `validate-retrospective` / `validate-operating-mode` / `validate-stage-prompts`) so a datum counts as "present" only in its right structural place (a real fenced block / a line-start field), never anywhere in the blob — closing the whole unanchored-presence family at one primitive. **Deliberately NOT in the enumeration above** — it is a `lib`, not a shipped `validators/*.cjs` gate (the enumeration globs top-level `validators/*.cjs` only).
@@ -168,7 +171,11 @@ The kit's own CI (`.github/workflows/validate-stage-prompts.yml`) runs `--templa
 
 When extending `STAGE-PROMPT-PROTOCOL.md` with a new root element:
 
-1. Add the variant to `SCHEMAS` at the top of `validate-stage-prompts.cjs`.
-2. List its required tags.
-3. Run `node validators/validate-stage-prompts.cjs --templates` to confirm the existing templates still parse cleanly.
-4. Add an example block in `templates/PHASE-DOC-TEMPLATE.md` and verify the validator accepts it.
+1. Add the root name to `STAGE_ROOTS` in `scripts/lib/stage-structure.cjs` — the shared structural reader, and **the** source of truth for what a stage root is. The validator and the UserPromptSubmit mode-check hook both key off it.
+2. Add the variant to `SCHEMAS` at the top of `validate-stage-prompts.cjs`.
+3. List its required tags.
+4. Add the root → session-role entry to `ROOT_TO_MODE` in `.claude/hooks/user-prompt-submit-mode-check.cjs` **and its template twin**, byte-identically.
+5. Run `node validators/validate-stage-prompts.cjs --templates` to confirm the existing templates still parse cleanly.
+6. Add an example block in `templates/PHASE-DOC-TEMPLATE.md` and verify the validator accepts it.
+
+Steps 1, 2 and 4 are mechanically locked together (M27.C): the validator refuses to run when `SCHEMAS` and `STAGE_ROOTS` disagree, and the hook fails closed when `ROOT_TO_MODE` and `STAGE_ROOTS` disagree. A root wired in one place and not the others used to ship silently — it would classify as ad-hoc and skip the role guard entirely.

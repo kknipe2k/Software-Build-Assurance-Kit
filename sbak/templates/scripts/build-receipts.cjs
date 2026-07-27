@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/build-receipts.cjs
 //
 // The build-receipts CLI — diagnostics (M20.6.A) + collectors (M20.6.C) + the
@@ -18,6 +18,11 @@
 //                                                      # any supplied ledger are NAMED, never omitted
 //   node scripts/build-receipts.cjs --check            # the release preflight: collect + render twice,
 //                                                      # byte-compare, statements valid, coverage stated
+//   node scripts/build-receipts.cjs log-tokens [--input N] [--output N] [--cache-read N]
+//        [--cache-write N] [--source platform-reported|derived|human-logged] [--note "…"]
+//        [--role R] [--phase M##.X]                    # append a DECLARED-basis token declaration
+//                                                      # (M26.F, Workstream 5): numbers need a source
+//                                                      # tag; an all-null declaration needs its note
 //
 // [dir] defaults to .claude/receipts under the cwd. An ABSENT dir is GREEN
 // with an explicit note — report-unavailable over invented (a fresh clone or
@@ -234,6 +239,85 @@ function normalize(input) {
     }
   }
 
+  // The Workstream-5 budget surface (M26.F) — nested under the frozen
+  // 13-section model as roles.budget (the M22.H nesting precedent: no 14th
+  // section). Answers "where did the build spend its budget" by role and
+  // phase; every unknown stays null with its why, never zero.
+  const budget = {};
+  // by_role — the same interval arithmetic the roles table renders (one source).
+  budget.by_role = {};
+  for (const role of Object.keys(intervals.perRole).sort()) {
+    const r = intervals.perRole[role];
+    budget.by_role[role] = { ms: r.ms, complete_turns: r.complete_turns, incomplete_turns: r.incomplete_turns };
+  }
+  // by_phase — turns attribute to the stage their turn_started was stamped with
+  // (the M26.F lifecycle-hook emitter). Pre-stamp/frozen history lands in the
+  // 'unknown' bucket: phase-unknown is a stated bucket, never a dropped turn.
+  {
+    const acc = {};
+    for (const t of intervals.turns) {
+      const ph = (typeof t.stage === 'string' && t.stage) ? t.stage : 'unknown';
+      if (!acc[ph]) acc[ph] = { ms: null, complete_turns: 0, incomplete_turns: 0 };
+      if (t.status === 'complete' && t.ms !== null) {
+        acc[ph].ms = (acc[ph].ms === null ? 0 : acc[ph].ms) + t.ms;
+        acc[ph].complete_turns += 1;
+      } else {
+        acc[ph].incomplete_turns += 1;
+      }
+    }
+    budget.by_phase = {};
+    for (const ph of Object.keys(acc).sort()) budget.by_phase[ph] = acc[ph];
+  }
+  // tokens — DECLARED basis only (.claude/receipts/tokens-*.jsonl, validated by
+  // the contract's validateTokenDeclaration; read by buildModel). No declarations
+  // → honest null with its note. Never derived from prompts, never zeroed.
+  budget.tokens = (input.tokens && typeof input.tokens === 'object') ? input.tokens : {
+    input: null, output: null, cache_read: null, cache_write: null,
+    by_source: {}, declarations: 0,
+    note: 'no token declarations present (.claude/receipts/tokens-*.jsonl) — token spend unknown (honest null, never zero)',
+  };
+  // interventions — human touchpoints the record actually observed: permission
+  // asks (hook), release actions (hook-observed + script events), recorded human
+  // verdicts (stamps/CHANGELOG). Event counts are null when no events were
+  // captured at all (a count over an uninstrumented window would be a fake zero).
+  {
+    let permission = 0; let hookReleases = 0; let scriptReleases = 0;
+    for (const e of events) {
+      if (e.event === 'permission_requested') permission += 1;
+      if (e.event === 'tool_started' && 'release' in e) hookReleases += 1;
+      if (e.event === 'red_approved' || e.event === 'stage_cleared') scriptReleases += 1;
+    }
+    budget.interventions = (events.length === 0)
+      ? { permission_requests: null, hook_observed_releases: null, script_release_events: null, human_verdicts: decisions.length, note: 'no instrumented events in this window — event-derived intervention counts unknown (never zero); human_verdicts is collector-derived' }
+      : { permission_requests: permission, hook_observed_releases: hookReleases, script_release_events: scriptReleases, human_verdicts: decisions.length };
+  }
+  // rework_by_origin — framework-originated vs project-originated rework,
+  // aggregated over every retro's declared origin split (C's reworkOriginSplit;
+  // null-never-zero, over-attribution refused with a coverage note).
+  {
+    let anyDeclared = false; let fSum = 0; let pSum = 0; let uSum = 0; let retros = 0;
+    for (const k of keyed) {
+      if (k.rec.kind !== 'stage-rework' || !k.rec.rework) continue;
+      const s = collect.reworkOriginSplit(k.rec.rework);
+      if (!s) continue;
+      if (s.invalid) {
+        coverage.push('rework origin split refused for ' + (k.rec.stage || k.rec.source) + ': ' + s.reason + ' (excluded from the attribution totals, stated here)');
+        continue;
+      }
+      retros += 1;
+      if (s.framework !== null || s.project !== null) {
+        anyDeclared = true;
+        fSum += s.framework || 0;
+        pSum += s.project || 0;
+      }
+      uSum += s.unattributed || 0;
+    }
+    budget.rework_by_origin = anyDeclared
+      ? { framework: fSum, project: pSum, unattributed: uSum, retros_counted: retros }
+      : { framework: null, project: null, unattributed: uSum, retros_counted: retros, note: 'no retro declares an origin-framework/origin-project split — attribution unknown (null, never zero)' };
+  }
+  roles.budget = budget;
+
   // The four headline sections — classified VIEWS of the records (C's
   // classification consumed, never re-decided). unclassified is not forced
   // anywhere: it stays out of the headline and is counted in assurance.
@@ -312,8 +396,21 @@ function esc(s) {
     .replace(/'/g, '&#39;');
 }
 
+// KF-42 (M26.F): durations HUMANIZE in every human-facing surface — "1105725 ms"
+// tells a reader nothing; "18m 25.7s" does. Unknown stays the word 'unknown'
+// (never zero, never invented). Pure and deterministic (no locale formatting).
 function fmtMs(v) {
-  return (v === null || v === undefined) ? 'unknown' : (v + ' ms');
+  if (v === null || v === undefined) return 'unknown';
+  if (v < 1000) return v + ' ms';
+  if (v < 60000) return (v / 1000).toFixed(1) + 's';
+  if (v < 3600000) {
+    const m = Math.floor(v / 60000);
+    return m + 'm ' + ((v - m * 60000) / 1000).toFixed(1) + 's';
+  }
+  let h = Math.floor(v / 3600000);
+  let m = Math.round((v - h * 3600000) / 60000);
+  if (m === 60) { h += 1; m = 0; }
+  return h + 'h ' + m + 'm';
 }
 
 // ---------------------------------------------------------------------------
@@ -976,6 +1073,101 @@ function readOperatingMode(cwd) {
   return OPERATING_MODES.indexOf(val) !== -1 ? val : undefined;
 }
 
+// Token declarations (M26.F, Workstream 5) — tokens-*.jsonl beside the event
+// ledgers, DECLARED basis, validated line-by-line through the contract's
+// validateTokenDeclaration. Refused lines become coverage notes (stated, never
+// silently dropped); totals sum only declared NUMBERS — a field never declared
+// numerically stays null (unknown, never zero). Deterministic: files sorted by
+// basename, lines in file order.
+function readTokenDeclarations(dirs) {
+  const notes = [];
+  const files = [];
+  for (const d of dirs) {
+    let names = [];
+    try { names = fs.readdirSync(d).filter((n) => /^tokens-.*\.jsonl$/.test(n)); } catch (_) { names = []; }
+    for (const n of names) files.push(path.join(d, n));
+  }
+  files.sort((a, b) => {
+    const an = path.basename(a); const bn = path.basename(b);
+    if (an !== bn) return an < bn ? -1 : 1;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  const totals = { input: null, output: null, cache_read: null, cache_write: null };
+  const bySource = {};
+  let count = 0;
+  for (const f of files) {
+    let text;
+    try { text = fs.readFileSync(f, 'utf8'); }
+    catch (_) { notes.push('token declaration file unreadable: ' + path.basename(f)); continue; }
+    text.split('\n').forEach((line, i) => {
+      const clean = line.replace(/\r$/, '').trim();
+      if (clean === '') return;
+      let parsed = null;
+      try { parsed = JSON.parse(clean); } catch (_) { parsed = null; }
+      const v = parsed === null ? { ok: false, reason: 'not valid JSON' } : receipts.validateTokenDeclaration(parsed);
+      if (!v.ok) { notes.push('token declaration refused (' + path.basename(f) + ':' + (i + 1) + '): ' + v.reason); return; }
+      count += 1;
+      const d = v.declaration;
+      const src = d.source || 'none (all-null with note)';
+      bySource[src] = (bySource[src] || 0) + 1;
+      for (const k of receipts.TOKEN_FIELDS) {
+        if (d.tokens[k] === null) continue;
+        totals[k] = (totals[k] === null ? 0 : totals[k]) + d.tokens[k];
+      }
+    });
+  }
+  if (count === 0 && notes.length === 0) return { tokens: null, notes: notes }; // absent → normalize states the honest-null default
+  const by_source = {};
+  for (const k of Object.keys(bySource).sort()) by_source[k] = bySource[k];
+  const tokens = { input: totals.input, output: totals.output, cache_read: totals.cache_read, cache_write: totals.cache_write, by_source: by_source, declarations: count };
+  if (count === 0) tokens.note = 'declaration file(s) present but no valid declaration — token spend unknown (each refusal stated in coverage)';
+  else if (totals.input === null && totals.output === null && totals.cache_read === null && totals.cache_write === null) {
+    tokens.note = 'all declarations are honest nulls with notes — token spend unknown by declaration (never zero)';
+  }
+  return { tokens: tokens, notes: notes };
+}
+
+// log-tokens — the DECLARED-basis emitter (M26.F): a human/courier records what
+// the platform surface showed (or an honest null with its why). Validated by the
+// contract BEFORE the append; an invalid declaration is refused loudly, never
+// written. Appends below .claude/receipts/ (the same confinement as events).
+function runLogTokens(args) {
+  const num = (name) => {
+    const v = flagValue(args, name);
+    if (v === null || v === 'null') return null;
+    return /^\d+$/.test(v) ? parseInt(v, 10) : NaN; // NaN → the validator refuses, naming the field
+  };
+  const decl = {
+    schema: receipts.SCHEMA_VERSION,
+    at: new Date().toISOString(),
+    tokens: { input: num('--input'), output: num('--output'), cache_read: num('--cache-read'), cache_write: num('--cache-write') },
+  };
+  const source = flagValue(args, '--source');
+  if (source !== null) decl.source = source;
+  const note = flagValue(args, '--note');
+  if (note !== null) decl.note = note;
+  const role = flagValue(args, '--role');
+  const phase = flagValue(args, '--phase');
+  if (role !== null || phase !== null) {
+    decl.scope = {};
+    if (role !== null) decl.scope.role = role;
+    if (phase !== null) decl.scope.phase = phase;
+  }
+  const v = receipts.validateTokenDeclaration(decl);
+  if (!v.ok) {
+    console.error('build-receipts log-tokens: ' + v.reason);
+    return 1;
+  }
+  const dir = path.join(process.cwd(), '.claude', 'receipts');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = 'tokens-' + v.declaration.at.slice(0, 10) + '.jsonl';
+  const target = sandbox.assertInside(dir, file);
+  fs.appendFileSync(target, JSON.stringify(v.declaration) + '\n', 'utf8');
+  console.log('build-receipts log-tokens: declaration appended to .claude/receipts/' + file +
+    ' (basis: declared' + (v.declaration.source ? '; source ' + v.declaration.source : '; all-null with note') + ')');
+  return 0;
+}
+
 // buildModel(cwd, range, ledgerDirs?) — ledgerDirs (M22.F, UAT #27) is an
 // optional list of explicit event-ledger dirs (the `render --ledger <dir>`
 // flags, resolved against cwd). The #20-instructed two-terminal topology
@@ -988,10 +1180,12 @@ function buildModel(cwd, range, ledgerDirs) {
   const arc = collect.collectArc({ cwd: cwd, range: range || 'HEAD' });
   let events = [];
   const extraCoverage = [];
+  const tokenDirs = []; // token declarations ride beside the event ledgers (M26.F)
   if (Array.isArray(ledgerDirs) && ledgerDirs.length > 0) {
     const ledgerFiles = [];
     for (const d of ledgerDirs) {
       const abs = path.resolve(cwd, d);
+      if (fs.existsSync(abs)) tokenDirs.push(abs);
       if (!fs.existsSync(abs)) {
         // A supplied-but-absent dir is a STATED coverage note, never an error
         // (report-unavailable over invented — the same doctrine as the default).
@@ -1014,6 +1208,7 @@ function buildModel(cwd, range, ledgerDirs) {
       extraCoverage.push('multi-ledger merge: ' + ledgerDirs.length + ' ledger dir(s) supplied — one report across every role, whichever worktree ledgered it (UAT #27)');
     }
   } else if (fs.existsSync(path.join(cwd, '.claude', 'receipts'))) {
+    tokenDirs.push(path.join(cwd, '.claude', 'receipts'));
     const m = receipts.mergeLedgers(path.join(cwd, '.claude', 'receipts'));
     events = m.events;
     for (const n of m.notes) extraCoverage.push(n);
@@ -1040,7 +1235,11 @@ function buildModel(cwd, range, ledgerDirs) {
   const identity = { name: path.basename(cwd), range: range || 'HEAD', commit: commit, dirty: dirty };
   const opMode = readOperatingMode(cwd);
   if (opMode) identity.mode = opMode;
-  return normalize({ identity: identity, records: arc.records, events: events, coverage: arc.coverage.concat(extraCoverage) });
+  const td = readTokenDeclarations(tokenDirs);
+  for (const n of td.notes) extraCoverage.push(n);
+  const modelInput = { identity: identity, records: arc.records, events: events, coverage: arc.coverage.concat(extraCoverage) };
+  if (td.tokens) modelInput.tokens = td.tokens;
+  return normalize(modelInput);
 }
 
 function printCoverage(model, cap) {
@@ -1153,9 +1352,12 @@ function main(argv) {
   if (cmd === '--check' || cmd === 'check') {
     return runCheck();
   }
+  if (cmd === 'log-tokens') {
+    return runLogTokens(argv.slice(1));
+  }
   const dir = argv[1] || path.join(process.cwd(), '.claude', 'receipts');
   if (cmd !== 'validate' && cmd !== 'coverage') {
-    console.error(`build-receipts: unknown command ${JSON.stringify(cmd)} (validate|coverage|collect|arc|render|--check)`);
+    console.error(`build-receipts: unknown command ${JSON.stringify(cmd)} (validate|coverage|collect|arc|render|log-tokens|--check)`);
     return 2;
   }
   if (!fs.existsSync(dir)) {
@@ -1208,4 +1410,6 @@ module.exports = {
   sanitizeText,
   writeReports,
   buildModel,
+  fmtMs,
+  readTokenDeclarations,
 };

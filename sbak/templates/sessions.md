@@ -6,7 +6,7 @@
 
 ## Append-only rule
 
-This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4). CI enforces via diff check: prior rows must be byte-identical to their committed state.
+This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4): prior rows must be byte-identical to their committed state. The rule always holds. Its **CI diff check is risk-armed** — `.github/workflows/append-only-ledger.yml` carries `docs/sessions.md` in its `LEDGERS` set and generates only when this project declares a risk trigger.
 
 If a row needs correction, **add a new row** noting the correction. Do not edit the original.
 

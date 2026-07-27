@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -39,8 +39,14 @@
 //     templates/scripts → scripts/, installs what is absent, VERIFIES what is
 //     present (the existing engine), sets core.hooksPath, verifies the receipts
 //     hook landed byte-identical (#0), and mediates every collision by REPORT,
-//     never overwrite (#16; the ratified narrowing of #23's "merged": an existing
-//     .claude/settings.json is kept + reported, merge stays the user's hand-step).
+//     never overwrite (#16) — EXCEPT .claude/settings.json, where KF-56 (M27.B)
+//     replaces keep-and-report with a VERIFIED MERGE via lib/settings-merge.cjs:
+//     byte-exact archive + semantic merge of the template-derived kit
+//     registrations and permissions floor + atomic replace + auto-restore. User
+//     hooks, rules, and unknown keys survive; conflicts are reported per the
+//     two-class taxonomy (never silently resolved); an unparseable settings
+//     file is archived and reported, never replaced. Adoption may not end
+//     "controls dormant."
 //     Its route table reads the file-classes from release-manifest.json in THIS
 //     repo — one source of truth with the pack path (C.3.5) — and FAILS CLOSED
 //     when the manifest is absent: never guess classes. Idempotent: a clean
@@ -82,6 +88,8 @@ const { spawnSync } = require('child_process');
 
 // The confinement primitive travels with the tool (red ruling D2 — extend, don't fork).
 const { assertInside } = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
+const { repairHookModes } = require(path.join(__dirname, 'lib', 'hook-chmod.cjs'));
+const { applySettingsMerge, deriveKitSettings, flattenRegistrations } = require(path.join(__dirname, 'lib', 'settings-merge.cjs'));
 
 // ── the MANAGED set (rows-derived, smoke-locked against rows.json BOTH directions) ──────
 // Every enforcement-class row of the golden row-set (scripts/fixtures/golden-bootstrap/
@@ -95,6 +103,18 @@ const MANAGED = [
   { file: 'validators/validate-retrospective.cjs', template: 'validators/validate-retrospective.cjs', render: 'copy' },
   { file: 'validators/validate-app-map.cjs', template: 'validators/validate-app-map.cjs', render: 'copy' },
   { file: 'validators/validate-test-honesty.cjs', template: 'validators/validate-test-honesty.cjs', render: 'copy' },
+  { file: 'validators/validate-operating-mode.cjs', template: 'validators/validate-operating-mode.cjs', render: 'copy' },
+  { file: 'validators/validate-outcome-challenge.cjs', template: 'validators/validate-outcome-challenge.cjs', render: 'copy' },
+  { file: 'validators/validate-risk-escalation.cjs', template: 'validators/validate-risk-escalation.cjs', render: 'copy' },
+  { file: 'validators/validate-destructive-op.cjs', template: 'validators/validate-destructive-op.cjs', render: 'copy' },
+  { file: 'validators/validate-risk-matrix.cjs', template: 'validators/validate-risk-matrix.cjs', render: 'copy' },
+  { file: 'validators/validate-calibration.cjs', template: 'validators/validate-calibration.cjs', render: 'copy' },
+  { file: 'validators/validate-reconciliation.cjs', template: 'validators/validate-reconciliation.cjs', render: 'copy' },
+  { file: 'validators/validate-transition.cjs', template: 'validators/validate-transition.cjs', render: 'copy' },
+  { file: 'validators/validate-release-readiness.cjs', template: 'validators/validate-release-readiness.cjs', render: 'copy' },
+  { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy' },
+  { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy' },
+  { file: 'validators/check-append-only.cjs', template: 'validators/check-append-only.cjs', render: 'copy' },
   { file: 'validators/lib/fenced-block.cjs', template: 'validators/lib/fenced-block.cjs', render: 'copy' },
   { file: 'validators/README.md', template: 'validators/README.md', render: 'copy' },
   { file: '.claude/hooks/session-start-read-first.cjs', template: 'templates/dot-claude/hooks/session-start-read-first.cjs', render: 'copy' },
@@ -115,6 +135,9 @@ const MANAGED = [
   { file: 'scripts/kit-update.cjs', template: 'templates/scripts/kit-update.cjs', render: 'copy' },
   { file: 'scripts/smoke-project.cjs', template: 'templates/scripts/smoke-project.cjs', render: 'copy' },
   { file: 'scripts/lib/sandbox.cjs', template: 'templates/scripts/lib/sandbox.cjs', render: 'copy' },
+  { file: 'scripts/lib/hook-chmod.cjs', template: 'templates/scripts/lib/hook-chmod.cjs', render: 'copy' },
+  { file: 'scripts/lib/settings-merge.cjs', template: 'templates/scripts/lib/settings-merge.cjs', render: 'copy' },
+  { file: 'scripts/lib/stage-structure.cjs', template: 'templates/scripts/lib/stage-structure.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts.cjs', template: 'templates/scripts/lib/receipts.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts-collect.cjs', template: 'templates/scripts/lib/receipts-collect.cjs', render: 'copy' },
   { file: 'scripts/build-receipts.cjs', template: 'templates/scripts/build-receipts.cjs', render: 'copy' },
@@ -150,7 +173,8 @@ function usage(msg) {
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
-    '  enforcement wiring from templates/ (collisions reported, never overwritten); --ingest\n' +
+    '  enforcement wiring from templates/ (collisions reported, never overwritten; an existing\n' +
+    '  .claude/settings.json is MERGED with a byte-exact archive + rollback, KF-56); --ingest\n' +
     '  harvests existing known-issue markers into the ledgers as imported entries.\n'
   );
   process.exit(2);
@@ -332,6 +356,9 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   W('kit-update --adopt' + (dryRun ? ' (dry-run — the PLAN below; zero writes)' : '') + ' — installing the live enforcement wiring from ' + path.join(kitRoot, 'templates'));
   let installed = 0; let kept = 0; let drifted = 0; let ok = 0;
   let placeholderNote = false;
+  let hookRefused = 0; // KF-55: refused .githooks entries — a non-zero count means activation is INCOMPLETE and adopt exits non-zero
+  let settingsIncomplete = 0; // KF-56: unparseable/aborted/restored settings merge, or reported conflicts — INCOMPLETE, non-zero
+  let settingsConflicts = 0;
   for (const t of ADOPT_TREES) {
     const srcRoot = path.join(kitRoot, t.from);
     if (!fs.existsSync(srcRoot)) { W('  missing-source ' + t.from + '/ — template tree absent in the kit source, skipped (partial kit copy?)'); continue; }
@@ -340,6 +367,26 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       const srcAbs = path.join(srcRoot, rel);
       const tpl = fs.readFileSync(srcAbs);
       const tplText = tpl.toString('utf8');
+      // KF-55 (M27.A, owner condition C2b): a .githooks entry that is a SYMLINK is
+      // refused up front, and the check runs on the PLAIN JOINED path BEFORE the
+      // confinement assert — assertInside resolves symlinks by design, so asserting
+      // first would either throw the generic confinement error (external target) or
+      // hand back the TARGET path (internal target) and make the link invisible. A
+      // DANGLING link reads as absent below (readIf follows the link), and the
+      // install rename would silently REPLACE the user's link with template bytes —
+      // the existsSync-false path. Refuse visibly instead; the exec-bit pass below
+      // refuses symlinks the same way.
+      if (destRel.startsWith('.githooks/')) {
+        const joined = path.join(projRoot, destRel);
+        let lst = null;
+        try { lst = fs.lstatSync(joined); } catch (_) { lst = null; }
+        if (lst && lst.isSymbolicLink()) {
+          hookRefused++;
+          W('  refused    ' + destRel + ' — symlink' + (fs.existsSync(joined) ? '' : ' (dangling)')
+            + '; adopt never installs over or chmods through a symlink — replace it with a regular file to activate this hook');
+          continue;
+        }
+      }
       let liveAbs;
       try { liveAbs = assertInside(projRoot, destRel); } catch (e) { W('  refused    ' + destRel + ' — ' + e.message); continue; }
       const row = managedByFile.get(destRel);
@@ -362,7 +409,60 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       }
       // Present: NEVER overwritten by adopt (#16). Verify managed copy rows with
       // the engine's own rules; everything else is kept + reported.
-      if (declaresDivergence(live)) { kept++; W('  divergent  ' + destRel + ' — declared intentional divergence (ARC-007); kept, never overwritten'); continue; }
+      if (declaresDivergence(live)) {
+        kept++;
+        // KF-56 gate-3 ruling: an ARC-007-declared settings file is the user's
+        // explicit standing choice — kept, exit 0 (the C1 never-modify-user-rules
+        // principle) — but the note must name EVERY dormant control and the
+        // exact undo; a quiet "kept" here would be §8 blocker 2 wearing a
+        // declaration.
+        let divNote = '';
+        if (destRel === '.claude/settings.json') {
+          let dormant = null;
+          try {
+            const kitSet = deriveKitSettings(kitRoot);
+            const have = new Set(flattenRegistrations(JSON.parse(live)).map((r) => r.command));
+            dormant = Array.from(new Set(kitSet.registrations.map((r) => r.command))).filter((c) => !have.has(c));
+          } catch (_) { dormant = null; } // unparseable / underivable — cannot inspect
+          const tplSettingsRel = path.relative(projRoot, path.join(kitRoot, 'templates', 'dot-claude', 'settings.json')).split(path.sep).join('/');
+          if (dormant === null) {
+            divNote = ' — NOTE: cannot inspect the declared-divergent settings (unparseable); ALL kit session controls may be dormant.';
+          } else if (dormant.length === 0) {
+            divNote = ' — all kit registrations present by parsed inspection; nothing dormant.';
+          } else {
+            divNote = ' — DORMANT controls (' + dormant.length + '): ' + dormant.join(', ') + '.';
+          }
+          if (dormant === null || dormant.length > 0) {
+            divNote += ' Undo: remove the INTENTIONAL DIVERGENCE line from the file head and re-run --adopt to merge them, or hand-merge the "hooks" section from ' + tplSettingsRel + '.';
+          }
+        }
+        W('  divergent  ' + destRel + ' — declared intentional divergence (ARC-007); kept, never overwritten' + divNote);
+        continue;
+      }
+      // KF-56 (M27.B): adoption may not end "controls dormant" — an existing
+      // settings.json is MERGED, never kept-dormant and never overwritten:
+      // byte-exact archive → semantic merge of the TEMPLATE-DERIVED kit
+      // registrations + permissions floor (lib/settings-merge.cjs; exact-command
+      // ownership, user hooks/rules/unknown keys survive, two-class conflict
+      // taxonomy) → temp write → verify → atomic replace → re-verify →
+      // auto-restore on failure. The old string-regex wiredness hint died here:
+      // wiredness is parsed-registration inspection, and an unparseable file is
+      // archived + reported, never replaced.
+      if (destRel === '.claude/settings.json') {
+        let sres;
+        try {
+          sres = applySettingsMerge({ projRoot, kitRoot, dryRun, log: (line) => W('  ' + line) });
+        } catch (e) {
+          settingsIncomplete++;
+          W('  ERROR      .claude/settings.json merge unavailable — ' + e.message + ' (fail-closed; your settings were not touched)');
+          continue;
+        }
+        settingsConflicts += sres.conflictCount;
+        if (sres.conflictCount > 0 || sres.status === 'unparseable' || sres.status === 'aborted' || sres.status === 'restored') {
+          settingsIncomplete++;
+        }
+        continue;
+      }
       if (row && row.render === 'copy' && normalize(live) !== normalize(tplText)) {
         drifted++;
         W('  drift      ' + destRel + ' — differs from its template; kept (adopt never overwrites — restore explicitly with --apply ' + destRel + ')');
@@ -370,22 +470,7 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       }
       if (row && row.render === 'copy') { ok++; W('  ok         ' + destRel + ' — matches its template'); continue; }
       kept++;
-      // The E2 honesty line (M23.A R-2, eval F3): keeping the user's settings.json
-      // means the kit hooks just installed are NOT wired — nothing registers them,
-      // so the session layer stays dormant until the hook block is merged by hand.
-      // Saying only "merge the fence" claimed success while the window stayed open.
-      // (Checked, not assumed: a settings.json that already names the kit's
-      // SessionStart hook — a prior hand-merge — earns the quiet line instead.)
-      let keptNote = '';
-      if (destRel === '.claude/settings.json') {
-        const wiresKitHooks = /session-start-read-first/.test(live || '');
-        const tplSettingsRel = path.relative(projRoot, path.join(kitRoot, 'templates', 'dot-claude', 'settings.json')).split(path.sep).join('/');
-        keptNote = wiresKitHooks
-          ? ' (your settings; they already register the kit hooks — merge the kit fence by hand if you want it, adopt will not merge for you)'
-          : ' (your settings — which means the kit hooks are NOT wired: nothing in your settings.json registers them, so the installed .claude/hooks/ stay dormant until you merge the "hooks" section from ' +
-            tplSettingsRel + ' by hand; same for the permission fence — adopt will not merge either for you)';
-      }
-      W('  kept       ' + destRel + ' — exists; never overwritten by adopt' + keptNote);
+      W('  kept       ' + destRel + ' — exists; never overwritten by adopt');
     }
   }
 
@@ -397,6 +482,25 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   else {
     const r = spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projRoot, encoding: 'utf8' });
     W(r.status === 0 ? '  hooksPath  set to .githooks' : '  hooksPath  FAILED to set (' + String(r.stderr || '').trim() + ') — run: git config core.hooksPath .githooks');
+  }
+
+  // Hook executability (the M26 Linux-CI finding): POSIX git SILENTLY IGNORES a
+  // non-executable core.hooksPath hook — one hint line, then the commit proceeds
+  // UNGATED. The install loop above lands files via writeFileSync (mode 0644), so on
+  // Linux/macOS every "gated" commit ran ungated while win32 (no exec bit) masked the
+  // gap. install-hooks.cjs always chmodded; --adopt absorbed its hooksPath half
+  // (UAT #2) and dropped the chmod half — restored here. Covers installed AND
+  // kept-from-an-earlier-adopt hooks: the exec bit is wiring, not content, so this
+  // never violates the #16 never-overwrite contract.
+  // KF-55 (M27.A): the repair is CONFINED via lib/hook-chmod.cjs — manifest-owned
+  // hook names only (the MANAGED .githooks rows), lstat + O_NOFOLLOW fd mutation,
+  // symlinks refused visibly, existing modes preserved, unknown files reported.
+  // The M26 statSync/chmodSync sweep followed symlinks: a repository-controlled
+  // .githooks link could direct the chmod OUTSIDE the project.
+  {
+    const hookNames = MANAGED.filter((r) => r.file.startsWith('.githooks/')).map((r) => r.file.slice('.githooks/'.length));
+    const hookRes = repairHookModes({ projRoot, hookNames, dryRun, log: (line) => W('  ' + line) });
+    hookRefused += hookRes.refused.length;
   }
 
   // Receipts verification (#0): the hook whose absence let the kit lose its own telemetry.
@@ -414,11 +518,27 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
     }
   }
   if (placeholderNote) W('  note: installed wiring files carry {{placeholders}} — they are filled by the bootstrap (or by hand), never by adopt.');
-  W('=> ' + (dryRun ? installed + ' would install' : installed + ' installed') + ', ' + ok + ' verified ok, ' + kept + ' kept (never overwritten), ' + drifted + ' drift (use --apply per file)');
+  W('=> ' + (dryRun ? installed + ' would install' : installed + ' installed') + ', ' + ok + ' verified ok, ' + kept + ' kept (never overwritten), ' + drifted + ' drift (use --apply per file)'
+    + (hookRefused > 0 ? ', ' + hookRefused + ' hook(s) REFUSED' : ''));
+  if (hookRefused > 0) {
+    // KF-55: a refused hook means adoption may NOT conclude "hooks installed" —
+    // visible AND non-zero, so nothing downstream reads this run as fully armed.
+    W('=> hook activation INCOMPLETE — ' + hookRefused + ' .githooks entr' + (hookRefused === 1 ? 'y' : 'ies')
+      + ' refused (symlinks are never installed over or chmodded through). The commit gates are NOT fully'
+      + ' armed until each refused hook is replaced with a regular file; exiting non-zero.');
+  }
+  if (settingsIncomplete > 0) {
+    // KF-56: same rule at the control plane — a conflicted, unparseable, or
+    // rolled-back settings merge may not read as "controls armed".
+    W('=> settings activation INCOMPLETE — '
+      + (settingsConflicts > 0 ? settingsConflicts + ' conflict(s) reported above; ' : '')
+      + 'everything non-conflicted was merged and your own rules and commands were NOT modified. '
+      + 'Resolve the reported items by hand, then re-run --adopt; exiting non-zero.');
+  }
 
   if (!dryRun) cmdIngest(projRoot, false);
   else W('  (dry-run: the known-issue ingest also runs on a real adopt — nothing harvested now)');
-  return 0;
+  return (hookRefused > 0 || settingsIncomplete > 0) ? 1 : 0;
 }
 
 function main() {
@@ -489,7 +609,19 @@ function main() {
       continue;
     }
     if (row.render === 'wiring') {
-      report.push({ row, cls: 'wiring', detail: `bootstrap-filled; stamp compared only (@${liveStamp || 'unstamped'} ok)` });
+      // A wiring row is bootstrap-FILLED: content drift is by design, so only the stamp is
+      // compared — BUT "filled at Phase 3" was ASSERTED, never verified (KF-27 residual, M26.C).
+      // A live wiring file still carrying an unfilled {{TOKEN}} ships a broken gate (the
+      // {{FAST_CHECK_COMMAND}} → `command not found` wall on the first commit). Scan the LIVE file
+      // for a surviving placeholder — the SAME regex golden-bootstrap enforces on the render, so
+      // "filled" here means exactly what it means there — and FLAG it (exit non-zero), catching a
+      // fill that never happened at update time instead of at the user's first commit.
+      const surviving = (live.match(/\{\{[A-Za-z0-9_]+\}\}/g) || []).filter((v, i, a) => a.indexOf(v) === i);
+      if (surviving.length) {
+        report.push({ row, cls: 'unfilled', detail: `bootstrap-filled row still carries ${surviving.join(', ')} — Phase 3 did not fill it; fill the live file (fill-verification, KF-27)` });
+      } else {
+        report.push({ row, cls: 'wiring', detail: `bootstrap-filled; stamp compared only (@${liveStamp || 'unstamped'} ok)` });
+      }
       continue;
     }
     if (live === tpl) { report.push({ row, cls: 'clean', detail: `@${liveStamp || 'unstamped'}` }); continue; }
@@ -552,15 +684,18 @@ function main() {
   }
 
   // ── the read-only report ──────────────────────────────────────────────────────────────
-  const order = ['clean', 'note', 'wiring', 'stamp', 'drifted', 'divergent', 'absent', 'absent-template'];
+  const order = ['clean', 'note', 'wiring', 'unfilled', 'stamp', 'drifted', 'divergent', 'absent', 'absent-template'];
   report.sort((a, b) => order.indexOf(a.cls) - order.indexOf(b.cls) || (a.row.file < b.row.file ? -1 : 1));
   process.stdout.write(`kit-update — drift report vs ${path.join(kitRoot, 'templates')} (read-only; --apply <file> to restore one file)\n`);
   for (const r of report) {
     process.stdout.write(`  ${r.cls.padEnd(10)} ${r.row.file.padEnd(50)} ${r.detail}\n`);
   }
-  const drifted = report.filter((r) => r.cls === 'drifted' || r.cls === 'stamp');
+  // An unfilled wiring file counts toward the exit code alongside content/stamp drift: a gate that
+  // never got its placeholder filled is as broken as one that drifted (KF-27 fill-verification).
+  const drifted = report.filter((r) => r.cls === 'drifted' || r.cls === 'stamp' || r.cls === 'unfilled');
+  const unfilled = report.filter((r) => r.cls === 'unfilled');
   const divergent = report.filter((r) => r.cls === 'divergent');
-  process.stdout.write(`=> ${drifted.length} drifted, ${divergent.length} divergent-by-declaration; exit ${drifted.length ? 1 : 0}\n`);
+  process.stdout.write(`=> ${drifted.length} drifted${unfilled.length ? ` (incl. ${unfilled.length} unfilled)` : ''}, ${divergent.length} divergent-by-declaration; exit ${drifted.length ? 1 : 0}\n`);
   process.exit(drifted.length ? 1 : 0);
 }
 

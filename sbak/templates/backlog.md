@@ -34,7 +34,7 @@ Why this is non-negotiable: if the agent could re-rank the backlog on its own, "
 <!--
 TIER NOTE — keep only the columns your tier uses:
   * Lite     — #, User story, Status  (drop Depends on + Notes; inversions noted in CHANGELOG.md)
-  * Standard — the full table below (#, User story, Status, Depends on, Notes)
+  * Full — the full table below (#, User story, Status, Depends on, Notes)
   * Full     — the full table below + an override-log entry on every re-rank (see below)
 
 Assign each new story the next unused #. NEVER reuse or renumber a #. To
@@ -68,7 +68,7 @@ the two; justified inversions are logged in docs/off-track-log.md.
 
 ## Override log (Full tier — every re-rank recorded here, append-only)
 
-> A re-rank is a human-ratified change to priority order. Record each one so direction stays traceable. Newest at the bottom. (Lite/Standard: this section is optional; ratification still happens, but the log is honor-system.)
+> A re-rank is a human-ratified change to priority order. Record each one so direction stays traceable. Newest at the bottom. (This section is honor-system unless the ledger workflow is risk-armed; ratification still happens either way.)
 
 <!-- Append re-rank records below this line. Format:
 - YYYY-MM-DD — moved #N above #M (was rank X, now rank Y). Reason: {{user's reason}}. Ratified by: {{user}}.

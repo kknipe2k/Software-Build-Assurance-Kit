@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-transition.cjs
 //
 // The G15 transition gate, shipped framework-wide so
@@ -22,7 +22,7 @@
 //     SCOPED TIGHTLY (red-review): the match is the SPECIFIC durable-state path, NOT a bare
 //     `active-mode` basename — a write to `<tmpdir>/active-mode` in a test is a scratch
 //     file, not a transition. And clause 1 SKIPS test/harness source files (*.test.* /
-//     *.spec.* / smoke.cjs / bake-and-test.cjs / anything under tests|__tests__|fixtures|
+//     *.spec.* / smoke.cjs / bake-inheritance.cjs / anything under tests|__tests__|fixtures|
 //     validators) + temp/tmpdir write targets — so a state-named `writeFileSync` STRING in
 //     a fixture (smoke.cjs is full of them) never blocks a commit. Floor only; the resolver
 //     reads inline string literals + simple `const x = <expr>` bindings, not arbitrary
@@ -182,8 +182,8 @@ function isTestOrHarness(file) {
   if (/_test\.go$/.test(base)) return true;
   if (/_(?:test|spec)\.rb$/.test(base)) return true;
   // smoke-project.cjs is the SHIPPED mini-smoke — its state-named writes are
-  // sandbox fixtures, the same harness class as smoke.cjs / bake-and-test.cjs.
-  if (base === 'smoke.cjs' || base === 'bake-and-test.cjs' || base === 'smoke-project.cjs') return true;
+  // sandbox fixtures, the same harness class as smoke.cjs / bake-inheritance.cjs.
+  if (base === 'smoke.cjs' || base === 'bake-inheritance.cjs' || base === 'smoke-project.cjs') return true;
   const norm = file.replace(/\\/g, '/');
   if (/(^|\/)(tests?|__tests__|fixtures?|validators)\//i.test(norm)) return true;
   return false;

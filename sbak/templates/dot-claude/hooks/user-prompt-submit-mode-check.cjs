@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /
@@ -10,18 +10,35 @@
 // prompt exists, so it cannot see what the user is about to paste. The
 // mode<->prompt match can only be checked when the prompt is in hand.
 //
-// Mode is detected from the pasted prompt, in priority order:
-//   1. An explicit <mode>work|verifier|orchestrator|refactor</mode> tag, if present.
-//   2. Otherwise the stage-prompt root element:
-//        <work_stage_prompt>      -> work
-//        <closeout_stage_prompt>  -> work      (closeout is a build session)
-//        <verifier_stage_prompt>  -> verifier
-//        <refactor_stage_prompt>  -> refactor  (Stage R health check)
-//        <audit_pass_prompt>      -> verifier  (audit IS verification;
-//                                   the persona/dimension/checklist ride on the
-//                                   prompt, NOT a new active-mode value)
-//   3. If neither is present, the prompt is treated as ad-hoc (a question,
-//      an orchestrator consultation, etc.) and passes silently.
+// WHAT THIS CLAIMS, EXACTLY (the narrowed claim; do not widen it). For the framework's
+// validated stage-prompt grammar, this hook identifies the outer stage element and checks
+// that its required role matches the active session role. It is a role-separation guard
+// for that grammar — NOT a general XML parser, NOT a security boundary, and it proves
+// nothing about arbitrary XML.
+//
+// The structure is read by ONE shared module — scripts/lib/stage-structure.cjs — which the
+// stage-prompt validator consumes too, so hook and validator can never disagree about what
+// a stage prompt is. Its verdict drives the policy:
+//   none      -> ad-hoc (a question, an orchestrator consultation, prose that merely
+//                MENTIONS a tag): passes silently. Blocking prose is the false-positive
+//                class this design exists to kill — frequent false blocks teach operators
+//                to bypass the control.
+//   complete  -> enforce the root's role:
+//                  <work_stage_prompt>      -> work
+//                  <closeout_stage_prompt>  -> work      (closeout is a build session)
+//                  <verifier_stage_prompt>  -> verifier
+//                  <refactor_stage_prompt>  -> refactor  (Stage R health check)
+//                  <audit_pass_prompt>      -> verifier  (audit IS verification; the
+//                                             persona/checklist ride on the prompt, NOT a
+//                                             new active-mode value)
+//   partial   -> an unclosed opening tag. ENFORCED when the tag is grammar-conformant
+//                (it carries a real stage id — a truncated REAL prompt); treated as ad-hoc
+//                when it is not (a bare tag in prose).
+//   ambiguous -> two grammar-conformant roots of different kinds submitted together:
+//                which one is being run is undecidable -> BLOCK with that diagnostic.
+//   invalid   -> positively a stage prompt but malformed (crossed spans) -> BLOCK.
+// A <mode> annotation is NOT a stage root and is never consulted: it may agree with the
+// structure but can never override it (the C1-001 evasion).
 //
 // .claude/active-mode holds the session's mode. ABSENT is the one legitimate
 // default -> "work" (a greenfield work session, or a project predating the dial).
@@ -33,8 +50,9 @@
 // Exit codes:
 //   0  -> allow the prompt (match; ad-hoc/no stage prompt; or absent active-mode
 //         resolving to the legitimate work default).
-//   2  -> block: a real mode mismatch, OR a present-but-unresolvable active-mode
-//         (fail-closed, ERR-002). stderr explains and how to fix it.
+//   2  -> block: a real mode mismatch, an ambiguous or malformed stage prompt, a
+//         present-but-unresolvable active-mode (fail-closed, ERR-002), or an
+//         unreachable/mis-wired classifier module. stderr explains and how to fix it.
 //
 // Cross-platform (Node, no shell-isms).
 
@@ -42,6 +60,19 @@
 
 const fs = require('fs');
 const path = require('path');
+
+// The ONE stage-structure reader, shared with validators/validate-stage-prompts.cjs.
+// The relative path resolves identically in the kit, in a generated project, in an
+// adopted repo, and inside templates/ — which is why the live and template copies of this
+// hook stay byte-identical. A load failure is handled in main(): it must never leave the
+// guard silently DORMANT, and must never brick ordinary conversation.
+let CLASSIFIER = null;
+let CLASSIFIER_ERR = null;
+try {
+  CLASSIFIER = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'stage-structure.cjs'));
+} catch (e) {
+  CLASSIFIER_ERR = e && e.message ? e.message : String(e);
+}
 
 const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 
@@ -96,50 +127,33 @@ function getPrompt(raw) {
   return raw;
 }
 
-// Identify the ROOT stage-prompt element (IPC-006 / C1-001/002). This is the
-// hardening of the old "regex on raw text, first tag (incl. <mode>) wins" classifier,
-// which was evadable three ways:
-//   * a `<mode>work</mode>` PREFIX overrode the real root element (C1-001), so a
-//     verifier prompt could masquerade as work;
-//   * FIRST-TAG-WINS on raw text false-blocked a legitimate work prompt that merely
-//     MENTIONED `<verifier_stage_prompt>` in its body before its own root (C1-002).
-// Fix: a REAL element has BOTH an opening `<X ...>` and a matching closing `</X>`.
-// A bare mention (a quoted tag with no close) and a `<mode>` annotation (not in the
-// element set) are NOT elements. Among real elements, the root is the one whose
-// opening tag comes FIRST. `<mode>` may CONFIRM the structural mode but can never
-// OVERRIDE it — a disagreeing `<mode>` is the evasion and is ignored.
-const STAGE_ELEMENTS = Object.keys(ROOT_TO_MODE);
-
-function detectRootElement(prompt) {
-  let bestName = null;
-  let bestOpen = Infinity;
-  for (const name of STAGE_ELEMENTS) {
-    const openM = prompt.match(new RegExp('<' + name + '\\b'));
-    if (!openM) continue;
-    if (prompt.indexOf('</' + name + '>') === -1) continue; // bare mention, not a real element
-    if (openM.index < bestOpen) { bestOpen = openM.index; bestName = name; }
+// Classify the prompt's stage structure (IPC-006 / C1-001/002, corrected at KF-57).
+//
+// History, so the shape is not "simplified" back into a defect. The original classifier
+// was a regex on raw text where the first tag — including `<mode>` — won. That was
+// evadable two ways: a `<mode>work</mode>` PREFIX overrode the real root (C1-001), and
+// FIRST-TAG-WINS false-blocked a work prompt that merely MENTIONED another tag (C1-002).
+// M09.C required a real element (matching open AND close) and dropped `<mode>` from the
+// candidate set — but it still took the EARLIEST such element, so a complete quoted
+// example above a real prompt captured the classification (KF-57) — and, from the other
+// direction, a decoy root flipped it. The structural decision now lives in ONE shared
+// module; this hook only maps the module's root to a role and applies the policy above.
+// Reverting to earliest-tag selection is the mutation the kit's floor kills.
+function classify(prompt) {
+  const res = CLASSIFIER.classifyStagePrompt(prompt);
+  if (!res || typeof res.state !== 'string') {
+    return { state: 'invalid', reason: 'stage-structure reader returned no verdict' };
   }
-  if (bestName !== null) return bestName;
-
-  // No element has a matching close (a truncated / streamed paste). Fall back to the
-  // first opening tag among the element set so a partial real prompt still classifies.
-  // `<mode>` is not an element, so it still cannot win here.
-  let firstName = null;
-  let firstIdx = Infinity;
-  for (const name of STAGE_ELEMENTS) {
-    const m = prompt.match(new RegExp('<' + name + '\\b'));
-    if (m && m.index < firstIdx) { firstIdx = m.index; firstName = name; }
-  }
-  return firstName;
+  return res;
 }
 
-// Returns the mode the prompt declares/implies, or null if it's not a stage prompt.
-function detectMode(prompt) {
-  const root = detectRootElement(prompt);
-  if (root === null) return null; // ad-hoc prompt -> nothing to enforce
-  // The structural root is AUTHORITATIVE. A <mode> annotation that disagrees is
-  // the IPC-006 evasion and is ignored.
-  return ROOT_TO_MODE[root];
+// The module owns the stage-root name set. If ROOT_TO_MODE has drifted from it, a root is
+// wired in one place and not the other — a half-wired root would silently classify as
+// ad-hoc and skip the guard, so this fails CLOSED rather than guessing.
+function lockstepBreak() {
+  const want = CLASSIFIER.STAGE_ROOTS.slice().sort().join(',');
+  const have = Object.keys(ROOT_TO_MODE).sort().join(',');
+  return want === have ? null : `ROOT_TO_MODE [${have}] != STAGE_ROOTS [${want}]`;
 }
 
 // Decode a tiny mode file across encodings. PowerShell `>` writes UTF-16LE+BOM;
@@ -195,10 +209,57 @@ function readActiveMode(claudeDir) {
 
 function main() {
   const prompt = getPrompt(readStdin());
-  const declared = detectMode(prompt);
+
+  // DEGRADED INSTALL (the classifier module is unreachable or the root set has drifted).
+  // Two prongs, deliberately asymmetric: ordinary conversation must never be bricked by a
+  // broken install, but a stage-shaped prompt must never sail through UNCHECKED — a
+  // guard that quietly stops guarding is the dormant-control class. The stage-shaped test
+  // here is a plain name scan over this file's own ROOT_TO_MODE, not a second structural
+  // reader: it decides only whether to fail closed, never what the role is.
+  const brokenReason = CLASSIFIER === null
+    ? `cannot load scripts/lib/stage-structure.cjs (${CLASSIFIER_ERR})`
+    : lockstepBreak();
+  if (brokenReason) {
+    const stageShaped = Object.keys(ROOT_TO_MODE).some((n) => prompt.indexOf('<' + n) !== -1);
+    if (!stageShaped) process.exit(0); // prose is still prose
+    process.stderr.write(
+      `\nStage-prompt classifier unavailable — prompt not run (fail-closed).\n` +
+      `  ${brokenReason}\n` +
+      `  This prompt looks like a stage prompt, and the role guard cannot classify it.\n` +
+      `  Refusing to run it unchecked — that would silently disable the 3-brain bias guard.\n\n` +
+      `  Fix: reinstall the enforcement wiring, then re-paste:\n` +
+      `    node scripts/kit-update.cjs --adopt\n\n`
+    );
+    process.exit(2);
+  }
+
+  const structure = classify(prompt);
 
   // Ad-hoc prompt (no stage-prompt structure) -> nothing to enforce.
-  if (declared === null) process.exit(0);
+  if (structure.state === 'none') process.exit(0);
+
+  // A bare opening tag in prose is NOT a submitted prompt: an unclosed tag that carries no
+  // real stage id is someone TALKING about a stage prompt. A truncated REAL prompt (whose
+  // opening tag does carry a stage id) still gets enforced.
+  if (structure.state === 'partial' && !structure.conformant) process.exit(0);
+
+  // Positively identified as a stage prompt, but the structure is undecidable or
+  // malformed. Fail closed with a diagnostic that cannot be mistaken for a role mismatch.
+  if (structure.state === 'ambiguous' || structure.state === 'invalid') {
+    const kind = structure.state === 'ambiguous' ? 'Ambiguous stage prompt' : 'Malformed stage prompt';
+    process.stderr.write(
+      `\n${kind} — prompt not run.\n` +
+      `  ${structure.reason}\n` +
+      `  This is NOT a role mismatch: the session role was never consulted, because the\n` +
+      `  prompt's own structure could not be resolved to a single stage prompt.\n\n` +
+      `  Fix: re-paste exactly one complete stage prompt (quoted examples belong inside the\n` +
+      `  prompt body, or in a fenced block in the Phase doc — not beside the root).\n\n`
+    );
+    process.exit(2);
+  }
+
+  const declared = ROOT_TO_MODE[structure.root];
+  if (!declared) process.exit(0); // unreachable while the lockstep holds; never guess a role
 
   const claudeDir = path.join(process.cwd(), '.claude');
   const res = readActiveMode(claudeDir);

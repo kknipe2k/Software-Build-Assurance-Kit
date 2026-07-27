@@ -8,7 +8,7 @@
 
 This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4). **No prior entry may be edited, reordered, or deleted.**
 
-Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (Full-enforced; Standard-advisory): prior committed content must remain a byte-prefix of the current file. This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md` — the release-state ledger simply joins that workflow's `LEDGERS` set; there is no separate workflow.
+Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (generated when a risk trigger arms it; advisory by convention otherwise): prior committed content must remain a byte-prefix of the current file. This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md` — the release-state ledger simply joins that workflow's `LEDGERS` set; there is no separate workflow.
 
 ### Why append-only
 
@@ -40,6 +40,7 @@ Each state is a **separately-gated** transition. A state may not be claimed unti
 - Prior state: `{{the state below this one}}`  (recorded {{date}})
 - Gate passed: {{the named gate for this transition — e.g. "Stage V Sound + E reconcile", "release.yml SLSA Build L2"}}
 - SLSA build level (states 5–6 only): {{L2 | L3 | n/a — not at the packaged end yet}}
+- Rendered receipt (states 5–6 only): {{.claude/receipts/<tag>.html (the `build-receipts render` output) | n/a — no receipt collected}}
 - Rework so far (four-type, honest): implementation {{N}} / verifier {{N}} / irl {{N}} / post-merge {{N}}
 - Evidence: {{run reference / commit range / attestation}}
 - Notes: {{anything an auditor needs}}
@@ -57,6 +58,7 @@ a recorded release state, once logged, is permanent. Example:
 - Prior state: `source-release-ready`  (recorded 2026-06-10)
 - Gate passed: release.yml built the macOS + linux artifacts; attest-build-provenance ran
 - SLSA build level: L2 (actions/attest-build-provenance — Sigstore-signed, in the transparency log)
+- Rendered receipt: .claude/receipts/v1.0.0-rc1.html (the `build-receipts render` output — token/time/rework accounting)
 - Rework so far (four-type, honest): implementation 3 / verifier 1 / irl 0 / post-merge 0
 - Evidence: run https://github.com/<org>/<repo>/actions/runs/<id>; attestation digest sha256:<...>
 - Notes: macOS leg signed + notarized; the public-distribution review is the next transition.

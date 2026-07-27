@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-destructive-op.cjs
 //
 // The G12 destructive-op gate, shipped framework-wide so

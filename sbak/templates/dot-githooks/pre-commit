@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 0.2.0
+# @kit-version 1.0.0
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
@@ -22,150 +22,266 @@ staged_all=$(git diff --cached --name-only --diff-filter=ACMR) || {
   exit 1
 }
 
+# --- the `[ -f ]` guard policy: VISIBLE SKIP AT FIRE-TIME (KF-48, M27.D) ------
+# Every gate below is guarded by `[ -f validators/…`, because a lighter tier legitimately
+# ships a SUBSET of the validator set — a hard requirement would false-block Lite on its
+# first commit. Until M27.D that guard wrapped the whole stanza, so an absent validator was
+# a SILENT pass: the md2page trial found a project whose own pre-commit named 12 gates while
+# its scaffold carried 3, and nothing said a word on any commit. Two changes close it:
+#   1. the scaffold now GENERATES every validator this hook invokes, at the tier that claims
+#      it (golden-bootstrap --generated-refs enforces referenced⇒present), and
+#   2. the guard moved INSIDE the staged-file filter, so absence is disclosed exactly when
+#      the gate WOULD have fired — never silently skipped, and never as chatter on the
+#      ordinary commits of a lighter tier that touches none of these surfaces.
+# A NOTE here means one of two things, both worth seeing: this project's tier does not carry
+# that gate, or the gate was deleted. It names the validator and the one-command repair.
+gate_not_installed() {
+  echo "NOTE  gate NOT INSTALLED in this project: $1" >&2
+  echo "      Its staged-file filter matched, so this commit is going through UNCHECKED by it." >&2
+  echo "      A lighter tier ships a subset by design; a deleted gate does not. Restore the" >&2
+  echo "      full set for this project's tier:  node scripts/kit-update.cjs --adopt" >&2
+}
+
 # --- framework validators (only fire when relevant files are staged) ----------
-if [ -f validators/validate-stage-prompts.cjs ]; then
-  # docs/bugfix/ is the bug_fix mode's phase-doc home — same schema, different tree (UAT 2026-07).
-  staged_phase=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
-  if [ -n "$staged_phase" ]; then
+# docs/bugfix/ is the bug_fix mode's phase-doc home — same schema, different tree (UAT 2026-07).
+staged_phase=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
+if [ -n "$staged_phase" ]; then
+  if [ -f validators/validate-stage-prompts.cjs ]; then
     node validators/validate-stage-prompts.cjs $staged_phase
+  else
+    gate_not_installed validators/validate-stage-prompts.cjs
   fi
 fi
-if [ -f validators/validate-retrospective.cjs ]; then
-  # ERR-012: only spawn the retro validator when a real stage retro is actually
-  # staged (mirrors the stage-prompt sibling above + the ERR-013 precise matcher:
-  # excludes templates/ and retrospectives/audit/). A normal commit with no retro
-  # staged never invokes it, so a validator fault can't abort the commit before the
-  # project fast-check below. B[0-9]+ rides alongside M[0-9]{2}: a bug_fix retro
-  # named off-convention (B01.A…) must still trigger the stamp gate (UAT #14).
-  staged_retro=$(printf '%s\n' "$staged_all" | grep -E '^retrospectives/(M[0-9]{2}|B[0-9]+).*-retrospective\.md$' || true)
-  if [ -n "$staged_retro" ]; then
+
+# V-🟡 carry-forward landing slot (KF-48 instance 4, M27.D): BUILD-PLAYBOOK §3.4 promises a
+# 🟡 Verifier finding "carries forward to next milestone's Stage A" — a promise nothing read
+# until this gate. When a Phase doc is staged, the prior milestone's V-findings file is opened
+# and every 🟡 finding id must APPEAR here: in scope, or explicitly deferred with the reason.
+# Honest locus: it checks the id LANDED, not that the treatment is good — what it removes is
+# the third option (saying nothing), which is how the trial's M02 doc dropped one. A first
+# milestone, or a Verifier record with no 🟡, no-ops silently. Severity follows the same model
+# as its siblings: --warn = advisory (the Lite render); Full renders empty (BLOCK).
+if [ -n "$staged_phase" ]; then
+  if [ -f validators/validate-carry-forward.cjs ]; then
+    node validators/validate-carry-forward.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_phase
+  else
+    gate_not_installed validators/validate-carry-forward.cjs
+  fi
+fi
+# ERR-012: only spawn the retro validator when a real stage retro is actually
+# staged (mirrors the stage-prompt sibling above + the ERR-013 precise matcher:
+# excludes templates/ and retrospectives/audit/). A normal commit with no retro
+# staged never invokes it, so a validator fault can't abort the commit before the
+# project fast-check below. B[0-9]+ rides alongside M[0-9]{2}: a bug_fix retro
+# named off-convention (B01.A…) must still trigger the stamp gate (UAT #14).
+staged_retro=$(printf '%s\n' "$staged_all" | grep -E '^retrospectives/(M[0-9]{2}|B[0-9]+).*-retrospective\.md$' || true)
+if [ -n "$staged_retro" ]; then
+  if [ -f validators/validate-retrospective.cjs ]; then
     node validators/validate-retrospective.cjs --staged
+  else
+    gate_not_installed validators/validate-retrospective.cjs
   fi
 fi
 
-if [ -f validators/validate-test-honesty.cjs ]; then
-  # G9 test-honesty: a v1.7+ work-stage Phase doc must carry a <test_honesty>
-  # slot (named mutation, or `n/a — no risk surface`), and no staged test may be
-  # assertion-free / exception-only. Risk-tiered + incremental — the validator filters
-  # the staged set itself and fails CLOSED on a git error. Severity follows test_honesty
-  # (FRAMEWORK-CONFIG §4.17): --warn = advisory (Lite/Standard default, shipped here);
-  # a Full project REMOVES --warn to BLOCK. Only spawn when a Phase doc or test file is
-  # actually staged (mirrors the ERR-012 conditional-spawn pattern above). STACK-AWARE
-  # (I12-2, M20.5.B): the spawn filter routes the per-language test shapes the validator
-  # now evaluates — Python test_*/_test.py, Go *_test.go, Rust tests/*.rs — plus the
-  # Ruby _spec/_test.rb shapes it visibly discloses.
-  staged_th=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*\.md|docs/bugfix/[^/]+\.md|.*\.(spec|test)\.[cm]?[jt]sx?|([^ ]*/)?(tests?|__tests__)/[^ ]*\.[cm]?[jt]sx?|([^ ]*/)?test_[^ /]*\.py|.*_test\.(py|go)|([^ ]*/)?tests?/[^ ]*\.rs|.*_(spec|test)\.rb)$' || true)
-  if [ -n "$staged_th" ]; then
-    node validators/validate-test-honesty.cjs --warn --staged
+# G-operating-mode (KF-22, M26.C): the operating-mode value gate is claimed as a "pre-commit
+# value check" in the calibration interview, project-config.md, and PROJECT-CLAUDE.md — this
+# stanza makes that claim TRUE in every project, not just the kit. Before M26.C it was wired
+# into no project path (advertised-but-inert); wiring it depended on the KF-21 parser fix
+# (M26.B) landing first, or a filled, commented config would have failed it on every project's
+# first commit.
+# HARD — no --warn — where every sibling validator below is advisory. This is the ONE deliberate
+# exception, stated so a future consistency sweep cannot "fix" it backward: it is a four-value
+# ENUM check that PASSES on an absent field (→ greenfield default) AND on an unfilled
+# calibration placeholder, so it CANNOT false-block a real project. The --warn dial exists for
+# judgement-call validators (test-honesty, risk-matrix, …); an enum membership test is not one.
+# BLOCK severity is the ruled behaviour (M26.C fork 3), not an oversight — do NOT add --warn.
+# Fires only when project-config.md is staged (ERR-012 conditional-spawn); the validator reads
+# the staged blob itself via --staged and fails CLOSED on a git error (PC-1 sibling).
+staged_cfg=$(printf '%s\n' "$staged_all" | grep -E '(^|/)project-config\.md$' || true)
+if [ -n "$staged_cfg" ]; then
+  if [ -f validators/validate-operating-mode.cjs ]; then
+    node validators/validate-operating-mode.cjs --staged
+  else
+    gate_not_installed validators/validate-operating-mode.cjs
   fi
 fi
 
-if [ -f validators/validate-reconciliation.cjs ]; then
-  # Evidence-retention + count-reconciliation: a closeout / findings file that
-  # states a count must RECOMPUTE it from the ledger (or fail), and an assurance verdict
-  # must retain reproducible evidence. Content-gated (a file with neither block is a
-  # no-op) + fail-closed on a git error. Only fires on the closeout / findings surfaces —
-  # CHANGELOG, the gap-analysis / audit ledgers, and the milestone retros/findings — never
-  # templates/ (whose example blocks carry placeholders by design). Severity follows the
-  # same model as test-honesty: --warn = advisory (shipped here); a Full project REMOVES
-  # --warn to BLOCK. Mirrors the ERR-012 conditional-spawn pattern above.
-  staged_rc=$(printf '%s\n' "$staged_all" | grep -E '^(CHANGELOG\.md|docs/gap-analysis\.md|docs/audit/.*\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
-  if [ -n "$staged_rc" ]; then
-    node validators/validate-reconciliation.cjs --warn $staged_rc
+# Outcome Challenge shape check (companion §6 A–D; M26.F): docs/outcome-challenge.md is the
+# contract-completeness challenge, authored BEFORE implementation. Whenever it is staged, its
+# four parts (A outcome contract / B omission challenge / C outcome drives / D independent
+# product challenge) and the six-dimensions / risk-scaling / before-implementation anchors must
+# survive — a dropped part is exactly the omission class the challenge exists to catch, and the
+# validator NAMES the missing part. The unfilled template SHAPE passes (structure is the gate;
+# filling it is the pre-implementation lifecycle step the doc itself binds — never a first-commit
+# false-block, the KF-21 lesson). Severity follows the ratified model: --warn = advisory (the
+# Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when the challenge doc is staged (ERR-012 conditional-spawn).
+staged_oc=$(printf '%s\n' "$staged_all" | grep -E '^docs/outcome-challenge\.md$' || true)
+if [ -n "$staged_oc" ]; then
+  if [ -f validators/validate-outcome-challenge.cjs ]; then
+    node validators/validate-outcome-challenge.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_oc
+  else
+    gate_not_installed validators/validate-outcome-challenge.cjs
   fi
 fi
 
-if [ -f validators/validate-risk-escalation.cjs ]; then
-  # G11 risk-overrides-tier: a staged project-config.md that declares a
-  # risk_triggers: token must carry a visible escalation record (the token `deep verification
-  # because:` bound to the trigger) in docs/gates.md, or BLOCK. Per-trigger AND-ed; fail-closed
-  # (a declared trigger + unreadable gates.md → non-zero; a no-trigger project no-ops). Severity
-  # follows risk_escalation (FRAMEWORK-CONFIG §4.19): --warn = advisory (Lite/Standard default,
-  # shipped here); a Full project REMOVES --warn to BLOCK. Only fires when project-config.md is
-  # staged (mirrors the ERR-012 conditional-spawn pattern above).
-  staged_re=$(printf '%s\n' "$staged_all" | grep -E '(^|/)project-config\.md$' || true)
-  if [ -n "$staged_re" ]; then
-    node validators/validate-risk-escalation.cjs --warn --staged
+# G9 test-honesty: a v1.7+ work-stage Phase doc must carry a <test_honesty>
+# slot (named mutation, or `n/a — no risk surface`), and no staged test may be
+# assertion-free / exception-only. Risk-tiered + incremental — the validator filters
+# the staged set itself and fails CLOSED on a git error. Severity follows test_honesty
+# (FRAMEWORK-CONFIG §4.17): --warn = advisory (the Lite render);
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only spawn when a Phase doc or test file is
+# actually staged (mirrors the ERR-012 conditional-spawn pattern above). STACK-AWARE
+# (I12-2, M20.5.B): the spawn filter routes the per-language test shapes the validator
+# now evaluates — Python test_*/_test.py, Go *_test.go, Rust tests/*.rs — plus the
+# Ruby _spec/_test.rb shapes it visibly discloses.
+staged_th=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*\.md|docs/bugfix/[^/]+\.md|.*\.(spec|test)\.[cm]?[jt]sx?|([^ ]*/)?(tests?|__tests__)/[^ ]*\.[cm]?[jt]sx?|([^ ]*/)?test_[^ /]*\.py|.*_test\.(py|go)|([^ ]*/)?tests?/[^ ]*\.rs|.*_(spec|test)\.rb)$' || true)
+if [ -n "$staged_th" ]; then
+  if [ -f validators/validate-test-honesty.cjs ]; then
+    node validators/validate-test-honesty.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
+  else
+    gate_not_installed validators/validate-test-honesty.cjs
   fi
 fi
 
-if [ -f validators/validate-destructive-op.cjs ]; then
-  # G12 destructive-op hard rule: when the staged set touches a destructive
-  # surface (restore/import/migrate/delete/replace/extract/unzip/backup — a test-block name or a
-  # code-file basename), it must carry BOTH a rollback test AND a confinement test exercising a
-  # REAL hostile path (../, encoded, symlink) — never a toy path. Tier-independent (alongside G1);
-  # fail-closed on a git error. Severity follows destructive_op (FRAMEWORK-CONFIG §4.17): --warn =
-  # advisory (Lite/Standard default, shipped here); a Full project REMOVES --warn to BLOCK. Only
-  # fires when a test file or a destructive-basename code file is staged (ERR-012 conditional-spawn).
-  staged_dop=$(printf '%s\n' "$staged_all" | grep -E '\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(restore|import|migrate|delete|replace|extract|unzip|backup)[^/]*\.([cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|cc|cpp|cxx|h|hpp|sh|bash|sql)$' || true)
-  if [ -n "$staged_dop" ]; then
-    node validators/validate-destructive-op.cjs --warn --staged
+# Evidence-retention + count-reconciliation: a closeout / findings file that
+# states a count must RECOMPUTE it from the ledger (or fail), and an assurance verdict
+# must retain reproducible evidence. Content-gated (a file with neither block is a
+# no-op) + fail-closed on a git error. Only fires on the closeout / findings surfaces —
+# CHANGELOG, the gap-analysis / audit ledgers, and the milestone retros/findings — never
+# templates/ (whose example blocks carry placeholders by design). Severity follows the
+# same model as test-honesty: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Mirrors the ERR-012 conditional-spawn pattern above.
+staged_rc=$(printf '%s\n' "$staged_all" | grep -E '^(CHANGELOG\.md|docs/gap-analysis\.md|docs/audit/.*\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
+if [ -n "$staged_rc" ]; then
+  if [ -f validators/validate-reconciliation.cjs ]; then
+    node validators/validate-reconciliation.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_rc
+  else
+    gate_not_installed validators/validate-reconciliation.cjs
   fi
 fi
 
-if [ -f validators/validate-risk-matrix.cjs ]; then
-  # G13 risk-matrix: a v1.8+ (or banner-LESS) work-stage Phase doc
-  # that DECLARES a risk surface (a <risk_declaration triggers="…"> slot) must address all 9
-  # matrix properties — each `covered-by: … — test: …` or an explicit `n/a`. Runs on the
-  # CHANGED set only (--staged), so a committed-but-untouched legacy banner-less doc is never
-  # retro-failed; fail-closed on a git error. Severity follows risk_matrix (FRAMEWORK-CONFIG
-  # §4.19): --warn = advisory (Lite/Standard default, shipped here); a Full project REMOVES
-  # --warn to BLOCK. Only fires when a Phase doc is staged (ERR-012 conditional-spawn pattern).
-  staged_rm=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
-  if [ -n "$staged_rm" ]; then
-    node validators/validate-risk-matrix.cjs --warn --staged
+# G11 risk-overrides-tier: a staged project-config.md that declares a
+# risk_triggers: token must carry a visible escalation record (the token `deep verification
+# because:` bound to the trigger) in docs/gates.md, or BLOCK. Per-trigger AND-ed; fail-closed
+# (a declared trigger + unreadable gates.md → non-zero; a no-trigger project no-ops). Severity
+# follows risk_escalation (FRAMEWORK-CONFIG §4.19): --warn = advisory (the Lite render);
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when project-config.md is
+# staged (mirrors the ERR-012 conditional-spawn pattern above).
+staged_re=$(printf '%s\n' "$staged_all" | grep -E '(^|/)project-config\.md$' || true)
+if [ -n "$staged_re" ]; then
+  if [ -f validators/validate-risk-escalation.cjs ]; then
+    node validators/validate-risk-escalation.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
+  else
+    gate_not_installed validators/validate-risk-escalation.cjs
   fi
 fi
 
-if [ -f validators/validate-calibration.cjs ]; then
-  # G14 verifier-proof: the seeded-defect calibration set + the
-  # recorded FNR are the verifier-proof. The STATIC FLOOR runs here — when the calibration set
-  # (prompts/calibration/**) or a *-findings.md is staged, validate-calibration.cjs checks the
-  # set shadows the full §8.5 catalog, every fixture is labeled + SEALED (no answer in the
-  # fixture), and a "Sound" findings file records a calibration block. Fail-closed on a git error.
-  # HONEST LOCUS: this floor only proves the harness is present + wired — the CATCH is the FNR
-  # recorded at V-time (agent judgment), NOT a pre-commit check (you can't run a judge in a smoke
-  # test). Severity follows the same model: --warn = advisory (shipped here); a Full project
-  # REMOVES --warn to BLOCK. Only fires when a calibration file or a findings file is staged.
-  staged_cal=$(printf '%s\n' "$staged_all" | grep -E '^prompts/calibration/|-findings\.md$' || true)
-  if [ -n "$staged_cal" ]; then
-    node validators/validate-calibration.cjs --warn --staged
+# G12 destructive-op hard rule: when the staged set touches a destructive
+# surface (restore/import/migrate/delete/replace/extract/unzip/backup — a test-block name or a
+# code-file basename), it must carry BOTH a rollback test AND a confinement test exercising a
+# REAL hostile path (../, encoded, symlink) — never a toy path. Tier-independent (alongside G1);
+# fail-closed on a git error. Severity follows destructive_op (FRAMEWORK-CONFIG §4.17): --warn =
+# advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only
+# fires when a test file or a destructive-basename code file is staged (ERR-012 conditional-spawn).
+staged_dop=$(printf '%s\n' "$staged_all" | grep -E '\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(restore|import|migrate|delete|replace|extract|unzip|backup)[^/]*\.([cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|cc|cpp|cxx|h|hpp|sh|bash|sql)$' || true)
+if [ -n "$staged_dop" ]; then
+  if [ -f validators/validate-destructive-op.cjs ]; then
+    node validators/validate-destructive-op.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
+  else
+    gate_not_installed validators/validate-destructive-op.cjs
   fi
 fi
 
-if [ -f validators/validate-transition.cjs ]; then
-  # G15 transitions: (a) a durable-state write (.claude/role / .claude/active-mode / stage-active,
-  # a *-state.md ledger) must write-temp-rename, never truncate-then-write (the ERR-002 race);
-  # (b) a closeout/release ```rework block must carry the four fixed types and reconcile its
-  # total against the fix-commit evidence (no "0 rework" while fix commits exist). The validator
-  # SKIPS test/harness source files internally, so a state-named write in test code never blocks.
-  # Severity follows transition (FRAMEWORK-CONFIG §4.20): --warn = advisory (Lite/Standard default,
-  # shipped here); a Full project REMOVES --warn to BLOCK. Only fires when a source file (clause 1)
-  # or a closeout / release-state surface (clause 2) is staged (ERR-012 conditional-spawn pattern).
-  # STACK-AWARE (I12-2, M20.5.B, A-19): clause 1 evaluates JS/TS/JSX-TSX, Python, Go, and Rust
-  # (extension-keyed), so the spawn filter routes all six. This filter lives in TWO pre-commits
-  # (kit + template) — sweep both or ship a divergence.
-  staged_tr=$(printf '%s\n' "$staged_all" | grep -E '\.(c|m)?[jt]sx?$|\.(py|go|rs)$|^(CHANGELOG\.md|docs/release-state\.md|docs/gap-analysis\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
-  if [ -n "$staged_tr" ]; then
-    node validators/validate-transition.cjs --warn $staged_tr
+# G13 risk-matrix: a v1.8+ (or banner-LESS) work-stage Phase doc
+# that DECLARES a risk surface (a <risk_declaration triggers="…"> slot) must address all 9
+# matrix properties — each `covered-by: … — test: …` or an explicit `n/a`. Runs on the
+# CHANGED set only (--staged), so a committed-but-untouched legacy banner-less doc is never
+# retro-failed; fail-closed on a git error. Severity follows risk_matrix (FRAMEWORK-CONFIG
+# §4.19): --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a Phase doc is staged (ERR-012 conditional-spawn pattern).
+staged_rm=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
+if [ -n "$staged_rm" ]; then
+  if [ -f validators/validate-risk-matrix.cjs ]; then
+    node validators/validate-risk-matrix.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
+  else
+    gate_not_installed validators/validate-risk-matrix.cjs
   fi
 fi
 
-if [ -f validators/validate-release-readiness.cjs ]; then
-  # G16 release-readiness: a docs/release-state.md entry reaching a gated state must
-  # be well-formed — (1) a public-distribution-ready claim cites an INDEPENDENT whole-product
-  # review record when the project declares capability triggers (risk_triggers:); (2) no ladder
-  # state is silently skipped (each intervening rung climbed or `n/a — <reason>`-exempted);
-  # (3) a release-end state (packaged/public) cites its SLSA build level (L1-L3 or `n/a —
-  # <reason>`). Stale manual-only / un-driven `verified` App-Map surfaces are FLAGGED
-  # (advisory). Honest locus: the record is required PRESENT (not judged good) and the SLSA level
-  # CITED (not that provenance was achieved — release.yml's attest step proves that at build).
-  # Severity follows release_readiness (FRAMEWORK-CONFIG §4.21): --warn = advisory (Lite/Standard
-  # default, shipped here); a Full project REMOVES --warn to BLOCK. Only fires when the release-
-  # state ledger is staged (ERR-012 conditional-spawn pattern).
-  staged_rr=$(printf '%s\n' "$staged_all" | grep -E '^docs/release-state\.md$' || true)
-  if [ -n "$staged_rr" ]; then
-    node validators/validate-release-readiness.cjs --warn $staged_rr
+# G14 verifier-proof: the seeded-defect calibration set + the
+# recorded FNR are the verifier-proof. The STATIC FLOOR runs here — when the calibration set
+# (prompts/calibration/**) or a *-findings.md is staged, validate-calibration.cjs checks the
+# set shadows the full §8.5 catalog, every fixture is labeled + SEALED (no answer in the
+# fixture), and a "Sound" findings file records a calibration block. Fail-closed on a git error.
+# HONEST LOCUS: this floor only proves the harness is present + wired — the CATCH is the FNR
+# recorded at V-time (agent judgment), NOT a pre-commit check (you can't run a judge in a smoke
+# test). Severity follows the same model: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a calibration file or a findings file is staged.
+staged_cal=$(printf '%s\n' "$staged_all" | grep -E '^prompts/calibration/|-findings\.md$' || true)
+if [ -n "$staged_cal" ]; then
+  if [ -f validators/validate-calibration.cjs ]; then
+    node validators/validate-calibration.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
+  else
+    gate_not_installed validators/validate-calibration.cjs
+  fi
+fi
+
+# G15 transitions: (a) a durable-state write (.claude/role / .claude/active-mode / stage-active,
+# a *-state.md ledger) must write-temp-rename, never truncate-then-write (the ERR-002 race);
+# (b) a closeout/release ```rework block must carry the four fixed types and reconcile its
+# total against the fix-commit evidence (no "0 rework" while fix commits exist). The validator
+# SKIPS test/harness source files internally, so a state-named write in test code never blocks.
+# Severity follows transition (FRAMEWORK-CONFIG §4.20): --warn = advisory (the Lite render);
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a source file (clause 1)
+# or a closeout / release-state surface (clause 2) is staged (ERR-012 conditional-spawn pattern).
+# STACK-AWARE (I12-2, M20.5.B, A-19): clause 1 evaluates JS/TS/JSX-TSX, Python, Go, and Rust
+# (extension-keyed), so the spawn filter routes all six. This filter lives in TWO pre-commits
+# (kit + template) — sweep both or ship a divergence.
+staged_tr=$(printf '%s\n' "$staged_all" | grep -E '\.(c|m)?[jt]sx?$|\.(py|go|rs)$|^(CHANGELOG\.md|docs/release-state\.md|docs/gap-analysis\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
+if [ -n "$staged_tr" ]; then
+  if [ -f validators/validate-transition.cjs ]; then
+    node validators/validate-transition.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_tr
+  else
+    gate_not_installed validators/validate-transition.cjs
+  fi
+fi
+
+# G16 release-readiness: a docs/release-state.md entry reaching a gated state must
+# be well-formed — (1) a public-distribution-ready claim cites an INDEPENDENT whole-product
+# review record when the project declares capability triggers (risk_triggers:); (2) no ladder
+# state is silently skipped (each intervening rung climbed or `n/a — <reason>`-exempted);
+# (3) a release-end state (packaged/public) cites its SLSA build level (L1-L3 or `n/a —
+# <reason>`). Stale manual-only / un-driven `verified` App-Map surfaces are FLAGGED
+# (advisory). Honest locus: the record is required PRESENT (not judged good) and the SLSA level
+# CITED (not that provenance was achieved — release.yml's attest step proves that at build).
+# Severity follows release_readiness (FRAMEWORK-CONFIG §4.21): --warn = advisory (the Lite render);
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when the release-
+# state ledger is staged (ERR-012 conditional-spawn pattern).
+staged_rr=$(printf '%s\n' "$staged_all" | grep -E '^docs/release-state\.md$' || true)
+if [ -n "$staged_rr" ]; then
+  if [ -f validators/validate-release-readiness.cjs ]; then
+    node validators/validate-release-readiness.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_rr
+  else
+    gate_not_installed validators/validate-release-readiness.cjs
+  fi
+fi
+
+# Spec-example harvest (KF-53 instance 1, M27.E): every literal example in the spec must appear in
+# at least one test fixture. The md2page trial's ONLY wrong-result escape was the spec's own example
+# — nested emphasis — implemented wrong by BOTH arms with green suites on both sides, because nothing
+# compared the spec's example list against the test surface. This gate compares them.
+# FIRES ON BOTH SIDES OF THE PAIR: a staged spec (a new example needs a fixture) or a staged test file
+# (a deleted fixture must not orphan an example). The filter is the TRIGGER only — the validator then
+# scans the whole spec surface, because an orphaned example is not in the staged diff.
+# NO FALSE BLOCK AT SPEC TIME: with no test files yet it exits 0 with a visible note naming what
+# re-arms it (the KF-21 lesson — a gate that fails every project's first commit gets deleted).
+# Honest locus: it proves the example REACHED the test surface, not that the test asserts the right
+# output for it. Waivers go in the spec beside the example (`harvest-waiver: <reason>`, reason
+# required) and are printed on every run. Severity follows the ratified model: the
+# VALIDATOR_SEVERITY_FLAG token renders Lite '--warn' (advisory) / Full '' (BLOCK).
+staged_sx=$(printf '%s\n' "$staged_all" | grep -E '^spec/.*\.md$|\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.(py|go|rs|rb)$|_spec\.rb$' || true)
+if [ -n "$staged_sx" ]; then
+  if [ -f validators/validate-spec-examples.cjs ]; then
+    node validators/validate-spec-examples.cjs {{VALIDATOR_SEVERITY_FLAG}}
+  else
+    gate_not_installed validators/validate-spec-examples.cjs
   fi
 fi
 
@@ -181,4 +297,27 @@ if [ -n "$staged_nonjs" ]; then
 fi
 
 # --- project fast checks (lint + unit subset) ---------------------------------
-{{FAST_CHECK_COMMAND}}
+# The bootstrap fills the token below with the project's fast suite (e.g.
+# `npm run lint && npm test`) — the ONE wiring token with no inline default, so it is
+# filled from discovery. The guard turns an UNFILLED token into a plain-English failure
+# instead of the cryptic `{{...}}: command not found` wall (KF-27 residual, M26.C) — while
+# STILL failing closed: set -e holds and this hook never fails open. The refuted half of
+# KF-27 (fail-OPEN) stays refuted; only the diagnosability residual is closed here.
+#
+# PATH-SCOPE THE TEST INVOCATION (KF-48 instance 3, M27.D). If the fast suite runs Node's
+# built-in test runner, scope it to this project's OWN tests with a QUOTED GLOB:
+#     node --test "tests/**/*.test.cjs"
+# A BARE `node --test` auto-discovers every file matching Node's patterns anywhere under the
+# repo — vendored trees like sbak/ included — which pollutes the suite AND the coverage
+# denominator (73.54% reported against a real 95-100% in the md2page trial). A bare directory
+# positional (`node --test tests`) is NOT a scoped run: current Node resolves it as a module
+# path and the command fails outright.
+fast_check='{{FAST_CHECK_COMMAND}}'
+fast_check_placeholder='{{'"FAST_CHECK_COMMAND"'}}'   # split token: the Phase-3 fill regex cannot match this
+if [ "$fast_check" = "$fast_check_placeholder" ]; then
+  echo "pre-commit: the project fast-check command (FAST_CHECK_COMMAND) was never filled at bootstrap." >&2
+  echo "  Edit .githooks/pre-commit and replace the placeholder on the fast_check= line with your" >&2
+  echo "  fast suite (e.g. 'npm run lint && npm test'). Failing closed — the commit is blocked until it is set." >&2
+  exit 1
+fi
+eval "$fast_check"

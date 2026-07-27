@@ -43,7 +43,7 @@ Milestones are sequenced. Each milestone produces a PR; PRs merge in order. Each
 
 **Depends on:** none (first milestone).
 
-**Stages:** A ({{M01_A_TITLE}}) · B ({{M01_B_TITLE}}) · C ({{M01_C_TITLE}}) · D ({{M01_D_TITLE}}) · E (closeout).
+**Stages:** {{M01_STAGES}} · E (closeout).  <!-- fill from the Phase-2 plan, e.g. A (parser) · B (renderer); stage count is a per-milestone judgment, not a tier constant (KF-19, M26.D) -->
 
 Phase doc: `docs/build-prompts/M01-{{M01_SLUG}}.md`.
 
@@ -60,7 +60,7 @@ Phase doc: `docs/build-prompts/M01-{{M01_SLUG}}.md`.
 
 **Depends on:** M01 ({{M01_DEPENDENCY_REASON}}).
 
-**Stages:** A ({{M02_A_TITLE}}) · B ({{M02_B_TITLE}}) · C ({{M02_C_TITLE}}) · D ({{M02_D_TITLE}}) · E (closeout).
+**Stages:** {{M02_STAGES}} · E (closeout).  <!-- fill from the Phase-2 plan; per-milestone judgment (KF-19, M26.D) -->
 
 Phase doc: `docs/build-prompts/M02-{{M02_SLUG}}.md`.
 
@@ -76,7 +76,7 @@ Phase doc: `docs/build-prompts/M02-{{M02_SLUG}}.md`.
 
 **Depends on:** M02 ({{M02_DEPENDENCY_REASON}}).
 
-**Stages:** A · B · C · D · E (closeout).
+**Stages:** {{M03_STAGES}} · E (closeout).  <!-- fill from the Phase-2 plan; per-milestone judgment (KF-19, M26.D) -->
 
 Phase doc: `docs/build-prompts/M03-{{M03_SLUG}}.md` (authored at M02 closeout).
 

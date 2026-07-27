@@ -47,15 +47,15 @@
       "source": "templates/dot-claude/hooks/*.cjs glob",
       "value": 4
     },
-    "interview_choice_count": {
+    "interview_ask_count": {
       "kind": "bound",
-      "source": "templates/CALIBRATION-INTERVIEW.md \"## Choice N\" headings",
-      "value": 5
+      "source": "templates/CALIBRATION-INTERVIEW.md \"## Ask N\" headings (M26.D: 3 asks + 1 confirmation turn; the 5-choice shape retired)",
+      "value": 3
     },
     "kit_version": {
       "kind": "declared",
       "source": "the release identity, stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "0.2.0"
+      "value": "1.0.0"
     },
     "operating_mode_count": {
       "kind": "bound",
@@ -99,9 +99,8 @@
       "kind": "referenced",
       "source": "golden-manifest.json tiers[tier].counts.rendered (read live)",
       "value": {
-        "full": 69,
-        "lite": 36,
-        "standard": 68
+        "full": 97,
+        "lite": 41
       }
     },
     "schema_count": {
@@ -152,26 +151,26 @@
     },
     "tier_names": {
       "kind": "declared",
-      "source": "the unified tier vocabulary (what project-config.md persists)",
+      "source": "M26.D (the ratified collapse, calibration-core.json tiers): two tiers — Full the merged default, Lite the low-ceremony escape; what project-config.md persists",
       "value": [
         "Lite",
-        "Standard",
         "Full"
       ]
     },
     "tier_names_legacy": {
       "kind": "declared",
-      "source": "the retired interview labels (Light->Lite, Mid->Standard, Complex->Full)",
+      "source": "the retired tier labels: Light/Mid/Complex retired at M20 I9; Standard retired at M26.D (the two-tier collapse — merged into Full, fork ruling 1)",
       "value": [
         "Light",
         "Mid",
-        "Complex"
+        "Complex",
+        "Standard"
       ]
     },
     "validator_count": {
       "kind": "derived",
       "source": "validators/*.cjs glob",
-      "value": 16
+      "value": 17
     }
   },
   "note": "The kit's self-descriptive facts. DERIVED (machine source) / BOUND (re-parsed from a home doc's structure) / REFERENCED (read live from golden-manifest.json) / DECLARED (a decision with no machine source — the manifest is its canonical home; the identity classes police the docs against it) — never hand-stated twice. Regenerate: node validators/validate-entry-docs.cjs --write-manifest. Policed by validators/validate-entry-docs.cjs (the entry-doc set) + selfCheck (derived-vs-stored rot). scaffold_counts is read LIVE from golden-manifest.json, not copied."

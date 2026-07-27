@@ -1,0 +1,85 @@
+{
+  "_doc": "THE CALIBRATION CORE (M26.D — companion Workstream 2 seed). The single machine-readable authority for every calibration fact the bootstrap asks or derives. The C4 drift class existed because these facts were coordinated across prose BY HAND; prose homes are now rendered from or validated against THIS file — never hand-synced to each other. Machine readers: scripts/calibration-derive.cjs (the interview's derivation seam), scripts/golden-bootstrap.cjs (per-tier severity render + reference calibrations), scripts/bake-inheritance.cjs (kit_only_validators — the validators a project does NOT inherit), validators/validate-entry-docs.cjs (the schema→prose parity engine). Ratified shape (owner 2026-07-19; gate-1/gate-2 ratifications 2026-07-20): 3 asks + 1 confirmation turn; two tiers (Full default / Lite); verification_locus derived from ship target, never tier (KF-28); expertise cut (KF-07); approval cadence a one-line disclosure; severity schema-owned, Lite warn / Full block (M26.C fork-1 hand-off, ruled); append-only-ledger.yml risk-armed, Full-scoped (fork ruling 1). Counts are NEVER stored here — they derive from scripts/fixtures/golden-bootstrap/rows.json via golden-manifest.json (the counts-are-derived ruling).",
+  "version": 1,
+  "asks": ["operating_mode", "tier", "risk_triggers"],
+  "confirmation_turn": true,
+  "operating_modes": ["greenfield", "bug_fix", "research_publish", "audit"],
+  "default_operating_mode": "greenfield",
+  "risk_triggers": ["destructive_data_ops", "archive_extraction", "untrusted_fs_writes", "credentials", "untrusted_html", "installers"],
+  "severity": {
+    "_why": "The tier default for the 8 advisory validator sites in the generated pre-commit (test-honesty, reconciliation, risk-escalation, destructive-op, risk-matrix, calibration, transition, release-readiness). Rendered as the VALIDATOR_SEVERITY_FLAG fill: warn -> '--warn', block -> '' (no flag = the validators' blocking default). validate-operating-mode is NOT on this dial — it is HARD at every tier (M26.C fork-3 ruling: enum check, cannot false-block). Per-validator override: the warn|block rows in project-config.md, honored by editing the hook line or re-rendering via kit-update --apply.",
+    "Lite": "warn",
+    "Full": "block"
+  },
+  "kit_only_validators": [
+    "validate-validator-enumeration.cjs",
+    "validate-entry-docs.cjs"
+  ],
+  "risk_armed_modules": {
+    ".github/workflows/append-only-ledger.yml": {
+      "arms_on": "any_risk_trigger",
+      "tier_scope": ["Full"],
+      "toggle_when_armed": { "ledger": "append_only_enforced" },
+      "why": "Fork ruling 1 (owner, 2026-07-19): the ledger CI enforcement is armed by declared risk, not bought by tier — risk_triggers becomes mechanically real on this module. Full-scoped: the ledgers the workflow polices (gap-analysis, tech-debt, consultations, off-track-log) are not generated at Lite, so a Lite trigger records its escalation via G11 instead (disclosed in the confirmation turn, never a silent no-op)."
+    }
+  },
+  "tiers": {
+    "Lite": {
+      "default": false,
+      "row_token": "lite",
+      "pitch": "low-ceremony: brief retros, CHANGELOG-only ledger, markdown task lists, advisory gates",
+      "toggles": {
+        "retro_depth": "brief",
+        "ledger": "none",
+        "read_first_cap": "small",
+        "red_review": "off",
+        "off_track_check": "brief",
+        "app_map": "skip",
+        "verifier_mode": "pass_1_only",
+        "refactor_mode": "skip"
+      }
+    },
+    "Full": {
+      "default": true,
+      "row_token": "full",
+      "pitch": "the assurance tier (the default): staged work + Stage E closeout, two-axis retros, fresh-context Verifier, blocking gates; ledger CI enforcement arms on declared risk",
+      "toggles": {
+        "retro_depth": "two_axis",
+        "ledger": "append_only_advisory",
+        "read_first_cap": "medium",
+        "red_review": "on",
+        "off_track_check": "advisory",
+        "app_map": "on",
+        "verifier_mode": "pass_2_4",
+        "refactor_mode": "trigger_n5"
+      },
+      "_toggle_provenance": "Merged-Full defaults = the old Standard set with severity block as the ONE ruled escalation (gate-2 ratified decision 4): fork ruling 1 defines merged Full as the old Standard footprint plus the risk-armed ledger; the old-Full extras (three_axis retros, trigger_n3, enforced off-track, pass_1_2_3_4, CI-enforced ledger by default) were the retired third tier's ceremony and stay reachable by explicit choice — the project-config.md toggle rows and risk_triggers, never stranded."
+    }
+  },
+  "defaults": {
+    "_why": "Formerly expertise-derived (KF-07: the expertise ask is CUT — its collisions with approval_cadence/pre_write_surface dissolve). One default set for every user; each is a documented project-config.md toggle the user can override there.",
+    "explanation_mode": "standard",
+    "web_verify": "always",
+    "research_mode": "best_practice_first",
+    "pre_write_surface": "spec_and_plan_only",
+    "escalation": "time_box_2x",
+    "hook_enforcement": "enforced"
+  },
+  "derivations": {
+    "approval_cadence": {
+      "value": "per_stage",
+      "fence": "fenced_autonomy",
+      "disclosure": "Reviews happen at stage boundaries (G1: nothing is committed without your approval), with the fenced-autonomy permission fence; say 'review more often' or 'review less often' at any time to move the dial.",
+      "_why": "The cadence ASK is cut (ratified): per_stage + fenced_autonomy is the recommended default for every calibration; the confirmation turn discloses it in one line and invites correction. Maximum/minimum cadence (and their fences) remain project-config.md overrides."
+    },
+    "verification_locus": {
+      "_why": "KF-28: locus derives from ship target and repo visibility, never from tier. public repo -> cloud (Actions free + unlimited); private -> hybrid (near-zero Actions spend). local_first is an explicit user override only — never derived.",
+      "public": "cloud",
+      "private": "hybrid"
+    },
+    "docker_leg": {
+      "_why": "KF-28's Docker-for-a-browser-game defect: the Linux-in-Docker leg of verify-local runs only when a ship target is linux/server-class — a Windows-only or browser-only deliverable verifies native-only. Target-driven, never tier-driven.",
+      "ship_target_match": ["linux", "server", "docker", "container"]
+    }
+  }
+}

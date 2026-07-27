@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -96,12 +96,16 @@ function decodeBytes(b) {
   if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return b.toString('utf8', 3);
   return b.toString('utf8');
 }
-function readRoleToken(claudeDir, name) {
+function readMarkerFile(claudeDir, name) {
   try {
-    return decodeBytes(fs.readFileSync(path.join(claudeDir, name))).split(NUL).join('').trim().toLowerCase();
+    return decodeBytes(fs.readFileSync(path.join(claudeDir, name))).split(NUL).join('').trim();
   } catch (_) {
     return undefined; // absent / unreadable
   }
+}
+function readRoleToken(claudeDir, name) {
+  const v = readMarkerFile(claudeDir, name);
+  return v === undefined ? undefined : v.toLowerCase();
 }
 // PREFER `.claude/role`, FALL BACK to the legacy `.claude/active-mode` ONLY when role
 // is ABSENT (I9 alias-window). A present-but-garbage marker resolves to null (unknown)
@@ -155,6 +159,12 @@ function main() {
   if (typeof payload.session_id === 'string') raw.session = payload.session_id;
   const role = resolveRole(claudeDir);
   if (role) raw.role = role;
+  // M26.F (Workstream 5): the by-phase axis is a REAL emitter — the open stage marker
+  // (.claude/stage-active, written by scripts/stage-active.cjs) is stamped onto every
+  // event as the allowlisted, format-checked `stage` field. Absent or malformed marker
+  // → no stage: frozen history and un-staged sessions stay phase-unknown, never guessed.
+  const stageTok = readMarkerFile(claudeDir, 'stage-active');
+  if (stageTok && receipts.STAGE_RE.test(stageTok)) raw.stage = stageTok;
   if (hookName === 'SessionStart' && typeof payload.source === 'string') raw.source = payload.source;
   if (typeof payload.tool_name === 'string') raw.tool_category = receipts.toolCategory(payload.tool_name);
   if (typeof payload.tool_use_id === 'string') raw.tool_use_id = payload.tool_use_id; // defensive; absent is honest
@@ -199,6 +209,7 @@ function main() {
     const mk = { schema: receipts.SCHEMA_VERSION, at, event: 'release_line_observed', emitter: hookName };
     if (typeof payload.session_id === 'string') mk.session = payload.session_id;
     if (role) mk.role = role;
+    if (stageTok && receipts.STAGE_RE.test(stageTok)) mk.stage = stageTok; // same by-phase stamp (M26.F)
     let mres;
     try { mres = receipts.appendEvent(receiptsDir, mk); }
     catch (_) { mres = { ok: false }; }

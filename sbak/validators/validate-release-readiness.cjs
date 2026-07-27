@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-release-readiness.cjs
 //
 // The G16 release-readiness gate (clause 2 — the
@@ -43,6 +43,21 @@
 //     its SLSA build level — `L1`/`L2`/`L3`, or an explicit `n/a — <reason>` (a source-only
 //     deliverable with no artifact to attest). A missing / bare / placeholder SLSA line →
 //     BLOCK. The transition that says "distributable" is the one that proves provenance.
+//
+//   CLAUSE 4 — RENDERED RECEIPT CITED at the distribution boundary (KF-40, M26.C). A
+//     `public-distribution-ready` entry must CITE its rendered build receipt
+//     (`.claude/receipts/<tag>.html`), or an explicit `n/a — <reason>`. `build-receipts --check`
+//     self-describes as the release preflight but was wired into no project lifecycle step; this
+//     clause is that consumer — the receipt joins the whole-product review (clause 1) at the public
+//     claim, both the whole-build accounting a distribution rests on. Scoped to PUBLIC, not the full
+//     release end SLSA uses (a committed append-only `packaged` rung cannot retroactively cite one).
+//     Honest locus: the receipt is CITED, not judged good (determinism is --check's job).
+//
+//   CLAUSE 5 — FRONT-DOOR SET PRESENT at the distribution boundary (KF-41(b), M26.C). A
+//     `public-distribution-ready` entry requires README + LICENSE to EXIST at the project root — a
+//     charter extension closing the gap that let a README-less v0.1.0 tag (G16 tested what was
+//     declared; nothing declared a README). The same presence granularity the ladder already uses,
+//     extended to the product's front door. Honest locus: PRESENT, not judged good.
 //
 //   MANUAL-AGING (a FLAG, never a block). A `public-distribution-ready` entry carried
 //     over an App-Map (--app-map, default docs/app-map.md) that still has a STALE manual-only
@@ -92,6 +107,12 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// EXTEND, DON'T FORK: the shared comment strip (M26.B / KF-24). This validator read its ledger
+// RAW, so templates/release-state.md's illustrative `<!-- … -->` example entry parsed as a LIVE
+// ladder entry and the gate exit-1'd on its own shipped template — a validator that blocks the
+// artifact it ships. A commented-out example is documentation, not a claim.
+const { stripHtmlComments } = require('./lib/fenced-block.cjs');
+
 // CRLF (and lone CR) → LF so a Windows checkout doesn't read as a false divergence.
 function normalize(s) {
   return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -116,9 +137,14 @@ const NA_WITH_REASON = /^n\/?a\s*[—–-]\s*\S/i;
 // the rework engine reuse guards against). A {{placeholder}} / blank / `[]` / `none` → no
 // triggers, so the shipped template (value {{RISK_TRIGGERS}}) never reads as declared.
 function parseRiskTriggers(text) {
-  const m = normalize(text).match(/^[^\n]*\brisk_triggers\b\s*:\s*(.*)$/im);
+  // The ad-hoc `.replace(/<!--[\s\S]*$/, '')` that used to sit on the captured value is retired
+  // (M26.B): it was a per-site spot-fix of the C2 class, and it only handled a comment that ran
+  // to end-of-text. The shared strip runs on the WHOLE text before the match, so an inline
+  // annotation on the risk_triggers line — which the shipped template carries — is inert here
+  // for the same reason it is inert everywhere else.
+  const m = stripHtmlComments(normalize(text)).match(/^[^\n]*\brisk_triggers\b\s*:\s*(.*)$/im);
   if (!m) return []; // no field → not risk-aware → no triggers
-  let raw = m[1].trim().replace(/<!--[\s\S]*$/, '').trim();
+  let raw = m[1].trim();
   if (raw === '' || /\{\{.*\}\}/.test(raw)) return [];
   raw = raw.replace(/^\[/, '').replace(/\]$/, '').trim();
   if (raw === '' || /^none$/i.test(raw)) return [];
@@ -129,7 +155,11 @@ function parseRiskTriggers(text) {
 // Split a release-state ledger into entries. An entry starts at a `## ... reached `<state>``
 // heading and runs to the next such heading (or EOF). Returns { state, prior, body, naStates }.
 function parseEntries(text) {
-  const norm = normalize(text);
+  // THE READER SEAM (M26.B / KF-24). Comments are stripped ONCE here, so every clause below —
+  // well-formedness, continuity, SLSA, the review cite — sees only LIVE entries. The strip is
+  // space-preserving, so the `^##` heading anchoring and the per-entry line math are unchanged;
+  // a commented-out example simply stops being an entry.
+  const norm = stripHtmlComments(normalize(text));
   const lines = norm.split('\n');
   const entries = [];
   let cur = null;
@@ -255,6 +285,46 @@ function entryMissingSlsa(entry) {
   if (/\bL[1-3]\b/i.test(val)) return false;       // a concrete level cited (SLSA v1.0 tops at L3; L4 does not exist)
   if (NA_WITH_REASON.test(val)) return false;      // honest n/a — <reason> (no artifact to attest)
   return true;                                     // present but uncited (bare "n/a", prose, etc.)
+}
+
+// CLAUSE 4 mutant target (entryMissingReceipt — KF-40, M26.C). A release-end entry must CITE the
+// rendered build receipt the way clause 3 makes it cite the SLSA level. `build-receipts --check`
+// self-describes as the release preflight but was invoked by NO project lifecycle step (§6.5 called
+// the shipped capability "a later kit stage"); this clause is that consumer — the receipt is the
+// token/time/rework accounting a distribution claim rests on, and requiring its citation wires the
+// capability into the ladder. Reverting this body to `return false` ("receipt optional") makes the
+// "release-end claim with no receipt -> blocks" test go RED while the receipt-cited control stays
+// green. The mutation is killed specifically here.
+function entryMissingReceipt(entry) {
+  // Scoped to public-distribution-ready — the DISTRIBUTION boundary, where the receipt joins the
+  // independent whole-product review (clause 1, also PUBLIC-only): both are the whole-build
+  // accounting a distribution claim rests on. Deliberately NOT the full RELEASE_END (states 5–6)
+  // that SLSA uses: SLSA is per-artifact, but requiring a receipt on a `packaged-release-ready`
+  // entry would retroactively hit committed, append-only ledger entries (the kit's own v0.1.0
+  // packaged rung predates this clause and can never cite one without falsifying the record). The
+  // public claim is the one that asks "was this worth its tokens?"; that is where --check's
+  // accounting is owed. (M26.C scope decision — recorded in the retro.)
+  if (entry.state !== PUBLIC) return false;
+  const val = entryField(entry.bodyText, '(?:Rendered )?[Rr]eceipt');
+  if (isPlaceholder(val)) return true;
+  if (NA_WITH_REASON.test(val)) return false;      // honest n/a — <reason> (no receipt collected)
+  return false;                                    // any concrete citation satisfies (present, not judged good)
+}
+
+// CLAUSE 5 (KF-41(b), M26.C) — FRONT-DOOR SET PRESENT at the distribution boundary. G16 passed a
+// front-door-less v0.1.0 because no clause named a README: G16 tested what was DECLARED, and nothing
+// declared a README. A charter EXTENSION (new enforcement, not a declared-cite check): a
+// `public-distribution-ready` entry requires README + LICENSE to EXIST at the project root — the
+// same presence granularity G16 already applies to the ladder, extended to the product's front door.
+// Anchored to the project root (the dir of project-config.md), so it checks the SAME root the other
+// clauses read config from. Honest locus: the files are required PRESENT, not judged good — whether
+// the README says anything useful is the audit-pass adversary's call, like the review record.
+function frontDoorMissing(projectRoot) {
+  const missing = [];
+  const has = (names) => names.some((n) => { try { return fs.existsSync(path.join(projectRoot, n)); } catch (_) { return false; } });
+  if (!has(['README.md', 'README.rst', 'README.txt', 'README'])) missing.push('README.md');
+  if (!has(['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING'])) missing.push('LICENSE');
+  return missing;
 }
 
 // Which App-Map surfaces are stale manual-only / un-driven `verified`? A flag, not a
@@ -427,6 +497,17 @@ function main() {
           `not that provenance was achieved — that is release.yml's attest step at build time.`
         );
       }
+      // CLAUSE 4 — rendered receipt cited at the release end (KF-40).
+      if (entryMissingReceipt(entry)) {
+        findings.push(
+          `${f}: \`${entry.state}\` is a release-end state but cites NO rendered receipt — it must cite the ` +
+          `build-receipts render (e.g. \`.claude/receipts/<tag>.html\`, the output of \`build-receipts render\`) ` +
+          `or an explicit \`n/a — <reason>\`. \`build-receipts --check\` self-describes as the release preflight ` +
+          `but no lifecycle step consumed it; the distribution claim rests on the token/time/rework accounting the ` +
+          `receipt carries (G16 / KF-40). Honest locus: the receipt is CITED, not judged good — determinism is ` +
+          `build-receipts --check's job at build time.`
+        );
+      }
       // CLAUSE 1 — capability-triggered independent review (reads config lazily).
       if (entry.state === PUBLIC) {
         const triggers = declaredTriggers();
@@ -439,6 +520,18 @@ function main() {
             `(G16 / EU AI Act Art. 14). Honest locus: the RECORD is required present, not judged good — ` +
             `that is the audit-pass adversary's call.`
           );
+        }
+        // CLAUSE 5 — front-door set present (README + LICENSE) at the distribution boundary (KF-41(b)).
+        for (const missing of [frontDoorMissing(path.dirname(configPath))]) {
+          if (missing.length) {
+            findings.push(
+              `${f}: \`public-distribution-ready\` is claimed but the project's front-door set is incomplete — ` +
+              `${missing.join(' and ')} absent at the project root (${path.resolve(path.dirname(configPath))}). A ` +
+              `public release needs a front door: G16 passed a README-less v0.1.0 because no clause named one, so ` +
+              `the product shipped with nothing at the repo root saying what it is (KF-41(b)). Honest locus: the ` +
+              `file is required PRESENT, not judged good.`
+            );
+          }
         }
         // Stale manual-only / un-driven surfaces at the public-distribution boundary.
         if (appMapText !== null) {
@@ -472,6 +565,6 @@ function main() {
   process.exit(1);
 }
 
-module.exports = { entryMissingReview, ladderWellFormed, priorReached, bootstrapIntoRelease, entryMissingSlsa, parseEntries, LADDER };
+module.exports = { entryMissingReview, ladderWellFormed, priorReached, bootstrapIntoRelease, entryMissingSlsa, entryMissingReceipt, frontDoorMissing, parseEntries, LADDER };
 
 if (require.main === module) main();

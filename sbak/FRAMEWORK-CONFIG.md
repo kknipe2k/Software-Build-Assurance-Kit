@@ -18,55 +18,45 @@ This file makes the calibration explicit. You pick a tier (or override individua
 
 ---
 
-## 2. The three tiers
+## 2. The two tiers
 
 | Tier | For | Stages-to-overhead ratio | Defaults: approval cadence | Defaults: retro depth | Defaults: ledger | Defaults: research |
 |---|---|---|---|---|---|---|
-| **Lite** | Solo, simple/small project, non-expert user, ≤1 week of work, low audit needs | High signal, low ceremony | Per milestone (or per-PR) | Brief (1 axis: did it work?) | None — CHANGELOG only | Best-practice-first (web-verify defaults) |
-| **Standard** | Solo or small team, 1–4 weeks, intermediate complexity, normal audit needs | Balanced | Per stage for milestone-shape stages; per work-block otherwise | Two axes (process + product) | Suggested append-only; CI optional | Best-practice-first |
-| **Full** | Multi-week to multi-month, high complexity OR high audit needs, expert user | Heavy ceremony, full forensic trail | Per stage, every stage | Three axes (process + product + pattern) | Append-only enforced via CI | Token-frugal by default; web-verify only on flagged questions |
+| **Lite** | Solo, ≤1–2 weeks, no audit need, you are the only future reader | High signal, low ceremony | Per-PR | Brief (1 axis: did it work?) | None — CHANGELOG only | Best-practice-first (web-verify defaults) |
+| **Full** (default) | Anything with a second reader, an audit need, or a multi-week horizon | Balanced — verification-heavy where it pays | Per stage | Two axes (process + product) | Append-only advisory; **CI-enforced when a declared risk trigger arms the ledger workflow** (M26.D, fork ruling 1) | Best-practice-first |
+
+*(The third tier was retired at M26.D — merged into Full; its extra ceremony — three-axis retros, tighter refactor triggers, enforced off-track, always-on ledger CI — stays reachable as explicit per-toggle choices, never stranded.)*
 
 Each tier is a **default toggle bundle**. You can override any individual toggle without changing tier (see §4). The tier name is shorthand for "I want this bundle of defaults."
 
 ### What changes between tiers — quick visual
 
 ```
-                   Lite          Standard       Full
-Discovery Qs       2             5              8
-Scaffold files     ~36           ~68            ~69
-Approvals/stage    1 (per-PR)    1 (per-stage)  1 (per-stage)
-Retro axes         1             2              3
-Ledger             CHANGELOG     append-only*   append-only + CI
-Cog cost (h)       ~1 setup      ~3 setup       ~6 setup
-Recurring cost     0.1h/stage    0.5h/stage     1.5h/stage
-Best for           V1 prototype  V1→V2 product  Long-lived system
+                   Lite          Full (default)
+Discovery Qs       2             5
+Scaffold files     ~44           ~108
+Approvals/stage    1 (per-PR)    1 (per-stage)
+Retro axes         1             2
+Ledger             CHANGELOG     append-only* (+ CI when risk-armed)
+Cog cost (h)       ~1 setup      ~3 setup
+Recurring cost     0.1h/stage    0.5h/stage
+Best for           V1 prototype  Products + long-lived systems
 
-* "append-only" without CI means the doc says append-only; nothing fails if you edit it.
+* "append-only" without CI means the doc says append-only; declaring a risk trigger
+  arms the CI workflow that fails a PR mutating a prior line.
 ```
 
 ---
 
-## 2.5 Expertise is a separate dimension from tier
+## 2.5 The retired expertise dimension (historical — M26.D)
 
-Tier captures project complexity and audit needs. **Expertise** captures how familiar the user is with the stack, the framework, and software engineering generally. These are independent — a beginner may be running a Full-tier audited project; an expert may be running a Lite-tier weekend tool. The combinations are all valid; they just call for different agent behavior.
-
-| Expertise | Description | Effect on agent behavior |
-|---|---|---|
-| `novice` | New to this stack, framework, or to engineering practices. | High explanation density (the agent explains what it's doing and why); lean on web-verified best practices for technical choices; fewer approval interruptions (trust the framework + best practices to land good defaults); flag any decision the user might not realize is reversible. |
-| `intermediate` | Comfortable with the stack; learning the framework. | Moderate explanation; web-verify for non-trivial choices; per-tier approval cadence applies. |
-| `expert` (default) | Knows the stack, knows the framework, has run this loop before. | Minimal explanation (works as written in the playbook); token-frugal research (user flags what to verify); per-tier approval cadence applies; agent doesn't second-guess decisions the user has signaled as routine. |
-
-**Why "fewer approvals for novices" isn't backwards.** A novice user reviewing every stage decision can introduce more error than the agent does — they don't have the framework's mental model yet, so they second-guess defaults that are actually fine. Pulling the approval cadence to per-PR (instead of per-stage) for novices means the agent runs through stages on best-practice defaults, and the user reviews the whole milestone arc once. The user learns by reading the milestone summary; the agent isn't blocked waiting for advice the user can't yet give.
-
-Experts get more approvals (per-stage) because their feedback at each boundary is high-signal — they catch drift the agent wouldn't see.
-
-The `expertise` toggle drives several others by default (Novice = high explanation + best-practice-first + per-PR approval; Expert = minimal explanation + token-frugal + per-stage approval), but you can override individual toggles regardless of expertise. The override log captures the deviation.
+The interview formerly asked a separate **expertise** question (Novice / Intermediate / Expert) that derived narration, web-verify, and cadence defaults. It was retired at M26.D (KF-07: its derived cadence/surfacing values collided with the tier's), and its derived toggles collapsed to **one documented default set for every project** (`calibration-core.json` `defaults`): `explanation_mode: standard`, `web_verify: always`, `research_mode: best_practice_first`, `pre_write_surface: spec_and_plan_only`. Each remains an individually overridable `project-config.md` toggle — dial narration up (`verbose`) or down (`terse`), or switch to `token_frugal` research, any time; the override log captures the deviation.
 
 ## 2.6 Tier also determines the role model
 
-Tier isn't only a ceremony dial — at **Standard and Full** it splits the agent into two distinct session types:
+Tier isn't only a ceremony dial — at **Full** it splits the agent into two distinct session types:
 
-- **Orchestrator** — authors Phase docs / ADRs, adjudicates build surfaces, routes Verifier findings, sequences milestones, runs PRs. Governed by `ORCHESTRATOR.md` (generated at bootstrap for Standard+).
+- **Orchestrator** — authors Phase docs / ADRs, adjudicates build surfaces, routes Verifier findings, sequences milestones, runs PRs. Governed by `ORCHESTRATOR.md` (generated at bootstrap at Full).
 - **Build** — executes one stage per fresh session from a §X.5 prompt. Governed by `CLAUDE.md` + the stage prompt; never reads `ORCHESTRATOR.md`.
 
 The human is the serializing conduit between them. At **Lite** tier the two roles collapse into a single session — no separate orchestrator, no `ORCHESTRATOR.md`. This is a structural consequence of tier, not a toggle; see `BUILD-PLAYBOOK.md` §2.2 for the role model and `ORCHESTRATOR.md` §1 for how the two roles are physically hosted (two CLIs + git worktrees on one machine is the recommended topology).
@@ -87,29 +77,28 @@ Three inputs. Pick tier by the **highest-tier input** — i.e., if any one input
 | 4 | Multi-service, persistent state across boundaries, multiple integrations, OR a security boundary. |
 | 5 | Distributed system, regulated domain, multi-team, OR multi-year lifecycle expected. |
 
-Map: 1–2 → Lite. 3 → Standard. 4–5 → Full.
+Map: 1–2 → Lite. 3–5 → Full.
 
 ### Input 2: Time horizon (calendar weeks of focused work)
 
 | Horizon | Signal |
 |---|---|
-| ≤1 week | Lite |
-| 1–4 weeks | Standard |
-| ≥4 weeks | Full |
+| ≤1–2 weeks (solo, no audit need) | Lite |
+| Anything longer | Full |
 
 ### Input 3: Audit / accountability needs
 
 | Need | Signal |
 |---|---|
 | None — solo, throwaway, you're the only future reader | Lite |
-| Some — you'll come back to this in 6 months and want to remember why | Standard |
+| Some — you'll come back to this in 6 months and want to remember why | Full |
 | High — multiple reviewers, regulated context, "what did we decide and why" must survive years | Full |
 
 **Output:** the highest-tier input wins. A 3-day project with regulatory audit needs is **Full**, not Lite — the time horizon doesn't override the audit requirement.
 
-### Don't know? Start Standard.
+### Don't know? Start Full — then apply the downshift rule.
 
-Standard is the safest default for "I'm not sure." You can drop to Lite at any milestone boundary if it feels heavy, or escalate to Full when complexity surfaces. The re-tier protocol (§7) makes this cheap.
+Full is the default for "I'm not sure": the kit's value lives in its verification machinery. But over-tiered is as broken as under-tiered — if the project is solo + no audit need + ≤2 weeks, Lite is the honest choice regardless of how complex the stack feels (the complexity lives in the code, not the coordination). You can drop to Lite at any milestone boundary if the ceremony feels heavy; the re-tier protocol (§7) makes this cheap.
 
 ---
 
@@ -119,23 +108,23 @@ Tiers are bundles; toggles are the individual dials. Override any toggle to devi
 
 ### 4.1 Approval cadence — `approval_cadence`
 
-Controls how often the agent surfaces work for human review. **This is one of the three primary user choices in the calibration interview** (`templates/CALIBRATION-INTERVIEW.md`) — it's surfaced at bootstrap as "Minimum / Standard / Maximum" rather than derived from tier alone. The user gets explicit control over how much they're agreeing to review, since that's the most directly visible "human overhead" dial.
+Controls how often the agent surfaces work for human review. **Since M26.D this is not an interview ask** — the bootstrap derives `per_stage` (with the fenced-autonomy fence) and DISCLOSES it in one line in the confirmation turn, inviting correction ("review more often" / "review less often"). The user still holds the dial; they just aren't quizzed for it.
 
 | Value | User-facing label | Meaning | Cost (human time) | What you get |
 |---|---|---|---|---|
 | `per_step` | Maximum | Review after every TDD micro-cycle | Highest (10–20 reviews/stage) | Maximum control; near-pair-programming |
-| `per_stage` | Standard | Review at stage end (default: Standard, Full tiers + Familiar/Experienced expertise) | Medium (1 review/stage) | Catches drift early; standard cadence |
+| `per_stage` | Per-stage | Review at stage end (the derived default, disclosed in the confirmation turn) | Medium (1 review/stage) | Catches drift early; standard cadence |
 | `per_milestone` | (advanced; not surfaced in the interview) | Review only at milestone closeout | Low (1 review per ~5 stages) | Trust the agent within a milestone; review the whole arc |
-| `per_pr` | Minimum | Review only when PR opens (default: Lite tier or New expertise) | Lowest (1 review per merge) | Minimal interruption; relies on tests |
+| `per_pr` | Minimum | Review only when PR opens (the Lite default) | Lowest (1 review per merge) | Minimal interruption; relies on tests |
 
 **Rule that doesn't change with cadence:** the do-not-commit-without-approval rule (G1) still holds. `per_pr` means you approve a single batch commit at PR time, not that the agent commits whenever it wants.
 
-**`approval_cadence` also drives the generated permission fence.** One question, two effects: the cadence above *and* the `.claude/settings.json` `permissions` profile the bootstrap selects. The user-facing labels (Maximum / Standard / Minimum) map to three fence profiles — "how much do you want to babysit?":
+**`approval_cadence` also drives the generated permission fence.** One question, two effects: the cadence above *and* the `.claude/settings.json` `permissions` profile the bootstrap selects. The cadence values map to three fence profiles — "how much do you want to babysit?":
 
 | Fence profile (← cadence label) | `defaultMode` | allow / ask split | Best for |
 |---|---|---|---|
 | **Maximum oversight** (← Maximum / `per_step`) | `default` (or `plan` for reads-only) | tiny allow (lint); test/build/edit/git all `ask` | Novice / sensitive / learning |
-| **Fenced autonomy** (← Standard / `per_stage`) — *recommended default* | `acceptEdits` | allow = edit source, `{{TEST}}`/`{{LINT}}`/`{{BUILD}}`, `git add`; ask = `git commit`/`push`, dep install, manifest edits | the sweet spot |
+| **Fenced autonomy** (← `per_stage`) — *recommended default* | `acceptEdits` | allow = edit source, `{{TEST}}`/`{{LINT}}`/`{{BUILD}}`, `git add`; ask = `git commit`/`push`, dep install, manifest edits | the sweet spot |
 | **Sleep-through** (← Minimum / `per_pr`) | `acceptEdits` + recommend the **user-level** `auto` opt-in | same allow/ask as Fenced (repo can't set `auto`); lean on auto's classifier for the long tail | trusted direction, long unattended runs |
 
 **The `deny` floor is level-invariant — identical at every level (the wall doesn't move; only the allow/ask split flexes).** It denies **secret reads** (`.env`, `.env.*`, `secrets/**`, `*.pem`, `*.key`), **secret writes** (`Edit(./.env)`, `Edit(./.env.*)`), and **irreversible Bash** (`git push --force`, `git push -f` [short force-push form], `git reset --hard`, `git clean`, `rm -rf`) at Maximum oversight, Fenced autonomy, and Sleep-through alike — this enumeration matches both the shipped `templates/dot-claude/settings.json` deny block **and** the kit's own live `.claude/settings.json` deny block exactly (no undocumented superset). `scripts/smoke.cjs` asserts the live `.claude/settings.json` deny floor is byte-identical to the shipped template floor (the **live == template** guard), so the live fence can no longer silently drift from the documented floor. **Egress/exfil control is deliberately a *separate layer* — user-level `auto` (its classifier blocks `curl … | bash` semantically) + the OS sandbox + keeping secrets off disk — not a static `deny` on `curl`/`wget`**: a static egress deny is trivially bypassed by a `node`/`python` subprocess (the same gap that limits `deny: Read()`) while still blocking the toolchains that legitimately need `curl`, so it buys friction without buying safety. `defaultMode:"auto"` is **never** repo-set (ignored by design); `.claudeignore` is **never** generated (broken). See `templates/dot-claude/settings.json` (`_permission_profiles`) and the honest secrets/web-remote caveats in the generated `CLAUDE.md`.
@@ -148,7 +137,7 @@ Controls how much process self-evaluation each stage produces.
 |---|---|---|
 | `none` | No retrospective file | Genuinely throwaway work; you'll never look back |
 | `brief` (default: Lite) | One paragraph: "what worked, what didn't, what to change" | Lightweight forward signal without the form-filling |
-| `two_axis` (default: Standard) | Process + Product, no Pattern axis | Standard projects without a generalization concern |
+| `two_axis` (default: Full) | Process + Product, no Pattern axis | The Full default — process + product signal without the pattern-mining overhead |
 | `three_axis` (default: Full) | Process + Product + Pattern (current behavior) | Long-running projects where prompt-pattern drift compounds |
 
 ### 4.3 Ledger discipline — `ledger`
@@ -158,7 +147,7 @@ Controls the append-only product↔spec ledger.
 | Value | Behavior | When useful |
 |---|---|---|
 | `none` (default: Lite) | No `gap-analysis.md`. Use `CHANGELOG.md` for "what shipped." | Simple projects; you don't need a forensic record. |
-| `append_only_advisory` (default: Standard) | `gap-analysis.md` exists with the append-only rule documented; nothing enforces it. | You want the discipline but not the CI cost. |
+| `append_only_advisory` (default: Full; CI-enforced when risk-armed) | `gap-analysis.md` exists with the append-only rule documented; nothing enforces it. | You want the discipline but not the CI cost. |
 | `append_only_enforced` (default: Full) | CI fails any PR that edits a prior ledger line. | Audit-critical: regulated, multi-team, or long-lived. |
 
 ### 4.4 Web-verify cadence — `web_verify`
@@ -167,7 +156,7 @@ Controls when the agent web-searches external facts (library versions, API shape
 
 | Value | Behavior | Cost (tokens) | Default for |
 |---|---|---|---|
-| `always` | Web-verify any externally-knowable fact before coding to it | High | Lite, Standard (lean on best practices over guesswork) |
+| `always` | Web-verify any externally-knowable fact before coding to it | High | Both tiers (lean on best practices over guesswork) |
 | `on_request` | Web-verify only when explicitly asked or when a fact is flagged uncertain | Medium | Full (expert user expected to flag what needs verifying) |
 | `never` | Never web-search; rely on training-data knowledge | Low | Air-gapped contexts, offline development |
 
@@ -180,7 +169,7 @@ Controls the maximum number of files in any read-first list (per stage, per proj
 | Value | Cap | Default for |
 |---|---|---|
 | `small` | 3–4 files | Lite |
-| `medium` | 6–8 files | Standard |
+| `medium` | 6–8 files | Full |
 | `large` | 10–12 files | Full |
 | `unlimited` | No cap | Discouraged; only for genuinely complex stages where every file pulls weight |
 
@@ -192,12 +181,12 @@ Controls how the agent decides between deep research and best-effort-from-memory
 
 | Value | Behavior | Cost (tokens) | Default for |
 |---|---|---|---|
-| `best_practice_first` | For any non-trivial technical decision, web-verify current best practice before coding. | High | Lite, Standard |
+| `best_practice_first` | For any non-trivial technical decision, web-verify current best practice before coding. | High | Both tiers (the standing default) |
 | `token_frugal` | Use training-data knowledge by default; web-verify only on user-flagged questions or when uncertainty is high. | Low | Full |
 | `time_bound` | Use training-data knowledge if a quick answer exists; web-verify only when the cost of being wrong exceeds N minutes of rework. | Medium | Custom — for users who want a heuristic instead of a default |
 | `complexity_bound` | Use training-data knowledge for routine decisions (file structure, idiomatic syntax); web-verify when the decision is irreversible or has architectural consequence. | Medium | Custom |
 
-The Lite/Standard default of `best_practice_first` traded against `token_frugal` is a deliberate inversion: non-experts benefit more from current-best-practice (the framework leans on the web for them) and have less ability to flag what needs verifying. Experts know what they know; they save tokens by not re-verifying it.
+The standing default of `best_practice_first` traded against `token_frugal` is deliberate: most users benefit more from current-best-practice (the framework leans on the web) than from the token saving. `token_frugal` remains the explicit override for users who know what they know and flag what needs verifying.
 
 ### 4.7 Escalation triggers — `escalation`
 
@@ -205,7 +194,7 @@ Controls when the agent stops and asks rather than self-correcting.
 
 | Value | Trigger | Default for |
 |---|---|---|
-| `time_box_2x` | Surface if any stage runs >2× its time-box estimate | Standard |
+| `time_box_2x` | Surface if any stage runs >2× its time-box estimate | Both tiers (the default) |
 | `time_box_strict` | Surface if any stage runs >1.5× its time-box estimate | Lite (catch sprawl early when ceremony is low) |
 | `iteration_3` | Surface after 3 self-correction iterations (current default) | Full |
 | `iteration_2_for_integration` | Surface after 2 iterations for cross-stack integration bugs (current default) | All tiers — this is non-tunable; it's a hard signal |
@@ -242,9 +231,9 @@ Controls whether the Verifier stage (Stage V — fresh-context contract-fidelity
 |---|---|---|---|---|
 | `skip` | None | (manual override only) | — | All contract bugs; not recommended |
 | `pass_1_only` | Inventory | Lite tier | "We forgot to ship file X" | Wire bugs, concurrency, runtime/visual |
-| `pass_2_4` | Hooks + Behavior (+ Security + Code-quality; + Design when `deliverable_type: web`) | Standard tier | Wire mismatches, runtime/visual bugs, vulns, dead code, off-brief UI | Concurrency / multi-call invariants. No Inventory pass — §X.2 is advisory at Standard (a missing whole file still surfaces in Hooks/Behavior) |
-| `pass_1_2_3_4` | Inventory + Hooks + Multi-call invariants + Behavior | Full tier | All of the above + state-machine bugs, single-use leaks, concurrent-access bugs | Project-specific concerns (security, perf, etc.) |
-| `pass_1_2_3_4_plus` | All four + project-specific passes named in `docs/gates.md` | Full tier with audit/security/perf gates | Tier-conditional: whatever the gate matrix demands | — |
+| `pass_2_4` | Hooks + Behavior (+ Security + Code-quality; + Design when `deliverable_type: web`) | Full tier (the default) | Wire mismatches, runtime/visual bugs, vulns, dead code, off-brief UI | Concurrency / multi-call invariants. No Inventory pass — §X.2 is advisory under `pass_2_4` (a missing whole file still surfaces in Hooks/Behavior) |
+| `pass_1_2_3_4` | Inventory + Hooks + Multi-call invariants + Behavior + Security + Code-quality (+ Design when `deliverable_type: web`) | Explicit-choice escalation (the retired top tier's default) | All of the above + state-machine bugs, single-use leaks, concurrent-access bugs | Project-specific concerns (perf, etc.) |
+| `pass_1_2_3_4_plus` | All four + project-specific passes named in `docs/gates.md` | Explicit choice, with audit/security/perf gates | Whatever the gate matrix demands | — |
 
 **Pass 4 requires a project-provided harness** (Vitest+jsdom for renderer, headless Tauri for IPC, etc.). The harness must be named in `docs/gates.md` for Pass 4 to enforce. If absent, Pass 4 surfaces 🟡 with explicit "no harness" caveat in findings rather than silently passing.
 
@@ -259,12 +248,12 @@ Controls the cadence of **Stage R** (the refactor health check — a second fres
 | Value | Cadence | Default for |
 |---|---|---|
 | `skip` | Stage R never runs | Lite |
-| `trigger_n5` | Run when `docs/tech-debt.md` has ≥5 entries OR every 3 milestones, whichever comes first | Standard |
-| `trigger_n3` | Run when `docs/tech-debt.md` has ≥3 entries OR every 2 milestones, whichever comes first | Full |
+| `trigger_n5` | Run when `docs/tech-debt.md` has ≥5 entries OR every 3 milestones, whichever comes first | Full (the default) |
+| `trigger_n3` | Run when `docs/tech-debt.md` has ≥3 entries OR every 2 milestones, whichever comes first | Explicit choice (tighter) |
 | `trigger_n2` | Tighter trigger for high-churn codebases | Custom |
 | `every_milestone` | Run after every Verifier pass | Custom |
 
-**Trigger thresholds are hypotheses, and data-tunable.** They ship with the default values (Standard `n5` / Full `n3`); refine them from real-world tech-debt accumulation rate once a Standard-tier project has completed M01–M03 with closeouts. The trigger is **OR-shaped**: whichever of the tech-debt count *or* the milestone interval fires first runs Stage R — the calendar fallback prevents indefinite deferral on a codebase nobody's logging debt for; the count reacts to actual debt on a codebase that's rotting faster than the interval.
+**Trigger thresholds are hypotheses, and data-tunable.** They ship with the default values (`n5` default / `n3` tighter); refine them from real-world tech-debt accumulation rate once a Full-tier project has completed M01–M03 with closeouts. The trigger is **OR-shaped**: whichever of the tech-debt count *or* the milestone interval fires first runs Stage R — the calendar fallback prevents indefinite deferral on a codebase nobody's logging debt for; the count reacts to actual debt on a codebase that's rotting faster than the interval.
 
 **Cadence is trigger-based, not calendar-only.** Stage R reads `docs/tech-debt.md` for the entry count at each milestone boundary (after the Verifier pass) and compares against the threshold; the milestone interval is the fallback. When it fires, run it in a fresh `refactor`-mode session (the `.claude/role` mechanism Stage V uses, with the stricter read-first list — `read-first-list-refactor.txt` omits prior retros **and** prior R findings).
 
@@ -277,8 +266,7 @@ Controls the cadence of **Stage R** (the refactor health check — a second fres
 Tier-conditional pass selection:
 
 - **Lite:** Stage R skipped entirely (`skip`).
-- **Standard:** Duplication + Drift (add Complexity only if a linter integration is named in `docs/gates.md`).
-- **Full:** Duplication + Complexity + Drift + project-specific passes from `docs/gates.md`.
+- **Full:** Duplication + Drift (add Complexity only if a linter integration is named in `docs/gates.md`); all three + project-specific passes from `docs/gates.md` is the explicit escalation.
 
 **Severity + the D.refactor loop.** 🔴 (rare — blocks the next milestone PR, only when the issue compounds per-milestone or risks data loss/security) opens a `D.refactor` stage; **the Verifier re-runs after the refactor** (to confirm contracts didn't break), then Stage R re-runs (to confirm the structural issue closed). Max 2 D.refactor iterations per milestone; the third escalates. 🟡 opens a D.refactor before the next milestone; 🟢 appends to `docs/tech-debt.md`. Hard gate **G7** (`PROCESS-VALIDATION.md`) verifies Stage R ran with fresh context when triggered. Mirrors `verifier_mode` (§4.10) by design — same machinery, different question.
 
@@ -300,16 +288,15 @@ Determines what kind of work the framework supports. Orthogonal to tier (which d
 | Tier | Dimensions audited | Setup + challenge |
 |---|---|---|
 | Lite | **1–2** (e.g., just security, just performance) | Skip S2 triage; skip the challenge. A quick health check. |
-| Standard | **3–4** of the 8 | Full setup (inventory + triage + plan); challenge the security-focused passes. |
-| Full | **all 8** | Full setup; challenge every pass; consolidation produces a ranked remediation backlog. |
+| Full | **3–4** of the 8 by default (up to all 8 by explicit choice) | Full setup (inventory + triage + plan); challenge the security-focused passes; at all 8, consolidation produces a ranked remediation backlog. |
 
 **`audit_multi_model: false | true`** *(default `false` — Path A)*. Path A (the shipped default) runs a **single model** (stock Claude Code) with the bias guard preserved by **fresh context**: each challenge review (G_AUDIT_C1) runs in a fresh session reading only the prior pass's output. **Path B** (`true`) is the **future multi-model SDK route** — a custom wrapper orchestrating Claude + (optionally) another model per pass for model-level blind-spot diversity; it needs non-trivial deployment infrastructure and is deferred until Path A proves the workflow. Leave at `false` unless you have wired the SDK path yourself.
 
-**The hybrid calibration (`research_publish`).** `research_publish` is intrinsically two-phase, and the tier dial does **not** apply uniformly. **Phase R** (research; the grounded-STORM steps R1–R5) is **Lite-process-locked regardless of the project tier** — no milestones, no per-stage retros, no Stage V — **except** the one mandatory ledger it always keeps, the sources registry (`docs/sources/registry.md`). Over-formalizing research destroys its discursive quality; the discipline lives in the app phase. Only **Phase A** (the interactive app) re-tiers — to whatever the findings-to-illustrate warrant — and inherits that tier's full scaffold **+ Stage V**. The Phase-R→Phase-A re-tier is an **explicit user event, never automatic**. So a Standard project runs Phase R at Lite process and Phase A at Standard; a Full project runs Phase R at Lite process and Phase A at Full. The `G_RP_R*` gates (`PROCESS-VALIDATION.md`) are checked under Phase R's Lite process at every tier; the `G_RP_A*` gates under Phase A's re-tiered ceremony.
+**The hybrid calibration (`research_publish`).** `research_publish` is intrinsically two-phase, and the tier dial does **not** apply uniformly. **Phase R** (research; the grounded-STORM steps R1–R5) is **Lite-process-locked regardless of the project tier** — no milestones, no per-stage retros, no Stage V — **except** the one mandatory ledger it always keeps, the sources registry (`docs/sources/registry.md`). Over-formalizing research destroys its discursive quality; the discipline lives in the app phase. Only **Phase A** (the interactive app) re-tiers — to whatever the findings-to-illustrate warrant — and inherits that tier's full scaffold **+ Stage V**. The Phase-R→Phase-A re-tier is an **explicit user event, never automatic**. So a Full project runs Phase R at Lite process and Phase A at Full. The `G_RP_R*` gates (`PROCESS-VALIDATION.md`) are checked under Phase R's Lite process at every tier; the `G_RP_A*` gates under Phase A's re-tiered ceremony.
 
 **The axis boundary.** `operating_mode` (work-*shape*) is **project-scoped** — set once at calibration, lives in `project-config.md`. It is orthogonal to and does **not** subsume the session-scoped 3-brain `role` (`.claude/role`, value set `{work, verifier, orchestrator, refactor}`). The SessionStart hook composes the read-first list from both: `operating_mode` picks the list *family*, `role` picks the bias-guard *variant*, most-specific-wins (`read-first-list-<op>-<active>.txt` → `read-first-list-<op>.txt` → `read-first-list-<active>.txt` → `read-first-list.txt`). Operating modes add read-first **lists** and **phase shapes** — never new `role` values.
 
-The calibration interview asks a **leading question** ("what kind of work is this?") that determines the mode before tier/expertise/approval cadence. A pre-commit value check (`validators/validate-operating-mode.cjs`) fails any `project-config.md` whose `operating_mode` is outside the four values.
+The calibration interview asks a **leading question** ("what kind of work is this?") that determines the mode before the tier and risk asks. A pre-commit value check (`validators/validate-operating-mode.cjs`) fails any `project-config.md` whose `operating_mode` is outside the four values.
 
 ### 4.13 Verbosity — `verbosity` (meta-dial)
 
@@ -317,13 +304,13 @@ One user-facing knob that sets the four narration/surfacing behaviors together, 
 
 | Value | Sets | For |
 |---|---|---|
-| `terse` | `explanation_mode: terse`, `web_verify: on_request`, `pre_write_surface: none`, retro narration minimal | Expert expertise / Lite tier |
-| `standard` | `explanation_mode: standard`, `web_verify: always`, `pre_write_surface: spec_and_plan_only`, retro narration normal | Intermediate / Standard tier |
-| `verbose` | `explanation_mode: verbose`, `web_verify: always`, `pre_write_surface: always`, retro narration full | Novice / Full tier |
+| `terse` | `explanation_mode: terse`, `web_verify: on_request`, `pre_write_surface: none`, retro narration minimal | Explicit choice — you know the loop |
+| `standard` (default) | `explanation_mode: standard`, `web_verify: always`, `pre_write_surface: spec_and_plan_only`, retro narration normal | Every project (the one default — the expertise ask was retired at M26.D) |
+| `verbose` | `explanation_mode: verbose`, `web_verify: always`, `pre_write_surface: always`, retro narration full | Explicit choice — learning the stack or the framework |
 
-**`pre_write_surface`** is the new sub-toggle this introduces (the fix for the "surface every draft then rewrite it" token waste): `always` (surface every artifact before writing — the old hard-rule-#1 behavior), `spec_and_plan_only` (surface the spec and milestone plan pre-write; write scaffold + Phase docs directly with post-write review), `none` (write-then-review everything). Default `spec_and_plan_only` at Standard. Bootstrap hard rule #1 reads this toggle rather than mandating surface-everywhere.
+**`pre_write_surface`** is the new sub-toggle this introduces (the fix for the "surface every draft then rewrite it" token waste): `always` (surface every artifact before writing — the old hard-rule-#1 behavior), `spec_and_plan_only` (surface the spec and milestone plan pre-write; write scaffold + Phase docs directly with post-write review), `none` (write-then-review everything). Default `spec_and_plan_only` (calibration-core.json defaults). Bootstrap hard rule #1 reads this toggle rather than mandating surface-everywhere.
 
-Default `verbosity` follows expertise first, then tier: Novice → verbose, Expert → terse, otherwise → standard.
+Default `verbosity` is `standard` for every project; `verbose`/`terse` are explicit user choices (the retired expertise ask no longer sets them).
 
 ### 4.14 Verification locus — `verification_locus`
 
@@ -337,7 +324,7 @@ Controls **where** the test suite actually runs — on local hardware vs. GitHub
 
 **The local-first inversion.** Conventionally CI is the source of truth and the backstop against `--no-verify`. Under `local_first` / `hybrid`, **local hooks are the primary verification** and the cloud shrinks to a tripwire (`hybrid`) or release-only (`local_first`). This is sound only if a non-bypassable check still exists somewhere — which is why `hybrid` keeps the PR smoke check: `--no-verify` skips the *local* hook but can never skip a *required status check*. Don't run `local_first` with no self-hosted runner AND no PR check — that leaves no backstop at all (see §8 smell).
 
-**What it generates** (Phase 3 scaffold): `scripts/verify-local.cjs` (the one local entrypoint — Linux-in-Docker + native, sequential, non-zero on any failure), `.githooks/pre-commit` (fast checks) + `.githooks/pre-push` (the full local matrix), `scripts/install-hooks.cjs` (sets `core.hooksPath`), and — for `hybrid` — `.github/workflows/pr-smoke.yml` + `.github/workflows/release.yml` (macOS + full matrix on `v*` tags only). The macOS release leg is emitted iff the Phase-0 OS-target audit finds a macOS ship target in packaging config. Under `cloud`, none of the local harness/hooks generate — instead `.github/workflows/ci.yml` runs the full matrix on every push/PR (free on public repos).
+**What it generates** (Phase 3 scaffold): `scripts/verify-local.cjs` (the one local entrypoint — Linux-in-Docker + native, sequential, non-zero on any failure), `.githooks/pre-commit` (fast checks) + `.githooks/pre-push` (the full local matrix), `scripts/install-hooks.cjs` (sets `core.hooksPath`), and `.github/workflows/release.yml` (macOS + full matrix on `v*` tags only) — generated under **both** `local_first` and `hybrid` (this is the tag-triggered cloud run the table row promises; Full only — Lite ships no `release.yml`). For `hybrid` **only**, it additionally generates `.github/workflows/pr-smoke.yml` (the non-bypassable PR tripwire `local_first` omits). The macOS release leg is emitted iff the Phase-0 OS-target audit finds a macOS ship target in packaging config. Under `cloud`, none of the local harness/hooks generate — instead `.github/workflows/ci.yml` runs the full matrix on every push/PR (free on public repos).
 
 **Backstop sub-choice.** The default backstop is the hosted `ubuntu` PR smoke check (zero maintenance, ~free against the quota). A **self-hosted runner** is a documented opt-in (`pr-smoke.self-hosted.yml.example`) that drops cloud cost to $0 by running the full suite on the dev box — at the cost of keeping that box online to gate PRs, basic runner hardening, and private-repo-only use. (Self-hosted minutes are free/unmetered as of 2026, though GitHub has signalled intent to meter the control plane (~$0.002/min), currently postponed — so treat $0 as current-but-at-risk; worst case ~pennies/PR.)
 
@@ -356,10 +343,10 @@ off_track_check: brief | advisory | enforced
 | Value | Mandatory paths | Log | Enforcement | Default for |
 |---|---|---|---|---|
 | `brief` | Per-stage off-track line in the brief retro + a one-line closeout sanity check | One-line note in `CHANGELOG.md` (no separate log) | Advisory only | Lite |
-| `advisory` | Per-stage line (mandatory) + full closeout check | `docs/off-track-log.md`, append-only **advisory** (honor-system) | Surfaced; a standing unjustified inversion is a closeout warning | Standard |
-| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, append-only **CI-enforced** (joins the `append-only-ledger.yml` set) | **G8 hard gate**: a standing unjustified inversion blocks the milestone PR | Full |
+| `advisory` | Per-stage line (mandatory) + full closeout check | `docs/off-track-log.md`, append-only **advisory** (honor-system) | Surfaced; a standing unjustified inversion is a closeout warning | Full (the default) |
+| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, append-only **CI-enforced** (joins the `append-only-ledger.yml` set) | **G8 hard gate**: a standing unjustified inversion blocks the milestone PR | Explicit choice (or ride the risk-armed ledger set) |
 
-Defaults: **Lite = `brief`, Standard = `advisory`, Full = `enforced`** (a new toggle ships with a default per tier so existing projects don't break on upgrade — §9). The **`/on-track` command is available at every value** — the toggle governs only the *mandatory* paths and the gate, never the on-demand review. Both clauses of G8 hold regardless of value: no unjustified inversion, and `docs/backlog.md` is HITL co-authored (no AI-only re-rank, status flip, scope change, or `Depends on` edit reaches the committed doc — that clause is what keeps "off track" falsifiable).
+Defaults: **Lite = `brief`, Full = `advisory`**; `enforced` stays an explicit-choice escalation (a toggle ships with a default per tier so existing projects don't break on upgrade — §9). The **`/on-track` command is available at every value** — the toggle governs only the *mandatory* paths and the gate, never the on-demand review. Both clauses of G8 hold regardless of value: no unjustified inversion, and `docs/backlog.md` is HITL co-authored (no AI-only re-rank, status flip, scope change, or `Depends on` edit reaches the committed doc — that clause is what keeps "off track" falsifiable).
 
 ### 4.16 App-Map generation — `app_map`
 
@@ -374,9 +361,9 @@ The map is **not gated to `web`** — the entry shape and the test-id-binding in
 | Value | Behavior | Default for |
 |---|---|---|
 | `skip` | No `docs/app-map.md`. A brief paragraph in README/CHANGELOG covers the rare Lite case. | Lite (all types); `library` (`api` surface class) at any tier |
-| `on` | `docs/app-map.md` generated + maintained: per-stage delta (build), drive/test script (Verifier), whole-map reconcile (closeout); currency enforced by `validators/validate-app-map.cjs` (test-id binding + surface-source tripwire). | Standard+ for the **drivable** surface classes (`ui` / `command` / `endpoint`) |
+| `on` | `docs/app-map.md` generated + maintained: per-stage delta (build), drive/test script (Verifier), whole-map reconcile (closeout); currency enforced by `validators/validate-app-map.cjs` (test-id binding + surface-source tripwire). | Full, for the **drivable** surface classes (`ui` / `command` / `endpoint`) |
 
-**Per-tier / per-type defaults: Lite = `skip`; Standard+ = `on` for the drivable surface classes (`ui` / `command` / `endpoint`); `library` (`api`) = `skip` (the opt-in degenerate case — a library's API surface already lives in the spec API section + unit/contract tests, so the map pays off only if the owner asks for it).** A new toggle ships with a default per tier so existing projects don't break on upgrade (§9). The currency check treats `State: verified` (a green test-id backs it) and `State: manual-only` (human-asserted, no e2e yet) differently — it never forces e2e for every surface. The surface-source tripwire's only escape is a logged `app-map-unchanged: <reason>` token — never a silent skip, never `--no-verify`.
+**Per-tier / per-type defaults: Lite = `skip`; Full = `on` for the drivable surface classes (`ui` / `command` / `endpoint`); `library` (`api`) = `skip` (the opt-in degenerate case — a library's API surface already lives in the spec API section + unit/contract tests, so the map pays off only if the owner asks for it).** A new toggle ships with a default per tier so existing projects don't break on upgrade (§9). The currency check treats `State: verified` (a green test-id backs it) and `State: manual-only` (human-asserted, no e2e yet) differently — it never forces e2e for every surface. The surface-source tripwire's only escape is a logged `app-map-unchanged: <reason>` token — never a silent skip, never `--no-verify`.
 
 ### 4.17 Test-honesty — `test_honesty`
 
@@ -388,14 +375,14 @@ test_honesty: warn | block
 
 | Value | Slot omission (a) | Assertion-free test (b) | Default for |
 |---|---|---|---|
-| `warn` | Advisory (NOTE, non-blocking) | Advisory (NOTE) — the heuristic's residual false-positive rate is absorbed here | Lite, Standard |
+| `warn` | Advisory (NOTE, non-blocking) | Advisory (NOTE) — the heuristic's residual false-positive rate is absorbed here | Lite |
 | `block` | **Blocks the commit** | **Blocks the commit** | Full |
 
-Defaults: **Lite = `warn`, Standard = `warn`, Full = `block`** (a new toggle ships with a default per tier so existing projects don't break on upgrade — §9). The validator runs the same way at every value; the toggle only routes severity (the generated pre-commit / CI passes `--warn` under `warn`). **Grandfathered regardless of value:** the slot requirement applies only to docs declaring `**Protocol version:** v1.7`+ — pre-v1.7 docs and any banner-less doc are never retro-failed. G9 is the **effectiveness** layer on top of the coverage gates (coverage proves *executed*; the mutation proves *caught*) — they compose, neither replaces the other.
+Defaults: **Lite = `warn`, Full = `block`** — schema-owned and **performed by the render** (M26.D, the ruled fork-1 flip): `calibration-core.json` `severity` fills the pre-commit's `VALIDATOR_SEVERITY_FLAG` token per tier (Lite `--warn`, Full empty = the validator's blocking default). Per-validator override: the warn|block row in `project-config.md`, honored by editing the hook line or re-rendering via `kit-update --apply`. **Grandfathered regardless of value:** the slot requirement applies only to docs declaring `**Protocol version:** v1.7`+ — pre-v1.7 docs and any banner-less doc are never retro-failed. G9 is the **effectiveness** layer on top of the coverage gates (coverage proves *executed*; the mutation proves *caught*) — they compose, neither replaces the other.
 
 ### 4.18 Assembled-execution cluster-gate — the G10 trigger list (derived, not toggled)
 
-Controls the **G10 cluster-gate** — the structural form of "unit/component green **cannot** approve a runtime surface." Unlike the toggles above this is **not a discretionary switch**: it is **keyed off the derived surface class** and is **mandatory** wherever it arms — *risk overrides tier*, so tier is the floor and a runtime/drivable surface raises it at Standard and Full alike. Gate **G10** in `PROCESS-VALIDATION.md`; enforced by `validators/validate-app-map.cjs` (the App-Map Evidence binding) + the `assembled_execution` Verifier pass (`STAGE-PROMPT-PROTOCOL.md` §8.5).
+Controls the **G10 cluster-gate** — the structural form of "unit/component green **cannot** approve a runtime surface." Unlike the toggles above this is **not a discretionary switch**: it is **keyed off the derived surface class** and is **mandatory** wherever it arms — *risk overrides tier*, so tier is the floor and a runtime/drivable surface raises it at either tier. Gate **G10** in `PROCESS-VALIDATION.md`; enforced by `validators/validate-app-map.cjs` (the App-Map Evidence binding) + the `assembled_execution` Verifier pass (`STAGE-PROMPT-PROTOCOL.md` §8.5).
 
 **The visible trigger list — which surface classes arm G10:**
 
@@ -428,7 +415,7 @@ Controls the **G11 risk-escalation gate** — the structural form of *"tier is t
 
 **The fail-closed standard.** Every enforcement path errors → **block**, never a silent pass: a validator that cannot compute its answer exits non-zero, never 0. G11 itself is fail-closed with a no-false-positive asymmetry: a *declared* trigger whose `docs/gates.md` is unreadable exits non-zero, but a *no-trigger* project never reads it (a Lite project with no `gates.md` is not falsely failed). Presence-gated does **not** mean fail-open (the honest limitation is documented in the validator header; Stage V is the adversary that closes the under-declaration escape).
 
-**Severity / the toggle** (mirrors §4.17): `risk_escalation: warn | block` — `--warn` advisory (Lite/Standard default, shipped in the template pre-commit), `block` enforced (a Full project removes `--warn`). The fail-closed source-unreadable branch (exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `risk_escalation: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed source-unreadable branch (exit 2) is never downgraded by `--warn`.
 
 ### The risk-properties matrix — what each declared surface must prove (G13)
 
@@ -458,7 +445,7 @@ Each property is either `covered-by: <how> — test: <name>` (names a covering t
 
 A **rollback-only** op (transactional delete) and a **path-confinement** op (archive extract) are distinguished precisely by which of **recovery** vs **confinement** is load-bearing — G12 tests *both* for a destructive surface; the matrix names which the *plan* must center.
 
-**Severity / the toggle** (mirrors §4.17): `risk_matrix: warn | block` — `--warn` advisory (Lite/Standard default, shipped in the template pre-commit), `block` enforced (Full). The fail-closed staged-enumeration branch (exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `risk_matrix: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed staged-enumeration branch (exit 2) is never downgraded by `--warn`.
 
 ### 4.20 Transitions — the release-state ladder, atomic state, honest rework (G15)
 
@@ -481,7 +468,7 @@ The **release end is SLSA-mapped** (states 5–6 cite their [SLSA build level](h
 
 **Honest rework (DORA's 5th metric, project-internal).** Rework is counted across the **four fixed types** — implementation corrections / verifier iterations / IRL reversals / post-merge discoveries — never a lump sum, never "0" while fix commits exist. The total **reconciles** against the fix-commit evidence by **extending** the reconciliation primitive (`recomputeCount`), not by forking a parallel count. The fix-commit count is a **lower bound**, so honest over-reporting passes; only under-reporting is the lie.
 
-**Severity / the toggle** (mirrors §4.17): `transition: warn | block` — `--warn` advisory (Lite/Standard default, shipped in the template pre-commit), `block` enforced (a Full project removes `--warn`). The fail-closed branch (an unreadable transition file / a git error → exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `transition: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed branch (an unreadable transition file / a git error → exit 2) is never downgraded by `--warn`.
 
 ### 4.21 Release-readiness — the capability-triggered review + SLSA provenance (G16)
 
@@ -497,7 +484,7 @@ Controls the **G16 release-readiness gate** — the structural form of *"`public
 
 **The DUAL honest locus (neither half overclaims).** The validator proves the review **record is PRESENT** (not that the review was *good* — the audit-pass adversary's judgment, recorded at review time) **and** the SLSA level is **CITED** (not that **provenance was achieved** — proven at build time by `release.yml`'s attest step). Floor (validator) + adversary (the audit review + the build-time attest) = a real gate; neither alone is.
 
-**Severity / the toggle** (mirrors §4.17): `release_readiness: warn | block` — `--warn` advisory (Lite/Standard default, shipped in the template pre-commit), `block` enforced (a Full project removes `--warn`). The fail-closed branch (an unreadable ledger, or a public-distribution entry whose trigger config is unreadable → exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `release_readiness: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed branch (an unreadable ledger, or a public-distribution entry whose trigger config is unreadable → exit 2) is never downgraded by `--warn`.
 
 ---
 
@@ -510,10 +497,8 @@ Bootstrap installs `project-config.md` at the project root with the tier and tog
 ```markdown
 # Framework Configuration — <project name>
 
-**Tier:** Standard
-**Expertise:** intermediate
-**Tier rationale:** ~3-week project, complexity score 3, low audit needs. Standard is the right default; can drop to Lite if scope shrinks.
-**Expertise rationale:** comfortable with the stack but new to this framework.
+**Tier:** Full
+**Tier rationale:** ~3-week project, complexity score 3, a second reader expected. Full is the default; can drop to Lite if scope shrinks.
 
 ## Active toggles
 
@@ -527,14 +512,14 @@ Bootstrap installs `project-config.md` at the project root with the tier and tog
 | research_mode | best_practice_first | |
 | escalation | time_box_2x | |
 | hook_enforcement | enforced | |
-| explanation_mode | standard | Intermediate expertise default. |
+| explanation_mode | standard | The standing default. |
 | verification_locus | hybrid | Local full suite at pre-push; one ubuntu PR smoke check; macOS + full matrix on tags only. |
 | off_track_check | advisory | Priority-drift guard (G8): per-stage line + full closeout check against `docs/backlog.md`; `off-track-log.md` advisory. `/on-track` available regardless. |
-| app_map | on | `docs/app-map.md` drive/test map (Standard+, drivable surface class). `skip` for Lite and `library`. Currency: test-id binding + surface-source tripwire. See §4.16. |
+| app_map | on | `docs/app-map.md` drive/test map (Full, drivable surface class). `skip` for Lite and `library`. Currency: test-id binding + surface-source tripwire. See §4.16. |
 
 ## Override log (append-only — drives the re-tier protocol)
 
-- 2026-05-10: Initial bootstrap as Standard tier, intermediate expertise.
+- 2026-05-10: Initial bootstrap as Full tier.
 ```
 
 ### How sessions consume it
@@ -563,11 +548,9 @@ Caps formalize the trade. The right cap depends on **project size + user experti
 |---|---|---|---|
 | Small (Lite) | Non-expert | Any | 3–4 |
 | Small (Lite) | Expert | Any | 2–3 (expert knows what to skip) |
-| Medium (Standard) | Non-expert | Routine | 5–6 |
-| Medium (Standard) | Non-expert | High (cross-cutting) | 7–8 |
-| Medium (Standard) | Expert | Any | 5–6 |
-| Large (Full) | Any | Routine | 7–8 |
-| Large (Full) | Any | High | 10–12 |
+| Medium (Full) | Any | Routine | 5–6 |
+| Medium (Full) | Any | High (cross-cutting) | 7–8 |
+| Large (Full, explicit `large` cap) | Any | High | 10–12 |
 | Large (Full) | Any | Closeout (cumulative) | bounded closeout read list (ledgers + the milestone's artifacts + touched spec + cumulative diff; loud truncation) |
 
 The cap is per-stage, not project-wide: a single stage in a Full-tier project can be capped at 5 files if its scope is narrow, while another stage in the same project might legitimately need 12.
@@ -580,14 +563,14 @@ The cap is per-stage, not project-wide: a single stage in a Full-tier project ca
 
 You picked a tier at bootstrap. The project's needs may shift. Re-tiering is supported and cheap.
 
-### When to re-tier upward (Lite → Standard, Standard → Full)
+### When to re-tier upward (Lite → Full)
 
 - Audit needs surface (e.g., the project gets adopted internally and now multiple teams depend on it)
 - Complexity grows (new integrations, new modules, security boundary added)
 - Time horizon extends (started as a 1-week prototype, now 3 months in)
 - A friction event reveals the lighter tier is missing something (e.g., you can't reconstruct why a decision was made; you needed an ADR)
 
-### When to re-tier downward (Full → Standard, Standard → Lite)
+### When to re-tier downward (Full → Lite)
 
 - The early milestones reveal the project is simpler than you thought
 - The retrospectives are mechanical and not surfacing useful signal
@@ -614,7 +597,7 @@ Some toggles only make sense in certain combinations. The bootstrap will warn (n
 
 - `ledger: append_only_enforced` + `hook_enforcement: disabled` is a smell — you're enforcing the ledger via CI but not enforcing read-first via hooks. Either you trust the agent or you don't.
 - `approval_cadence: per_pr` + `retro_depth: three_axis` is a mismatch — you're saving review time at PR but spending it again on per-stage retrospectives. Pair `per_pr` with `brief`.
-- `research_mode: token_frugal` + Lite tier is a smell — Lite is for non-experts who benefit most from web-verified best practices. If you're token-frugal *and* a non-expert, you're optimizing the wrong thing.
+- `research_mode: token_frugal` + Lite tier is a smell — Lite users benefit most from web-verified best practices (the standing default). Go token-frugal only if you genuinely know what needs verifying.
 - `read_first_cap: small` + `retro_depth: three_axis` is a smell — you're skipping orientation reads but writing detailed retrospectives. The ratio is backward.
 - `verification_locus: local_first` + no self-hosted runner + no PR smoke check is a smell — you've removed cloud verification entirely with nothing non-bypassable left, so a single `--no-verify` ships unverified code. Either keep the `hybrid` PR check or stand up a self-hosted backstop.
 
@@ -636,28 +619,20 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Lite
 
 - One discovery conversation (~15 minutes): what is this, what isn't it, success criteria.
-- Bootstrap generates ~36 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
+- Bootstrap generates ~44 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
 - Per stage: agent codes, surfaces a brief retrospective paragraph, you approve at PR time.
 - No append-only ledger. No formal ADRs (use commit messages). No cumulative closeout review.
 - Web-verify defaults: agent leans on current best practices for library choices, version pins, idiomatic patterns.
 - Total recurring overhead per stage: ~6–10 minutes of human review.
 
-### Standard
+### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~68 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Standard reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`.)
-- Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective.
-- Append-only ledger documented but not CI-enforced.
+- Bootstrap generates ~108 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +1 workflow when a declared risk trigger arms the ledger CI.)
+- Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
+- Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.
 - Total recurring overhead per stage: ~25–40 minutes of human review.
-
-### Full
-
-- Eight-question discovery (~60 minutes): full identity, stack, v1 scope, success criteria, distribution, license, naming, audit needs.
-- Bootstrap generates ~69 files: the full Standard scaffold plus the CI-enforced append-only gap-analysis workflow, three-axis retrospective template, and any additional ADRs/harness config the audit-needs path requires.
-- Per stage: agent fills three-axis retrospective with friction log, surfaces with cross-machine state, you review code + retrospective + (at closeout) gap-analysis entry.
-- Append-only ledger CI-enforced.
-- Web-verify on request: agent uses training-data knowledge by default, you flag what needs verification.
 - Total recurring overhead per stage: ~60–90 minutes of human review.
 
 The numbers are estimates. Your project will land where it lands. If a tier's recurring overhead is consistently 2× the estimate after the first milestone, that's a signal to re-tier — not to push through.

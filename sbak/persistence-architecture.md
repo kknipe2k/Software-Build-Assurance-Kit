@@ -31,17 +31,17 @@
 │  • persistence-architecture.md       (this file — framework-level)  │
 │  • docs/identity.md                  (project identity)             │
 │  • docs/scope.md                     (phased milestone scope)       │
-│  • docs/gates.md                     (Standard+; gate matrix)       │
-│  • docs/style.md                     (Standard+; style + naming)    │
-│  • docs/gotchas.md                   (Standard+; running traps)     │
-│  • docs/adr/                         (Standard+; immut. once accept)│
-│  • prompts/PHASE-DOC-TEMPLATE.md     (Standard+; per-milestone)     │
-│  • prompts/RETROSPECTIVE-TEMPLATE.md (Standard+; per-stage shape)   │
-│  • prompts/SUMMARY-TEMPLATE.md       (Standard+; per-milestone)     │
+│  • docs/gates.md                     (Full; gate matrix)           │
+│  • docs/style.md                     (Full; style + naming)        │
+│  • docs/gotchas.md                   (Full; running traps)         │
+│  • docs/adr/                         (Full; immut. once accept)    │
+│  • prompts/PHASE-DOC-TEMPLATE.md     (Full; per-milestone)         │
+│  • prompts/RETROSPECTIVE-TEMPLATE.md (Full; per-stage shape)       │
+│  • prompts/SUMMARY-TEMPLATE.md       (Full; per-milestone)         │
 │  • .claude/settings.json             (Claude Code hook wiring)      │
 │  • .claude/hooks/session-start-read-first.cjs (auto-loads read-list) │
 │  • .claude/read-first-list*.txt      (work / verifier / orch lists) │
-│  • ORCHESTRATOR.md  (Standard+; orchestration sessions ONLY)        │
+│  • ORCHESTRATOR.md  (Full; orchestration sessions ONLY)            │
 └─────────────────────────────────────────────────────────────────────┘
                               ▲
                               │ (per-milestone authoring)
@@ -77,13 +77,13 @@
 
 **Key property:** every layer below reads from layers above. Layer 1+2 load on every session; Layer 3 loads when the milestone starts; Layer 4 is the working memory for one stage; Layer 5 is what survives the stage and feeds the next.
 
-**Tier-conditional Layer 2 contents.** Several Layer 2 files only exist in Standard or Full tiers (marked above). In Lite tier, the bootstrap doesn't generate `gates.md`, `style.md`, `gotchas.md`, ADR scaffolding, the prompt templates, or `gap-analysis.md` — the project runs from a smaller orientation set and uses `CHANGELOG.md` for the role those files would play. The `project-config.md` file is the source of truth for which Layer 2 files apply; sessions read its toggles and behave accordingly.
+**Tier-conditional Layer 2 contents.** Several Layer 2 files only exist at Full tier (marked above). In Lite tier, the bootstrap doesn't generate `gates.md`, `style.md`, `gotchas.md`, ADR scaffolding, the prompt templates, or `gap-analysis.md` — the project runs from a smaller orientation set and uses `CHANGELOG.md` for the role those files would play. The `project-config.md` file is the source of truth for which Layer 2 files apply; sessions read its toggles and behave accordingly.
 
 **The SessionStart hook.** `.claude/hooks/session-start-read-first.cjs` (Node; cross-platform) is the enforcement bridge between Layer 2 (where the read-first list is documented) and Layer 4 (where it must actually be loaded). The hook reads `.claude/role`, selects the matching read-first list (`work` / `verifier` / `orchestrator`), applies the `read_first_cap` toggle, and prints contents to stdout — Claude Code injects stdout as additional session context. This makes the read-first list deterministic instead of honor-system. The hook prints a verification stamp (`[read-first stamp] mode=<mode>, ...`) the agent should echo in its first response so the user can confirm the load happened.
 
 **The session-role state file — and its one-release alias-window.** The session role (work / verifier / orchestrator / refactor) is the bare token in `.claude/role`, written atomically by `scripts/set-mode.cjs`; this axis was renamed from `active-mode` to `role` so it no longer collides with the project-scoped `operating_mode` dial. During the alias-window — one release — the writer also writes the legacy `.claude/active-mode`, and every reader prefers `.claude/role` and falls back to the alias-window `.claude/active-mode` **only when `.claude/role` is absent**, so a project bootstrapped before the rename keeps resolving; a present-but-garbage `.claude/role` fails closed and does **not** fall through to the alias-window `.claude/active-mode` — an unresolved marker must never silently select the more permissive path. This alias-window ends **in the first release after v0.2.0** — v0.2.0 itself still performs the legacy `.claude/active-mode` write and the readers' fallback, which are retired then. Beyond the policing machinery (the `role_terms` value class + its baseline) and the `state_file_legacy` manifest fact, this note is the only place in living documentation the legacy name legitimately appears.
 
-**Two session types (Standard+).** The agent runs as an **orchestration session** (governed by `ORCHESTRATOR.md` + `CLAUDE.md`; authors Phase docs/ADRs, adjudicates, routes findings, runs PRs) or a **build/stage session** (governed by `CLAUDE.md` + its §X.5 stage prompt; executes one stage). They never share a session; the human is the conduit. `ORCHESTRATOR.md` loads only in `orchestrator` mode and is never read by a build/verifier/closeout session — the schema validator enforces that stage prompts never reference it. At Lite tier the two roles collapse into one session and `ORCHESTRATOR.md` is not generated.
+**Two session types (Full).** The agent runs as an **orchestration session** (governed by `ORCHESTRATOR.md` + `CLAUDE.md`; authors Phase docs/ADRs, adjudicates, routes findings, runs PRs) or a **build/stage session** (governed by `CLAUDE.md` + its §X.5 stage prompt; executes one stage). They never share a session; the human is the conduit. `ORCHESTRATOR.md` loads only in `orchestrator` mode and is never read by a build/verifier/closeout session — the schema validator enforces that stage prompts never reference it. At Lite tier the two roles collapse into one session and `ORCHESTRATOR.md` is not generated.
 
 ---
 

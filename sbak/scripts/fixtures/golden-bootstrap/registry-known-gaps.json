@@ -1,0 +1,15 @@
+{
+  "_doc": "The dereference-registry known-gaps baseline (M26.A). Same discipline as known-gaps.json, and the same non-negotiable: a gap IN this baseline is reported KNOWN and the run still exits 0; a gap OUTSIDE it exits 1; a baseline entry that is NO LONGER observed (phantom) also exits 1, so a fixed gap cannot rot here unnoticed. THE BASELINE IS EMPTIED BY ADDING THE MISSING GENERATION ROWS — NEVER by loosening the derivation. Anyone tempted to add an entry to make a red run green: that is the exact move that let cluster C1 ship a blocks-any-release finding through a green bake. Both entries below were FOUND BY THIS CHECK on its first run, not known beforehand.",
+  "gaps": [
+    {
+      "artifact": "docs/sources/registry.md",
+      "spec_item": "M26.A-found / research_publish",
+      "why": "validate-sources.cjs dereferences it as DEFAULT_REGISTRY (project-relative, fail-closed) and templates/sources-registry.md already exists — KF-01's exact shape, one operating mode over. It has no generation row because the row schema cannot express an operating_mode conditional: applicable() knows tiers/locus/deliverable only, so a row added today would render into every greenfield project. Closing it needs a renderer change, which M26.A's scope discipline puts outside a rows stage."
+    },
+    {
+      "artifact": "docs/paper",
+      "spec_item": "M26.A-found / research_publish",
+      "why": "validate-sources.cjs's DEFAULT_PAPER_ROOT. Distinct from the registry above: a paper is AUTHORED content, not a generated artifact, so the correct close is probably a directory the mode's scaffold creates (with templates/PAPER-TEMPLATE.md as a seed) rather than a plain generation row. Recorded so the judgement is made deliberately instead of by silence."
+    }
+  ]
+}

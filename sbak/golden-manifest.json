@@ -1,10 +1,10 @@
 {
-  "note": "Reference calibration: greenfield / hybrid locus / non-web. Rendered by scripts/golden-bootstrap.cjs - DERIVED, do not hand-edit; regenerate with: node scripts/golden-bootstrap.cjs --write-manifest. PLACEHOLDER-SCAN SCOPE (deliberate narrowing, honest locus): only render:wiring rows - .claude/settings.json, scripts/verify-local.cjs, .githooks/pre-commit, .github/workflows/pr-smoke.yml, .github/workflows/release.yml, LICENSE - are scanned for a surviving {{PLACEHOLDER}} and MUST be zero (these are the deterministic files the bootstrap is contractually required to fill from discovery answers - e.g. LICENSE from the owner-supplied holder/year/type). render:copy form/doc templates (identity, scope, the prompts/ retrospective + phase-doc templates, etc.) ship VERBATIM with their {{placeholders}} intact - they are filled DURING the build, not at scaffold time (the scaffold-not-interview honest locus, mirroring bake-and-test). ENCODING (UTF-8 no-BOM + mojibake) is scanned on EVERY rendered file regardless of render mode.",
+  "note": "Reference calibration: greenfield / hybrid locus / non-web. Rendered by scripts/golden-bootstrap.cjs - DERIVED, do not hand-edit; regenerate with: node scripts/golden-bootstrap.cjs --write-manifest. PLACEHOLDER-SCAN SCOPE (deliberate narrowing, honest locus): only render:wiring rows - .claude/settings.json, scripts/verify-local.cjs, .githooks/pre-commit, .github/workflows/pr-smoke.yml, .github/workflows/release.yml, LICENSE - are scanned for a surviving {{PLACEHOLDER}} and MUST be zero (these are the deterministic files the bootstrap is contractually required to fill from discovery answers - e.g. LICENSE from the owner-supplied holder/year/type). render:copy form/doc templates (identity, scope, the prompts/ retrospective + phase-doc templates, etc.) ship VERBATIM with their {{placeholders}} intact - they are filled DURING the build, not at scaffold time (the scaffold-not-interview honest locus, mirroring bake-inheritance). ENCODING (UTF-8 no-BOM + mojibake) is scanned on EVERY rendered file regardless of render mode.",
   "tiers": {
     "full": {
       "counts": {
-        "rendered": 69,
-        "rows": 69,
+        "rendered": 108,
+        "rows": 108,
         "unrendered": 0
       },
       "files": [
@@ -22,7 +22,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "1fbea326fb98b968ec3e19adb022873ca3639326e8249560c6ad5c67b889ceab"
+          "sha256": "c801aa66215772080a9fd98dc656213e0992fc4aea58898eb79ffec04c33ba00"
         },
         {
           "bom": false,
@@ -54,7 +54,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5d7747250081ac45351d55064ca3e485ca84e96216494d2a15f4a55595889552"
+          "sha256": "7c3304ac7abf39a47633a44eee8c8f0220609eb0fb6f77234ae90bc3b283c6a1"
         },
         {
           "bom": false,
@@ -62,7 +62,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
+          "sha256": "125ab3698f88fee8b3799f6a473d540d4fef24b149990897cf70bc0f88d3c4f4"
         },
         {
           "bom": false,
@@ -70,7 +70,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
+          "sha256": "1271c50c24f7771b6c7be5fef051a35abad825bd4ca3be0acbcf858f8b299a20"
         },
         {
           "bom": false,
@@ -78,7 +78,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
+          "sha256": "5f2eb0ab9796f189253c06ee463a8b8c9b6de8feca82e9baaed7b1c3dd7f5259"
         },
         {
           "bom": false,
@@ -86,7 +86,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
+          "sha256": "ea36e0b75b7f6854901f1146172996e1b80d907616c6c476fa13a341c8911ea3"
         },
         {
           "bom": false,
@@ -142,7 +142,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
+          "sha256": "5e198ae5331632bb1e375affed7e0c19a002df5638cb8e2dac8b1d7c265db228"
         },
         {
           "bom": false,
@@ -150,7 +150,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
+          "sha256": "4385c7e3fde8634188726b5c2149fb44131d4d1e5eb503645dfbec00a507d2ab"
         },
         {
           "bom": false,
@@ -159,14 +159,6 @@
           "placeholders": [],
           "rendered": true,
           "sha256": "45970b5b29f086fda3a4a3b5782d8a421d789a97f81b61d2c7dd200dd3feac3d"
-        },
-        {
-          "bom": false,
-          "file": ".github/workflows/append-only-ledger.yml",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "b10621e49dc97a80098ad25f9ad3779ddb21dfb0b8b01d1c555e6e660de826a7"
         },
         {
           "bom": false,
@@ -182,7 +174,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "51edf56998446b97f9f7ad5dd41fc4826772dfffa5333357be3046aa9f048a0e"
+          "sha256": "454221a8ef37791092eed3aa0ecec31ee303c374afc39a4eee009470b51ee63f"
         },
         {
           "bom": false,
@@ -190,7 +182,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "f2efdb213b38f34dc3c8e8b4296459b069096531f846bd7d939364860aa9496e"
+          "sha256": "4f3a8d56b03228b7cc1caba64dc80472b4c831a46f030ff28b150cd258aa966d"
         },
         {
           "bom": false,
@@ -198,7 +190,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
+          "sha256": "7dd54bdf99fef7ed9c8d57fae3585db72a4189b2b346b93d4fd4d822a9abf91e"
         },
         {
           "bom": false,
@@ -222,7 +214,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
+          "sha256": "6e8be6ef8062fc1a6d70701e3aadb74733f0be3aa14bb4e76c2eb05ee7f577f5"
         },
         {
           "bom": false,
@@ -238,7 +230,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "114d330d3ecca3ffca5f77abdd29a124ba8dd0e58633c853973d617492dc0ea1"
+          "sha256": "1ed4b67be5bd9fd558d6b6107ac0739ba19b41ce508122de4d7c66b33b3936af"
+        },
+        {
+          "bom": false,
+          "file": "README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "7ff6a222d2771655102934367d5718bef48d3a2eed9f5f9e4c127fe6ce2ad837"
         },
         {
           "bom": false,
@@ -262,7 +262,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
+          "sha256": "4f7e27a63c65cfb1fa5cf42d3b0796af4e6cb1fe9def016bb467e52b72f68875"
         },
         {
           "bom": false,
@@ -270,7 +270,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "4f612a945596de5c4c352c7d1ca0ac3f1aa1e0734a7f0326e799b8bd28a09ddd"
+          "sha256": "3b677ebe5dac309295544d258414a68836bc689e1f9290b904b9f60f369ac1cc"
         },
         {
           "bom": false,
@@ -294,7 +294,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "06a76e2156e1cd4fc299ca924b06797ae87d1f4c040f7cfb95b1db7e9c062486"
+          "sha256": "9a75578243ea2029c12fd3242a2d75bad488c52b19184261097c45853bd92333"
         },
         {
           "bom": false,
@@ -322,11 +322,27 @@
         },
         {
           "bom": false,
+          "file": "docs/outcome-challenge.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a21d229b3f612ddbee57149e498e93c6a635c70a5fdea8eb51804db29149e5ab"
+        },
+        {
+          "bom": false,
+          "file": "docs/release-state.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "f2e9b112e77ea6229c2aa63a26a07ed6160c90cf25079b6f28d6acb8d64537b8"
+        },
+        {
+          "bom": false,
           "file": "docs/scope.md",
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
+          "sha256": "1f694dac21365872b1566e0582c42650163a7a3ca5c99ac60f47d7d658e2bdc8"
         },
         {
           "bom": false,
@@ -334,7 +350,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c56dae4a3915eefe262244d0ad4037e3558362120dd1bf830690db437c2ac18f"
+          "sha256": "3fc7977987fed0f44638293474450b904685af1ed84a52197f911bf07d889efa"
         },
         {
           "bom": false,
@@ -358,7 +374,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
+          "sha256": "9a178b3bc34d0abff9db2bbc2fa7e889ec3a6ef2f6b0bfe6ad909dd91fb2936d"
         },
         {
           "bom": false,
@@ -366,7 +382,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a9fda93281a740925b45342c93133c74cf70238e770aa18f45e4f12ded6d82b6"
+          "sha256": "cec1dbaf86a66be6194993b422f0cde9c56ac6a9d7af1df973037ddacbbcdca8"
         },
         {
           "bom": false,
@@ -390,7 +406,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "6eca028f19760e36fe3c4fad819d21f63eabf9f1862761d6f1a78a417950f4cf"
+          "sha256": "9928c2e673d48408d1f1a0a713a5faef6f0dbdd16bb65abef92ac183c1fe2136"
         },
         {
           "bom": false,
@@ -418,6 +434,190 @@
         },
         {
           "bom": false,
+          "file": "prompts/calibration/README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "f0bfffd668952345938172e44e801ab3bdec13cdb575d089c51de95ebae63f4e"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/assert-a-constant.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "7ffba65a4efeeed2f5ef537975b6a4d1fcf4636e366248b59701bf77fac8510d"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/bare-startswith.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "55e66747b8fee491495198b6e12cb53879d9bb8f0315466929b4f9936407fdbf"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/dropped-fence-caveat.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "88bf21daa6f9f5853fe1af0e6d2b0f73387af43cbe446f040c128f5817d8dc16"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/false-na.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "42d48a3c9bace520984a01f0f4d9a33c6fc4fafd63389e9b13139935976669f6"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/forged-ledger.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "1df24e82deb28daa3e62d0d05effff5a2aa7c98ee54d22995ea305b84e74767b"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/gate-contract-skipped.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "586ba352587d2132578f9481dd7905285544d3fa683f4388c711472481182587"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/non-covering-test.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "4af01fbf152ba2bd485567c0395aac17f73740fa9058afe569752b1ed3efe6be"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/prose-dodge-count.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "d557f29b42820e9512d033c90b37996f1cf0d493c5e953b0e1ec4347733e8f5c"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/stub-passes-assembled.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "20d518ab52cae9cbaced3be1a29687e8f1dba9fbe0e4d5af855548f1804f6929"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/toy-path-confinement.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "60e4e3684b3446cd8dedd05e3cf2328f177dfd0c5f2504f88d93a629966a9c70"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/fixtures/under-declared-trigger.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "21a8013506b092df02edb37b17122404e766582a5920ecfb5166bb80c6c9b88c"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/assert-a-constant.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e2dacdb7cbe06fabb36085be88e9353872cf36ea5d35f8ff0b5490ccf5e581e4"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/bare-startswith.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "71653b186d0f48e77ca70cbead2d25f1edbccef6db086508771d765372d907d0"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/dropped-fence-caveat.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "cd82760a1ec7f306b30da952e7938b06be5264741b8e3095132b7cbcbde963f5"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/false-na.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a2036fe8bdc3e322703c4bbfb4c0f4b4992e6b1c2b07b3fd2c05cef54d0c7ceb"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/forged-ledger.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "eb81b374ec2a19979f3b8ff00dd38886d31a5f2a07e45252569173dac7517647"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/gate-contract-skipped.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e23869fa35b5090376a45fc7a1181c545287e0bfef01dbd7bc9e89c6b8f0864a"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/non-covering-test.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ea17b8951e3af116bfb72838d0144937c6f478f52b6b3d105453056f0bc59241"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/prose-dodge-count.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5508f69b7b878b95a3ec96d3f8d66b5f42aab472d2c0a357f4b8fffc23a5a6ae"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/stub-passes-assembled.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "ce6122cad3ef597246e0f88265154aafbab3dd1115c3e5261b8e75e35c74c2d1"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/toy-path-confinement.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a6c7e92d7bf71dc837bc9a6ccb043758297b119e56a52bec4a36baa0956307d3"
+        },
+        {
+          "bom": false,
+          "file": "prompts/calibration/labels/under-declared-trigger.label.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "19187e233f33b335e2d0556195dfba9f81707e60bf62357cb408fbd795e4d3cf"
+        },
+        {
+          "bom": false,
           "file": "retrospectives/README.md",
           "mojibake": false,
           "placeholders": [],
@@ -430,7 +630,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
+          "sha256": "cf386b13ca33e1d4f038f954297505c9e19e441ed33a69d42af5cc98ccdd2986"
         },
         {
           "bom": false,
@@ -438,7 +638,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
+          "sha256": "defef6662ae3671f74c267d02cf0de9af65915aff1de961b8d84756cbd09bf88"
         },
         {
           "bom": false,
@@ -446,7 +646,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
+          "sha256": "bef2f9d77d4648615a00430ff93443204a9152be48c2971dd2ed9929b3acb549"
         },
         {
           "bom": false,
@@ -454,7 +654,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
+          "sha256": "21480b6635a18bed2e0579d8b1af0758a40ee16aeac6b2abc1cb46b0a4b52fc6"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/hook-chmod.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "16076c44a51cda46288dfd8dc84219f76f7afd87825c0a86db34898b6778420b"
         },
         {
           "bom": false,
@@ -462,7 +670,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
+          "sha256": "27920a5daeb8372855e52c9c8b5db5ba5b25e4f9a7a6e1c9021c8a047b9409ea"
         },
         {
           "bom": false,
@@ -470,7 +678,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
+          "sha256": "723cb6a2bf5e28d1a1d8760d856e76da36462c6050ca2836de623c50660be938"
         },
         {
           "bom": false,
@@ -478,7 +686,23 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
+          "sha256": "285b72410979fd8ddd4cb1f70cbd1c23e0b7ac445da346581ca6b460c9f0ab44"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/settings-merge.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "937d85a63cf6a2c6c9ebd80039c627164af27eeb496fe42b7608288c4d687e17"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/stage-structure.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "17e72204f0448019ba06a1e7e092b4fae676f7bfb6b9a518f6065382ad43c424"
         },
         {
           "bom": false,
@@ -486,7 +710,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
+          "sha256": "8918759e893fde3d5bc54bac4b72ba136dcbc8f974379b92004251d5b7940afb"
         },
         {
           "bom": false,
@@ -494,7 +718,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
+          "sha256": "08728c77bb5a15d31b454d18d850f1dd66af3f9fb14606e29e705fea745beda9"
         },
         {
           "bom": false,
@@ -502,7 +726,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
+          "sha256": "192f60fb9ad452e2cf03b64c2de1933a3ab7011ab3964325a836778f579518eb"
         },
         {
           "bom": false,
@@ -510,7 +734,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
+          "sha256": "8341be14dbc75e4d3cae66a253b5c98f477086e691efee7fc08b087b3858150e"
         },
         {
           "bom": false,
@@ -518,7 +742,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
+          "sha256": "f1a52eb54566f8af958edb365908330ccc38d9a5a0313f2265ce9a3000ec5216"
         },
         {
           "bom": false,
@@ -526,7 +750,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
+          "sha256": "13453f80dabcc367c39e8a380fefd2d826aab4a888823e8484f4d5121780870e"
         },
         {
           "bom": false,
@@ -534,7 +758,63 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "004f2d3d121d532964cea48f37cfd197a36ceea1fc66931dca116e3f81406460"
+          "sha256": "c3c05fa7c1c60606c26964577ee10b7319f2e8093ff75c03bc509f8d41e4d1e7"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-calibration.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "92023a8040af87c4e444c56a901375d70e29155ce89cc85061ceda547facb2de"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-carry-forward.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "bf196570d707bf08131d2b7e0f453ddf60810f7734a717c1fb2f816e7b007c0a"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-destructive-op.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "813364a52007d4385e9d3e3244b697601b77a22de3a62703c6674007cf713b64"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-operating-mode.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "feed062721e9ff4c0be39c3dc6c01f3de78a7cc450169ebbb211d8cb9a1b8fdd"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-outcome-challenge.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5a32d5a61d9987d432e4f685e3156ae4015a6e830ba1e5c4a0881da2a78524c5"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-reconciliation.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "e067881a1e2fdc774713124a57d4dea5732b71300f802c35377c2f086bdeb34f"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-release-readiness.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "c5b99872ef8e84d61d0e2db2f56590df0c78e77d47af6b2448ec0b03c9bda426"
         },
         {
           "bom": false,
@@ -542,7 +822,31 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "db7b3f825516ce701a494721f095b512701186b6a119b4d521518c5361adb3c9"
+          "sha256": "5aab02680033d98a062f82aa20e9bcd40df4d8ee7be988c2997ae928a2d12952"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-risk-escalation.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "0e60fd778a2de12b13eaae4feb56ded7a4f959092cc89a255888c27e01bde7db"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-risk-matrix.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "badbe36747093d0d8cf484074058ba422300dbc54a63cb130bbd375228147654"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-spec-examples.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a22d3c4ad5dbdf8a85d74b4031bf9171315bb8d564342cd578903e27f5589c57"
         },
         {
           "bom": false,
@@ -550,7 +854,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
+          "sha256": "db132b2776895c272c5bec9f29ba3c7c5cdaef399dc3398aecf10e19a1cb0954"
         },
         {
           "bom": false,
@@ -558,15 +862,23 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "823d6e7d99c27881c6290474b6cfd90ff4afaf9bce7cc34c6bb6963d94fb21cf"
+          "sha256": "f71d63ef5e25d574d032b541c96b66f2d492192c4fc50a9bb01ee9cf8397a091"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-transition.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "9bf5da018f86f67377322ebaea24f197c95c834c43068c59bf62c0b14a5cf821"
         }
       ],
       "tier": "full"
     },
     "lite": {
       "counts": {
-        "rendered": 36,
-        "rows": 36,
+        "rendered": 44,
+        "rows": 44,
         "unrendered": 0
       },
       "files": [
@@ -576,7 +888,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
+          "sha256": "125ab3698f88fee8b3799f6a473d540d4fef24b149990897cf70bc0f88d3c4f4"
         },
         {
           "bom": false,
@@ -584,7 +896,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
+          "sha256": "1271c50c24f7771b6c7be5fef051a35abad825bd4ca3be0acbcf858f8b299a20"
         },
         {
           "bom": false,
@@ -592,7 +904,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
+          "sha256": "5f2eb0ab9796f189253c06ee463a8b8c9b6de8feca82e9baaed7b1c3dd7f5259"
         },
         {
           "bom": false,
@@ -600,7 +912,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
+          "sha256": "ea36e0b75b7f6854901f1146172996e1b80d907616c6c476fa13a341c8911ea3"
         },
         {
           "bom": false,
@@ -656,7 +968,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
+          "sha256": "87556f6960b26499c014b38abc7647d9e62014d00d0c26d51211036f08ad55bf"
         },
         {
           "bom": false,
@@ -664,7 +976,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
+          "sha256": "4385c7e3fde8634188726b5c2149fb44131d4d1e5eb503645dfbec00a507d2ab"
         },
         {
           "bom": false,
@@ -680,7 +992,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
+          "sha256": "7dd54bdf99fef7ed9c8d57fae3585db72a4189b2b346b93d4fd4d822a9abf91e"
         },
         {
           "bom": false,
@@ -704,7 +1016,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
+          "sha256": "6e8be6ef8062fc1a6d70701e3aadb74733f0be3aa14bb4e76c2eb05ee7f577f5"
         },
         {
           "bom": false,
@@ -716,11 +1028,19 @@
         },
         {
           "bom": false,
+          "file": "README.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "7ff6a222d2771655102934367d5718bef48d3a2eed9f5f9e4c127fe6ce2ad837"
+        },
+        {
+          "bom": false,
           "file": "docs/backlog.md",
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
+          "sha256": "4f7e27a63c65cfb1fa5cf42d3b0796af4e6cb1fe9def016bb467e52b72f68875"
         },
         {
           "bom": false,
@@ -732,11 +1052,19 @@
         },
         {
           "bom": false,
+          "file": "docs/outcome-challenge.md",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a21d229b3f612ddbee57149e498e93c6a635c70a5fdea8eb51804db29149e5ab"
+        },
+        {
+          "bom": false,
           "file": "docs/scope.md",
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
+          "sha256": "1f694dac21365872b1566e0582c42650163a7a3ca5c99ac60f47d7d658e2bdc8"
         },
         {
           "bom": false,
@@ -744,7 +1072,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
+          "sha256": "9a178b3bc34d0abff9db2bbc2fa7e889ec3a6ef2f6b0bfe6ad909dd91fb2936d"
         },
         {
           "bom": false,
@@ -752,7 +1080,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
+          "sha256": "cf386b13ca33e1d4f038f954297505c9e19e441ed33a69d42af5cc98ccdd2986"
         },
         {
           "bom": false,
@@ -760,7 +1088,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
+          "sha256": "defef6662ae3671f74c267d02cf0de9af65915aff1de961b8d84756cbd09bf88"
         },
         {
           "bom": false,
@@ -768,7 +1096,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
+          "sha256": "bef2f9d77d4648615a00430ff93443204a9152be48c2971dd2ed9929b3acb549"
         },
         {
           "bom": false,
@@ -776,7 +1104,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
+          "sha256": "21480b6635a18bed2e0579d8b1af0758a40ee16aeac6b2abc1cb46b0a4b52fc6"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/hook-chmod.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "16076c44a51cda46288dfd8dc84219f76f7afd87825c0a86db34898b6778420b"
         },
         {
           "bom": false,
@@ -784,7 +1120,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
+          "sha256": "27920a5daeb8372855e52c9c8b5db5ba5b25e4f9a7a6e1c9021c8a047b9409ea"
         },
         {
           "bom": false,
@@ -792,7 +1128,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
+          "sha256": "723cb6a2bf5e28d1a1d8760d856e76da36462c6050ca2836de623c50660be938"
         },
         {
           "bom": false,
@@ -800,7 +1136,23 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
+          "sha256": "285b72410979fd8ddd4cb1f70cbd1c23e0b7ac445da346581ca6b460c9f0ab44"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/settings-merge.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "937d85a63cf6a2c6c9ebd80039c627164af27eeb496fe42b7608288c4d687e17"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/stage-structure.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "17e72204f0448019ba06a1e7e092b4fae676f7bfb6b9a518f6065382ad43c424"
         },
         {
           "bom": false,
@@ -808,7 +1160,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
+          "sha256": "8918759e893fde3d5bc54bac4b72ba136dcbc8f974379b92004251d5b7940afb"
         },
         {
           "bom": false,
@@ -816,7 +1168,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
+          "sha256": "08728c77bb5a15d31b454d18d850f1dd66af3f9fb14606e29e705fea745beda9"
         },
         {
           "bom": false,
@@ -824,7 +1176,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
+          "sha256": "192f60fb9ad452e2cf03b64c2de1933a3ab7011ab3964325a836778f579518eb"
         },
         {
           "bom": false,
@@ -832,7 +1184,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
+          "sha256": "8341be14dbc75e4d3cae66a253b5c98f477086e691efee7fc08b087b3858150e"
         },
         {
           "bom": false,
@@ -840,7 +1192,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
+          "sha256": "f1a52eb54566f8af958edb365908330ccc38d9a5a0313f2265ce9a3000ec5216"
         },
         {
           "bom": false,
@@ -848,7 +1200,31 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
+          "sha256": "13453f80dabcc367c39e8a380fefd2d826aab4a888823e8484f4d5121780870e"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-operating-mode.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "feed062721e9ff4c0be39c3dc6c01f3de78a7cc450169ebbb211d8cb9a1b8fdd"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-outcome-challenge.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "5a32d5a61d9987d432e4f685e3156ae4015a6e830ba1e5c4a0881da2a78524c5"
+        },
+        {
+          "bom": false,
+          "file": "validators/validate-spec-examples.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "a22d3c4ad5dbdf8a85d74b4031bf9171315bb8d564342cd578903e27f5589c57"
         },
         {
           "bom": false,
@@ -856,564 +1232,10 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
+          "sha256": "db132b2776895c272c5bec9f29ba3c7c5cdaef399dc3398aecf10e19a1cb0954"
         }
       ],
       "tier": "lite"
-    },
-    "standard": {
-      "counts": {
-        "rendered": 68,
-        "rows": 68,
-        "unrendered": 0
-      },
-      "files": [
-        {
-          "bom": false,
-          "file": ".claude/commands/approve-red.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "cda24f2f51598cd0edfc47fd5699c4d065bf195f8d437a6721af8c24f9fded0d"
-        },
-        {
-          "bom": false,
-          "file": ".claude/commands/closeout.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "1fbea326fb98b968ec3e19adb022873ca3639326e8249560c6ad5c67b889ceab"
-        },
-        {
-          "bom": false,
-          "file": ".claude/commands/on-track.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "e43bccc6361c4970d48174a81e3f4a39f3c3d87ef8aebb23c4821666654779bc"
-        },
-        {
-          "bom": false,
-          "file": ".claude/commands/refactor.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "2c5e0c035665e6c9572c57756a9861e8fb8e1ce4e7f549d7f77a6375da8d5d57"
-        },
-        {
-          "bom": false,
-          "file": ".claude/commands/stage.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "6d43faa3728635a6d0e2a86ba9c663aad21a494faeebeec95f6c2e0737d97abf"
-        },
-        {
-          "bom": false,
-          "file": ".claude/commands/verify.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "5d7747250081ac45351d55064ca3e485ca84e96216494d2a15f4a55595889552"
-        },
-        {
-          "bom": false,
-          "file": ".claude/hooks/pretooluse-red-gate.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "61c7d724967d6c17dac3f8f18133f56b58555fce1de87af35d03218ded57136d"
-        },
-        {
-          "bom": false,
-          "file": ".claude/hooks/receipts-lifecycle.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "8807cd95e29bd8df4176aa3fd53ec8e9612bbb5df8c5b649c8ead11f07c7acdc"
-        },
-        {
-          "bom": false,
-          "file": ".claude/hooks/session-start-read-first.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "5d91d30a53119b0e226c5ea80e3ce304ea6e700c3c4b3d327ff06f2da9407c68"
-        },
-        {
-          "bom": false,
-          "file": ".claude/hooks/user-prompt-submit-mode-check.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "30de4efe30833102501eaed1c304f8ce1d7cf970e2d2097b72d04fe8eabc5da9"
-        },
-        {
-          "bom": false,
-          "file": ".claude/read-first-list-orchestrator.txt",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "89d87df370e5da1811e159daaee2b1b000aaf1b856c9466c9e366aa138babec6"
-        },
-        {
-          "bom": false,
-          "file": ".claude/read-first-list-refactor.txt",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "a441acb62f80fe7135d8b9a2bdd21d2fdc4ef5305d2ea64e9d162d0870d63c59"
-        },
-        {
-          "bom": false,
-          "file": ".claude/read-first-list-verifier.txt",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "3d2afb8d601d9be9521420145714320ebc595e17b7047ba08fb5743ff08fd0cf"
-        },
-        {
-          "bom": false,
-          "file": ".claude/read-first-list.txt",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "ec67619e963d0adb6e0002840038fb7d02141ace1a8218259b3241d45a3be304"
-        },
-        {
-          "bom": false,
-          "file": ".claude/settings.json",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "dd84d3058bb01f56995445bc7e8229ba6e5b3018645a958672af4c6cc5572391"
-        },
-        {
-          "bom": false,
-          "file": ".gitattributes",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "24dbd9f4c99605c2672c8a832e2621620db0c68a7d8b8518bf4f80f788323511"
-        },
-        {
-          "bom": false,
-          "file": ".githooks/pre-commit",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "bd5c136a5806fadb372aaec3979d2de25a059ae0c4e0dffd889c72ad29e0f18a"
-        },
-        {
-          "bom": false,
-          "file": ".githooks/pre-push",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "61544099e36c2ca5caf985e9260ce57c45d2a694fbccd60091e381ff77e26377"
-        },
-        {
-          "bom": false,
-          "file": ".github/copilot-instructions.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "45970b5b29f086fda3a4a3b5782d8a421d789a97f81b61d2c7dd200dd3feac3d"
-        },
-        {
-          "bom": false,
-          "file": ".github/workflows/pr-smoke.self-hosted.yml.example",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "c1a87ae484ba9d810b434ea9d2bc224329a8602b34b4fa5debbdd7b2881d76da"
-        },
-        {
-          "bom": false,
-          "file": ".github/workflows/pr-smoke.yml",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "51edf56998446b97f9f7ad5dd41fc4826772dfffa5333357be3046aa9f048a0e"
-        },
-        {
-          "bom": false,
-          "file": ".github/workflows/release.yml",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "f2efdb213b38f34dc3c8e8b4296459b069096531f846bd7d939364860aa9496e"
-        },
-        {
-          "bom": false,
-          "file": ".github/workflows/validate-stage-prompts.yml",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "8201341297f526735407df93fef30e4f87d8b16574d878dc9de1c2212a5f08c8"
-        },
-        {
-          "bom": false,
-          "file": ".gitignore",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "19207eea4daad1eb249e411b840223fed2118cc5544d7640298f779f64f36192"
-        },
-        {
-          "bom": false,
-          "file": "CHANGELOG.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        },
-        {
-          "bom": false,
-          "file": "CLAUDE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "4347c38b9ee4a0fe2213c1e4c426a2526d6686f8400e34c507a14bd0347842dd"
-        },
-        {
-          "bom": false,
-          "file": "LICENSE",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "5eedb0f584c3e301f0f0851d56c8637f6421f10ee5652868606a29e875d19335"
-        },
-        {
-          "bom": false,
-          "file": "ORCHESTRATOR.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "114d330d3ecca3ffca5f77abdd29a124ba8dd0e58633c853973d617492dc0ea1"
-        },
-        {
-          "bom": false,
-          "file": "docs/adr/0000-template.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "d762467feef2584107b446b2e049122e930764c63b2b7fafb2c0501155865e0a"
-        },
-        {
-          "bom": false,
-          "file": "docs/app-map.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "0171e297c0a20fbda89d455dda15c1d73bebd8ef0706e692e3819ce11fd5f047"
-        },
-        {
-          "bom": false,
-          "file": "docs/backlog.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "696107eedf8b981e3a9ac83aaee325f1b165fe691a5bbd8daa01e946cf1edd57"
-        },
-        {
-          "bom": false,
-          "file": "docs/build-prompts/README.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "4f612a945596de5c4c352c7d1ca0ac3f1aa1e0734a7f0326e799b8bd28a09ddd"
-        },
-        {
-          "bom": false,
-          "file": "docs/consultations.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "51a23e86e9bd236c0fd2636357e1cd88554c31110d4b15db94f8088b9d051632"
-        },
-        {
-          "bom": false,
-          "file": "docs/gap-analysis.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "22b52c61b742998968a8a68ec22937be19b6c120e910a77a5a47db1a4b9eb98e"
-        },
-        {
-          "bom": false,
-          "file": "docs/gates.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "06a76e2156e1cd4fc299ca924b06797ae87d1f4c040f7cfb95b1db7e9c062486"
-        },
-        {
-          "bom": false,
-          "file": "docs/gotchas.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "c6d5ec5a06a5acf130d8e8fba5f0816a55680f2bacdd1862e2fbfd32363b1066"
-        },
-        {
-          "bom": false,
-          "file": "docs/identity.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "6ea63a1108323922f4d5df3113bb335c2feb589eda9099cfc5ba798c94bfc6a8"
-        },
-        {
-          "bom": false,
-          "file": "docs/off-track-log.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "1287c462e443222a851b39b2bf6524dea5bc31e3a7ddb4bf774ef1dbef6329a4"
-        },
-        {
-          "bom": false,
-          "file": "docs/scope.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "ad0c72e774aafe342483070ce52b8f066fe3b018be9217b8cb981a6d63d36f85"
-        },
-        {
-          "bom": false,
-          "file": "docs/sessions.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "c56dae4a3915eefe262244d0ad4037e3558362120dd1bf830690db437c2ac18f"
-        },
-        {
-          "bom": false,
-          "file": "docs/style.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "8eaf1bbcaf552e7566b228f46a4a77c1503d610b82d4c894044ae554670f28a1"
-        },
-        {
-          "bom": false,
-          "file": "docs/tech-debt.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "14f0dd94cae7a35501101018cc22bd292d2d98b24ff18ffcc85ae1d785880ca0"
-        },
-        {
-          "bom": false,
-          "file": "project-config.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "e5c0bafcdc40a5394dbc72ebe85d092c05746af4cd4780d749a503b81642b725"
-        },
-        {
-          "bom": false,
-          "file": "prompts/PHASE-DOC-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "a9fda93281a740925b45342c93133c74cf70238e770aa18f45e4f12ded6d82b6"
-        },
-        {
-          "bom": false,
-          "file": "prompts/REFACTOR-FINDINGS-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "cd6f6966bb2c04ffb72b0ae12e0e9ef3bcdfff9018417d3ac19f824b1ebcb676"
-        },
-        {
-          "bom": false,
-          "file": "prompts/REFACTOR-RETROSPECTIVE-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "200b5ccc6816904a04ab1db05bd9e9e2305d58d933ea0685fce387eccb05af28"
-        },
-        {
-          "bom": false,
-          "file": "prompts/RETROSPECTIVE-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "6eca028f19760e36fe3c4fad819d21f63eabf9f1862761d6f1a78a417950f4cf"
-        },
-        {
-          "bom": false,
-          "file": "prompts/SUMMARY-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "c9cc514c2576b2ae28ae3bd109885771e28292d9084725292efb19454c4a383f"
-        },
-        {
-          "bom": false,
-          "file": "prompts/VERIFIER-FINDINGS-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "4d6a79dcde394e2e03ec0f431433cadc9410c3bc5aa86486a5daccbf4620f91e"
-        },
-        {
-          "bom": false,
-          "file": "prompts/VERIFIER-RETROSPECTIVE-TEMPLATE.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "a38a5129dcffc994558002b7cb5e380be3f49605b9a34e17c5f487c3b35d3eb1"
-        },
-        {
-          "bom": false,
-          "file": "retrospectives/README.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "028b078e523d9b99ba19751ab3ab3e5dc25b811a69feec8030148543eb5efd14"
-        },
-        {
-          "bom": false,
-          "file": "scripts/approve-red.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "26f2e047a9e5f613edaac1a9845fe34d5f090947ed95d94dd7164df53a580433"
-        },
-        {
-          "bom": false,
-          "file": "scripts/build-receipts.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "32f48920f0a6def8d09e01a8be331cb459b376c806c729474f337b39e9153228"
-        },
-        {
-          "bom": false,
-          "file": "scripts/install-hooks.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "9379de71b71796a5b4a1a325c3aae70bc7dc41f7006f42eaa9732075361a227f"
-        },
-        {
-          "bom": false,
-          "file": "scripts/kit-update.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "491d836584fa73bd3c0639d0a4c65a92c0477cdd219c7f4287147e533d9daeb1"
-        },
-        {
-          "bom": false,
-          "file": "scripts/lib/receipts-collect.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "b1cc09254c315c2216b9646156221a36af0a1f84b165c9ac1cda059c97b01aa4"
-        },
-        {
-          "bom": false,
-          "file": "scripts/lib/receipts.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "30833be2349caf96b206b03ea72cd971cae5f7da0b1c45ec8ecd432ad9161824"
-        },
-        {
-          "bom": false,
-          "file": "scripts/lib/sandbox.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "fd4069d858ca860f155b88d5d221f8220946abf34e2fabcc7c5e7db1414df7b3"
-        },
-        {
-          "bom": false,
-          "file": "scripts/set-mode.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "823a3d7ff5b230b2363d1142178faa6955e1af3d94e373b5f67e7963ea9e7009"
-        },
-        {
-          "bom": false,
-          "file": "scripts/smoke-project.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "adac3e275459db48e172ac060fe32fea44d986296f1cee2e7308521635a7efe7"
-        },
-        {
-          "bom": false,
-          "file": "scripts/stage-active.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "d1f85b8404dab455230f00b071a00c608dc26227acb941cae48b656be674fb30"
-        },
-        {
-          "bom": false,
-          "file": "scripts/verify-local.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "c5e125ff20bdfb9a0141f53789e930655af0c07767cca79534a521acb390a056"
-        },
-        {
-          "bom": false,
-          "file": "validators/README.md",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "64a557827e9f1435084f2147a1ba87933fc7d2fd36257efa00be42b8de3f4822"
-        },
-        {
-          "bom": false,
-          "file": "validators/lib/fenced-block.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "5fa56a7119c1ab0935af4dd8df956802565a58ed51631ab0341d913ba2a818a9"
-        },
-        {
-          "bom": false,
-          "file": "validators/validate-app-map.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "004f2d3d121d532964cea48f37cfd197a36ceea1fc66931dca116e3f81406460"
-        },
-        {
-          "bom": false,
-          "file": "validators/validate-retrospective.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "db7b3f825516ce701a494721f095b512701186b6a119b4d521518c5361adb3c9"
-        },
-        {
-          "bom": false,
-          "file": "validators/validate-stage-prompts.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "b2314c23af1832fac27742e6854d7b209f1b5a85c682f457c12ed51607aaf115"
-        },
-        {
-          "bom": false,
-          "file": "validators/validate-test-honesty.cjs",
-          "mojibake": false,
-          "placeholders": [],
-          "rendered": true,
-          "sha256": "823d6e7d99c27881c6290474b6cfd90ff4afaf9bce7cc34c6bb6963d94fb21cf"
-        }
-      ],
-      "tier": "standard"
     }
   }
 }

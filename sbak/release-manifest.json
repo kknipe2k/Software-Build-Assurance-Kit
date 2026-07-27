@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "1.0.0",
   "product": "Software Build Assurance Kit",
   "slug": "sbak",
   "buildFrom": "tag",
@@ -43,7 +43,7 @@
     { "src": "scripts/fixtures/entry-docs/", "dest": "sbak/scripts/fixtures/entry-docs/", "class": "passthrough", "fileClass": "payload" },
     { "src": "scripts/fixtures/golden-bootstrap/", "dest": "sbak/scripts/fixtures/golden-bootstrap/", "class": "passthrough", "fileClass": "payload" },
     { "src": "scripts/golden-bootstrap.cjs", "dest": "sbak/scripts/golden-bootstrap.cjs", "class": "passthrough", "fileClass": "payload" },
-    { "src": "scripts/bake-and-test.cjs", "dest": "sbak/scripts/bake-and-test.cjs", "class": "passthrough", "fileClass": "payload" },
+    { "src": "scripts/bake-inheritance.cjs", "dest": "sbak/scripts/bake-inheritance.cjs", "class": "passthrough", "fileClass": "payload" },
     { "src": "scripts/lib/sandbox.cjs", "dest": "sbak/scripts/lib/sandbox.cjs", "class": "passthrough", "fileClass": "payload" },
     { "src": "golden-manifest.json", "dest": "sbak/golden-manifest.json", "class": "passthrough", "fileClass": "payload" },
     { "src": "LICENSE", "dest": "LICENSE", "class": "passthrough", "fileClass": "repo-identity" },
@@ -51,6 +51,8 @@
     { "src": "release-manifest.json", "dest": "sbak/release-manifest.json", "class": "passthrough", "fileClass": "payload" },
 
     { "src": "release/validators/validate-entry-docs.cjs", "dest": "sbak/validators/validate-entry-docs.cjs", "class": "scrubbed", "fileClass": "payload" },
+    { "src": "calibration-core.json", "dest": "sbak/calibration-core.json", "class": "verbatim", "fileClass": "payload" },
+    { "src": "scripts/calibration-derive.cjs", "dest": "sbak/scripts/calibration-derive.cjs", "class": "verbatim", "fileClass": "payload" },
     { "src": "release/framework-manifest.json", "dest": "sbak/framework-manifest.json", "class": "scrubbed", "fileClass": "payload" },
     { "src": "release/templates/dot-claude/README.md", "dest": "sbak/templates/dot-claude/README.md", "class": "scrubbed", "fileClass": "payload" },
     { "src": "release/validators/retro-stamp-grandfather.json", "dest": "sbak/validators/retro-stamp-grandfather.json", "class": "scrubbed", "fileClass": "payload" },

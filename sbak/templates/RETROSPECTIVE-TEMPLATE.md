@@ -111,7 +111,7 @@ How well-positioned is the next stage to start cleanly — clear handoff, no dan
 
 **Justification:** {{specific evidence — does the next stage's CLI prompt now make sense given what this stage produced; are there obvious gaps the next stage will hit immediately}}
 
-### User experience stamp (REQUIRED at Standard+; asked-and-transcribed — the verdict's content is exclusively the owner's)
+### User experience stamp (REQUIRED at Full; asked-and-transcribed — the verdict's content is exclusively the owner's)
 
 > The three axes above are agent-authored — the agent grading its own work. This stamp is the independent check: **the verdict is the owner's.** A weak model self-grades generously; this is what catches friction the agent didn't perceive. **Flow (the standing owner rule, M22 ruling 4):** at stage-end approval the agent **asks** for the verdict (pass/fail + optional note), **transcribes the owner's reply verbatim** into the block below, and appends a `transcribed:` line marking when it was asked (e.g. `transcribed: 2026-07-12 — verbatim from the owner's reply at approval`). The owner never hand-edits this file — the agent is only the pen; the verdict's *content* remains exclusively the owner's. Leave the marker line exactly as formatted (the pre-commit validator parses it).
 >
@@ -166,7 +166,7 @@ Off-track check — highest-priority unblocked backlog item: #{{N}} · this stag
 
 **If `N`: off track.** Surface the inversion now — do not roll it silently into the next stage. Get either an explicit user re-prioritization (`docs/backlog.md` re-ranked **by human ratification**, override-logged) or a logged build-sequence justification before continuing. Any backlog edit that results is **HITL co-authored** (G8 clause b): the agent proposes, the human ratifies — never folded silently into this stage's commit.
 
-**Tier note.** Lite reduces this to: the line above was filled, any inversion noted in `CHANGELOG.md`, and any backlog edit was human-ratified. Standard surfaces a standing inversion as a warning; Full blocks the milestone PR on a standing unjustified inversion.
+**Tier note.** Lite reduces this to: the line above was filled, any inversion noted in `CHANGELOG.md`, and any backlog edit was human-ratified. The Full default (`advisory`) surfaces a standing inversion as a warning; `enforced` blocks the milestone PR on a standing unjustified inversion.
 
 ### Count reconciliation (closeout stages only)
 

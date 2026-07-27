@@ -10,7 +10,7 @@ This directory ships with the **Software Build Assurance Kit**. After bootstrap,
 | `hooks/session-start-read-first.cjs` | The hook (Node.js). Reads `role`, picks the matching read-first list, caps to the configured size, prints contents to stdout. Claude Code captures stdout as additional session context. |
 | `read-first-list.txt` | Plain-text list for **work-mode** sessions (build stages A–D). One path per line, relative to repo root. May reference retrospectives. |
 | `read-first-list-verifier.txt` | Plain-text list for **verifier-mode** sessions. DELIBERATELY OMITS prior retrospectives — the fresh-context bias guard for Stage V. |
-| `read-first-list-orchestrator.txt` | Plain-text list for **orchestrator-mode** sessions (Standard+). Loads `ORCHESTRATOR.md` first, then `CLAUDE.md`, then standing methodology + live milestone state. Includes gap-analysis (the orchestrator needs full state). |
+| `read-first-list-orchestrator.txt` | Plain-text list for **orchestrator-mode** sessions (Full). Loads `ORCHESTRATOR.md` first, then `CLAUDE.md`, then standing methodology + live milestone state. Includes gap-analysis (the orchestrator needs full state). |
 | `role` (created at runtime) | Plain text: `work` (default if missing), `verifier`, or `orchestrator`. Set before opening the matching session; reset to `work` (or delete) after. |
 
 ## Mode-aware loading
@@ -19,7 +19,7 @@ The hook reads `.claude/role` and picks the matching read-first list. Three mode
 
 - `work` (or missing) → `read-first-list.txt` — build stages A–D; the standard orientation, retrospectives included.
 - `verifier` → `read-first-list-verifier.txt` — Stage V; **omits prior retrospectives** (the fresh-context bias guard, `BUILD-PLAYBOOK.md §3.4`).
-- `orchestrator` → `read-first-list-orchestrator.txt` — orchestration sessions (Standard+); loads `ORCHESTRATOR.md` first. The orchestrator authors Phase docs / ADRs, adjudicates surfaces, routes findings, runs PRs. See `ORCHESTRATOR.md` for the role and §1 there for topologies.
+- `orchestrator` → `read-first-list-orchestrator.txt` — orchestration sessions (Full); loads `ORCHESTRATOR.md` first. The orchestrator authors Phase docs / ADRs, adjudicates surfaces, routes findings, runs PRs. See `ORCHESTRATOR.md` for the role and §1 there for topologies.
 
 The agent verifies the right list loaded by checking the `[read-first stamp] role=<role>` line in its first-message context. If the role doesn't match expectation, surface the mismatch before doing any work.
 

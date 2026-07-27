@@ -4,7 +4,7 @@
 >
 > **Read this first, every orchestration session** — then `CLAUDE.md`, then the current milestone's live docs (Phase doc, retrospectives, gap-analysis, git log). This is the **decision index** for the orchestrator role: it names the authoritative doc for each decision rather than duplicating it. Keep it small — if it grows into an essay it has failed.
 >
-> **Tier note:** this manual applies at **Standard and Full** tiers. At **Lite** tier the orchestrator and build roles collapse into one session (small project, markdown task lists, per-PR approval) — there is no separate orchestration session and this file is not generated.
+> **Tier note:** this manual applies at **Full** tier. At **Lite** tier the orchestrator and build roles collapse into one session (small project, markdown task lists, per-PR approval) — there is no separate orchestration session and this file is not generated.
 
 ---
 
@@ -65,9 +65,11 @@ The role split is the same regardless of hosting. Only cross-machine state handl
 | **A — Two CLIs + git worktrees, one machine** *(recommended for Claude Code)* | Orchestrator in the main checkout; build in `claude --worktree`. Shared `.git`, isolated working trees. | None — same filesystem; the orchestrator reads git and the build's working tree directly. | Default for Claude Code. The cleanest setup. |
 | **B — Web orchestrator + local CLI build** | Orchestrator on claude.ai/code; build on a local CLI. | **Real** — the web orchestrator sees only `origin`; the build has commits not yet pushed. The §3 cross-machine pre-flight is mandatory every edit. | Only when the build genuinely runs on a separate machine. |
 | **C — Two CLIs, same directory, no worktree** | Two sessions, one working directory. | None, but file-race risk if the two are run truly concurrently. | Quick work; safe because the user serializes. |
-| **D — Two VS Code windows + git worktrees** *(canonical for Copilot at Standard+)* | Orchestrator chat in the main VS Code window (`code .`); build chat in a second window opened on `git worktree add ../build-wt <branch>` (`code ../build-wt`). Each window has its own Copilot Chat with Claude selected. Shared `.git`, isolated working trees. The kit's `.github/copilot-instructions.md` shim auto-loads in both. | None — same filesystem. Mode-aware reading becomes honor-system (no SessionStart hook in Copilot); state the mode in each chat's first message and verify the orientation stamp. | The Copilot equivalent of Topology A. The walkthrough demonstrates this setup. |
+| **D — Two VS Code windows + git worktrees** *(canonical for Copilot at Full)* | Orchestrator chat in the main VS Code window (`code .`); build chat in a second window opened on `git worktree add ../build-wt <branch>` (`code ../build-wt`). Each window has its own Copilot Chat with Claude selected. Shared `.git`, isolated working trees. The kit's `.github/copilot-instructions.md` shim auto-loads in both. | None — same filesystem. Mode-aware reading becomes honor-system (no SessionStart hook in Copilot); state the mode in each chat's first message and verify the orientation stamp. | The Copilot equivalent of Topology A. The walkthrough demonstrates this setup. |
 
 **Topology A setup:** from the repo root, `git worktree add ../build-wt <milestone-branch>` then run the build with `claude` inside `../build-wt`; run the orchestrator with `claude` in the main checkout. Both share `.git`, so the orchestrator sees the build's commits the instant they land and can read the build worktree's uncommitted files by path.
+
+**`worktree-after-first-commit` — Topology A may not exist yet on day one.** G1 holds through bootstrap, so the project's first commit is M01.A's. A project that arrived as a ZIP into a fresh `git init` therefore has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD** (a kit clone inherits history and is unaffected). Check with `git rev-parse --verify HEAD`; if it exits non-zero, run **Topology C** (two terminals, one directory, `set-mode` before each session's first prompt) until M01.A's first commit lands, then create the worktree and move the build session into it.
 
 **Cross-machine pre-flight applies in Topology B only.** In A and C the orchestrator verifies state by reading git directly — no need to ask the user to paste `git log`.
 
@@ -215,9 +217,9 @@ A consultation that turns into a real decision (changes scope, tier, or a contra
 
 ---
 
-## 10. Current state (live — rewrite at every handoff)
+## 10. Current state (live — update every state-changing turn)
 
-> This section is the orchestrator's working-state handoff — the **durable** layer of the swap-out. The full handoff *process* (when, the outgoing checklist, the incoming bootstrap) is in **`ORCH-HANDOFF.md`**; rewrite this section completely at the end of every orchestration session so the next session starts oriented. It is the one part of this file that is expected to change constantly.
+> This section is the orchestrator's working-state handoff — the **durable** layer of the swap-out. The full handoff *process* (when, the outgoing checklist, the incoming bootstrap) is in **`ORCH-HANDOFF.md`**. **Update discipline: do not wait for session close.** Update this section in the working tree immediately after every state-changing turn — a verdict issued, an owner ruling received, a stage opened or closed, a courier block sent. Session close is too late: a crashed session never reaches its close ritual, and the working tree is what survives a crash (the session hook loads live bytes, not git). The close-time rewrite is the final pass, not the only one; the commit rides the next approved commit. It is the one part of this file that is expected to change constantly.
 
 - **Milestone:** {{CURRENT_MILESTONE}}
 - **Last completed:** {{LAST_COMPLETED}}

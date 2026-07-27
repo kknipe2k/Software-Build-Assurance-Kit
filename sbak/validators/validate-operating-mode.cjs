@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // validators/validate-operating-mode.cjs
 //
 // Pre-commit value check for the operating_mode dial.
@@ -42,7 +42,7 @@ const { execSync } = require('child_process');
 // `([a-z_]+)` capture read a PREFIX (`greenfield9` → `greenfield` → wrongly valid), and a
 // table-row value with trailing content fell through to null → greenfield default. The value is
 // now read WHOLE (line-anchored) and validated in full.
-const { fieldInBlock } = require('./lib/fenced-block.cjs');
+const { fieldInBlock, stripHtmlComments } = require('./lib/fenced-block.cjs');
 
 const VALID = ['greenfield', 'bug_fix', 'audit', 'research_publish'];
 
@@ -50,14 +50,20 @@ const VALID = ['greenfield', 'bug_fix', 'audit', 'research_publish'];
 // field is absent. Tolerant of the field, key, and table-row spellings; the
 // first match wins, so the canonical calibration field should appear first.
 function declaredMode(text) {
+  // COMMENTS STRIPPED ONCE, HERE — so BOTH reads below inherit it (M26.B / KF-21). The field
+  // read gets it from the shared lib anyway, but the table-row read below has its OWN capture
+  // bounded by `|`, so an in-cell annotation would still leak into the value if the strip were
+  // left to fieldInBlock alone. Stripping at the top of the function is the single seam for
+  // this validator: neither spelling can reintroduce the class.
+  const live = stripHtmlComments(text);
   // Table-row form — capture the WHOLE cell value (not an `[a-z_]+` PREFIX). A value with
   // trailing junk (`greenfield9`, `bug_fix (see note)`) reads whole and is validated, never
   // silently truncated to a valid prefix or dropped to null.
-  const row = text.match(/^\|\s*operating_mode\s*\|\s*([^|]+?)\s*\|/mi);
+  const row = live.match(/^\|\s*operating_mode\s*\|\s*([^|]+?)\s*\|/mi);
   if (row) return row[1].replace(/`/g, '').trim().toLowerCase();
   // Field form — the shared block-bound reader: a line-START `operating_mode:` / `**Operating
   // mode:**` field, WHOLE-token value, never a prose mention or a prefix.
-  const field = fieldInBlock(text, 'operating_mode');
+  const field = fieldInBlock(live, 'operating_mode');
   if (field !== null && field !== '') return field.toLowerCase();
   return null;
 }

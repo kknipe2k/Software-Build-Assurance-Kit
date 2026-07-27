@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -458,14 +458,17 @@ function computeIntervals(merged) {
     let open = null;
     const openTools = new Map();
     const closeOpen = () => {
-      turns.push({ session: sess, role: open.role, start_at: open.startAt, end_at: null, ms: UNKNOWN_MS, status: 'incomplete' });
+      turns.push({ session: sess, role: open.role, stage: open.stage, start_at: open.startAt, end_at: null, ms: UNKNOWN_MS, status: 'incomplete' });
       notes.push(`turn with no stop: ${sess} @ ${open.startAt} — INCOMPLETE, duration unknown (never zero, never synthesized)`);
       open = null;
     };
     for (const e of list) {
       if (e.event === 'turn_started') {
         if (open) closeOpen();
-        open = { startAt: e.at, role: e.role || 'unknown' };
+        // M26.F: the by-phase axis — the turn carries the stage its turn_started was
+        // stamped with (the lifecycle hook reads .claude/stage-active). Absent → null:
+        // frozen/pre-stamp history stays phase-unknown, never guessed, never zeroed.
+        open = { startAt: e.at, role: e.role || 'unknown', stage: ('stage' in e) ? e.stage : null };
       } else if (e.event === 'turn_stopped') {
         if (open) {
           let ms = Date.parse(e.at) - Date.parse(open.startAt);
@@ -475,7 +478,7 @@ function computeIntervals(merged) {
             ms = UNKNOWN_MS;
             status = 'incomplete';
           }
-          turns.push({ session: sess, role: open.role, start_at: open.startAt, end_at: e.at, ms, status });
+          turns.push({ session: sess, role: open.role, stage: open.stage, start_at: open.startAt, end_at: e.at, ms, status });
           open = null;
         } else {
           unmatchedStops += 1;
@@ -563,6 +566,87 @@ function computeIntervals(merged) {
 }
 
 // ---------------------------------------------------------------------------
+// Token declarations (M26.F, Workstream 5) — DECLARED-basis files
+// (.claude/receipts/tokens-*.jsonl). Platform token counts have no hook
+// emitter on this host, so tokens enter the record as human/courier
+// DECLARATIONS, validated here. The honesty floor:
+//   * a token NUMBER without a source tag is REFUSED (a number of unknown
+//     provenance is the mut2 class — a derived figure claiming platform
+//     provenance);
+//   * the source enum is CLOSED: platform-reported | derived | human-logged;
+//   * an all-null declaration must state its note (an honest null carries its
+//     why); null is never coerced to zero.
+// ---------------------------------------------------------------------------
+
+const TOKEN_SOURCES = Object.freeze(['platform-reported', 'derived', 'human-logged']);
+const TOKEN_FIELDS = Object.freeze(['input', 'output', 'cache_read', 'cache_write']);
+
+// validateTokenDeclaration(raw) → { ok:true, declaration } | { ok:false, reason }.
+// Pure — no I/O; the reader/CLI feed it line-by-line.
+function validateTokenDeclaration(raw) {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, reason: 'declaration refused: not an object' };
+  }
+  if (raw.schema !== SCHEMA_VERSION) {
+    return { ok: false, reason: `declaration refused: schema must be ${SCHEMA_VERSION}` };
+  }
+  if (typeof raw.at !== 'string' || !AT_RE.test(raw.at)) {
+    return { ok: false, reason: 'declaration refused: at must be an ISO-8601 wall-clock timestamp' };
+  }
+  const t = raw.tokens;
+  if (t === null || typeof t !== 'object' || Array.isArray(t)) {
+    return { ok: false, reason: 'declaration refused: tokens must be an object with the four canonical fields' };
+  }
+  let anyNumber = false;
+  const tokens = {};
+  for (const f of TOKEN_FIELDS) {
+    if (!(f in t)) return { ok: false, reason: `declaration refused: tokens.${f} is required (null when unknown — never omitted, never zeroed)` };
+    const v = t[f];
+    if (v === null) { tokens[f] = null; continue; }
+    if (typeof v !== 'number' || !isFinite(v) || v < 0 || Math.floor(v) !== v) {
+      return { ok: false, reason: `declaration refused: tokens.${f} must be a non-negative integer or null` };
+    }
+    tokens[f] = v;
+    anyNumber = true;
+  }
+  if ('source' in raw && raw.source !== undefined) {
+    if (TOKEN_SOURCES.indexOf(raw.source) === -1) {
+      return { ok: false, reason: `declaration refused: source outside the closed enum (${TOKEN_SOURCES.join('|')})` };
+    }
+  } else if (anyNumber) {
+    return { ok: false, reason: 'declaration refused: a token NUMBER without a source tag (platform-reported|derived|human-logged) — provenance is required for every counted token (the mut2 schema face)' };
+  }
+  if ('note' in raw && raw.note !== undefined && (typeof raw.note !== 'string' || raw.note.trim() === '')) {
+    return { ok: false, reason: 'declaration refused: note must be a non-empty string when present' };
+  }
+  if (!anyNumber && (typeof raw.note !== 'string' || raw.note.trim() === '')) {
+    return { ok: false, reason: 'declaration refused: all-null tokens need a stated note — an honest null carries its why (never a silent unknown)' };
+  }
+  if ('scope' in raw && raw.scope !== undefined) {
+    const s = raw.scope;
+    if (s === null || typeof s !== 'object' || Array.isArray(s)) {
+      return { ok: false, reason: 'declaration refused: scope must be an object ({ role?, phase? })' };
+    }
+    if ('role' in s && DERIVED_ROLES.indexOf(s.role) === -1) {
+      return { ok: false, reason: 'declaration refused: scope.role outside the canonical role enum' };
+    }
+    if ('phase' in s && (typeof s.phase !== 'string' || !STAGE_RE.test(s.phase))) {
+      return { ok: false, reason: 'declaration refused: scope.phase fails the stage format check' };
+    }
+  }
+  const out = { schema: SCHEMA_VERSION, at: raw.at, tokens: tokens };
+  if ('source' in raw && raw.source !== undefined) out.source = raw.source;
+  if (typeof raw.note === 'string' && raw.note.trim() !== '') out.note = raw.note;
+  if (raw.scope && typeof raw.scope === 'object') {
+    const sc = {};
+    if ('role' in raw.scope) sc.role = raw.scope.role;
+    if ('phase' in raw.scope) sc.phase = raw.scope.phase;
+    if (Object.keys(sc).length > 0) out.scope = sc;
+  }
+  return { ok: true, declaration: out };
+}
+
+// ---------------------------------------------------------------------------
 // The software-build-assurance-kit/build-receipt/v1 statement builder (in-toto-shaped).
 // ---------------------------------------------------------------------------
 
@@ -646,6 +730,9 @@ module.exports = {
   ALLOWED_FIELDS,
   STATEMENT_TYPE,
   PREDICATE_TYPE,
+  TOKEN_SOURCES,
+  TOKEN_FIELDS,
+  validateTokenDeclaration,
   validateEvent,
   ledgerFileFor,
   resolveScriptSession,

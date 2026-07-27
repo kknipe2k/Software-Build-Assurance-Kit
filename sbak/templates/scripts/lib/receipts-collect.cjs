@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/lib/receipts-collect.cjs
 //
 // The collectors (M20.6.C) — committed artifacts become receipts. This is the
@@ -46,7 +46,7 @@ const { spawnSync } = require('child_process');
 // the same way — "consume, don't fork"). No parallel parser in this file.
 const fenced = require('../../validators/lib/fenced-block.cjs');
 
-const COLLECTOR_VERSION = '0.2.0';
+const COLLECTOR_VERSION = '1.0.0';
 
 // A stage commit ships a surface: M<NN>[.<NN>...].<Stage>: <subject>.
 const STAGE_COMMIT_RE = /^M\d+(?:\.\d+)*\.[A-Za-z0-9]+:/;
@@ -248,13 +248,51 @@ function parseRework(text) {
     const ver = intOrNull(fenced.fieldInBlock(b, 'verifier'));
     const irl = intOrNull(fenced.fieldInBlock(b, 'irl'));
     const pm = intOrNull(fenced.fieldInBlock(b, 'post-merge'));
-    if (impl != null || ver != null) return { implementation: impl, verifier: ver, irl: irl, postMerge: pm };
+    if (impl != null || ver != null) {
+      const out = { implementation: impl, verifier: ver, irl: irl, postMerge: pm };
+      // M26.F (Workstream 5): the OPTIONAL origin split — framework-originated vs
+      // project-originated rework, declared in the same fence (G15's parseKV grammar
+      // tolerates the extra lines). Undeclared → no origin key: attribution stays
+      // UNKNOWN (reworkOriginSplit renders that as null, never zero).
+      const of = intOrNull(fenced.fieldInBlock(b, 'origin-framework'));
+      const op = intOrNull(fenced.fieldInBlock(b, 'origin-project'));
+      if (of != null || op != null) out.origin = { framework: of, project: op };
+      return out;
+    }
   }
   // Prose fallback — M20.6-style retros carry the four-type rework as PROSE, not
   // a fenced block. A bounded, stated parse limitation (not the canonical form).
   const m = text.match(/[Ii]mplementation\s+(\d+)[\s\S]{0,120}?verifier\s+(\d+)[\s\S]{0,60}?irl\s+(\d+)[\s\S]{0,60}?post-merge\s+(\d+)/);
   if (m) return { implementation: +m[1], verifier: +m[2], irl: +m[3], postMerge: +m[4], prose: true };
   return null;
+}
+
+// reworkOriginSplit(rework) → { framework, project, unattributed } — the M26.F
+// attribution surface. Null-never-zero: an undeclared origin resolves to
+// { framework: null, project: null, unattributed: <total> } (unknown attribution is
+// stated, never zeroed into "no framework rework"). Over-attribution (declared origin
+// events exceeding the declared rework total) is REFUSED as invalid — the split can
+// never claim more rework than the fence records.
+function reworkOriginSplit(rw) {
+  if (!rw || typeof rw !== 'object') return null;
+  let total = 0;
+  for (const k of ['implementation', 'verifier', 'irl', 'postMerge']) {
+    if (typeof rw[k] === 'number' && rw[k] > 0) total += rw[k];
+  }
+  const o = rw.origin;
+  const f = (o && typeof o.framework === 'number') ? o.framework : null;
+  const p = (o && typeof o.project === 'number') ? o.project : null;
+  if (f === null && p === null) {
+    return { framework: null, project: null, unattributed: total };
+  }
+  const attributed = (f || 0) + (p || 0);
+  if (attributed > total) {
+    return {
+      framework: f, project: p, unattributed: null, invalid: true,
+      reason: 'over-attribution refused: declared origin total ' + attributed + ' exceeds the fence\'s rework total ' + total,
+    };
+  }
+  return { framework: f, project: p, unattributed: total - attributed };
 }
 
 function parseBudget(text) {
@@ -540,6 +578,7 @@ module.exports = {
   parseVerdict,
   parseFnr,
   parseRework,
+  reworkOriginSplit,
   parseStamp,
   parseBudget,
 };

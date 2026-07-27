@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/install-hooks.cjs
 //
 // One-time git-hook install for verification_locus: local_first | hybrid.
@@ -21,18 +21,21 @@
 
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const { repairHookModes } = require(path.join(__dirname, 'lib', 'hook-chmod.cjs'));
 
 try {
   execSync('git config core.hooksPath .githooks', { stdio: 'inherit' });
-  // chmod +x on POSIX so the hooks are runnable; no-op on Windows.
-  if (process.platform !== 'win32') {
-    const dir = path.resolve(process.cwd(), '.githooks');
-    if (fs.existsSync(dir)) {
-      for (const f of fs.readdirSync(dir)) fs.chmodSync(path.join(dir, f), 0o755);
-    }
+  // Confined exec-bit repair on POSIX (KF-55, M27.A): manifest-owned hook names
+  // only, existing modes preserved, symlinks refused via lib/hook-chmod.cjs —
+  // never a directory-wide chmod sweep. No-op on Windows (no exec bit).
+  const res = repairHookModes({ projRoot: process.cwd(), log: (line) => console.log('    ' + line) });
+  if (res.refused.length > 0) {
+    console.error('FAIL  hook activation INCOMPLETE — ' + res.refused.length + ' .githooks entr'
+      + (res.refused.length === 1 ? 'y' : 'ies')
+      + ' refused (never chmodded through a symlink); refused hooks stay INERT until replaced with regular files.');
+    process.exit(1);
   }
   console.log('OK  git hooks installed (core.hooksPath = .githooks).');
   console.log('    pre-commit: fast checks    pre-push: full local matrix (Linux + native)');

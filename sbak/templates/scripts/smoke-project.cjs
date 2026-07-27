@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 0.2.0
+// @kit-version 1.0.0
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -286,6 +286,25 @@ vPair('validate-reconciliation.cjs',
       `# Closeout\n\n${FENCE}reconcile\ncount: 999\nsource: recon-src.txt\npattern: fix\n${FENCE}\n`)]).code;
   },
   'a claimed count that does not recompute from its named source');
+
+// The spec-example harvest gate. The happy fixture fixtures its example; the failing one
+// leaves the spec's literal example absent from every test file — the escape shape this
+// gate exists for (a spec that states an output, a suite that never checks it, and both
+// looking healthy). Each case gets its OWN root so the walker sees only its own surface.
+vPair('validate-spec-examples.cjs',
+  () => {
+    const d = fixtureDir('specex-ok');
+    write('specex-ok/spec/project-spec.md', '# spec\n\n## Examples\n\n- `render(*a*)` yields em.\n');
+    write('specex-ok/tests/r.test.cjs', "assert.strictEqual(render('*a*'), '<em>a</em>'); // render(*a*)\n");
+    return vRun('validate-spec-examples.cjs', ['--root', d]).code;
+  },
+  () => {
+    const d = fixtureDir('specex-bad');
+    write('specex-bad/spec/project-spec.md', '# spec\n\n## Examples\n\n- `render(*a*)` yields em.\n');
+    write('specex-bad/tests/r.test.cjs', "assert.strictEqual(add(1, 2), 3);\n");
+    return vRun('validate-spec-examples.cjs', ['--root', d]).code;
+  },
+  'a literal spec example that reaches no test fixture');
 
 // Kit-only / mode-conditional validators — visibly skipped BY DESIGN, with the reason.
 const BY_DESIGN_SKIPS = {

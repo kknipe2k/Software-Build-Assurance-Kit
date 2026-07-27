@@ -138,13 +138,13 @@
     </div>
     <div class="step">
       <div class="n">2 · CALIBRATE</div>
-      <div class="t">Answer 5 questions</div>
+      <div class="t">Answer 3 asks</div>
       <div class="d">Project size, your experience, approval cadence, deliverable type, verification &amp; CI cost. Sets how much ceremony and which gates apply.</div>
     </div>
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
       <div class="t">Spec → milestones → scaffold</div>
-      <div class="d">Generates ~36 files for Lite, ~68 for Standard, ~69 for Full. Then hands off to the build loop.</div>
+      <div class="d">Generates ~44 files for Lite, ~108 for Full. Then hands off to the build loop.</div>
     </div>
     <div class="step">
       <div class="n">4 · BUILD LOOP</div>
@@ -159,37 +159,37 @@
   </div>
   <p class="note">The core promise: <b>human reviews, agent implements, CI enforces.</b> The agent never commits without your explicit approval — that rule holds in every tier and every mode.</p>
 
-  <h2>Step 2 — Calibration (the 5 questions)</h2>
-  <p>The first thing the framework asks. Each answer maps to settings stored in <code>project-config.md</code>. You can change them later via an append-only override log.</p>
+  <h2>Step 2 — Calibration (3 asks + a confirmation turn)</h2>
+  <p>The first thing the framework asks. Each answer maps to settings stored in <code>project-config.md</code>; everything not asked is derived and confirmed back to you in plain English. You can change them later via an append-only override log.</p>
   <table>
     <tr><th>Question</th><th>Options</th><th>What it controls</th></tr>
     <tr>
-      <td>Project size / complexity</td>
-      <td><span class="pill lite">Lite</span> <span class="pill standard">Standard</span> <span class="pill full">Full</span></td>
-      <td>The <b>tier</b> — how much ceremony. Scaffold size, retrospective depth, whether the audit ledger is CI-enforced.</td>
+      <td>What kind of work is this? <em>(asked)</em></td>
+      <td>greenfield · bug_fix · research_publish · audit</td>
+      <td>The <b>operating mode</b> — which discovery questions follow and the top-level shape of the work.</td>
     </tr>
     <tr>
-      <td>Your experience with the stack</td>
-      <td>New · Familiar · Experienced</td>
-      <td>The <b>expertise</b> — how much the agent narrates decisions, and whether it web-verifies best practices before coding.</td>
+      <td>How much assurance? <em>(asked)</em></td>
+      <td><span class="pill full">Full</span> (default) <span class="pill lite">Lite</span></td>
+      <td>The <b>tier</b> — how much ceremony. Scaffold size, retrospective depth, validator severity (Full blocks, Lite warns).</td>
     </tr>
     <tr>
-      <td>Approval cadence</td>
-      <td>Minimum · Standard · Maximum</td>
-      <td>How often the agent stops for your review — per PR, per stage, or per micro-task.</td>
+      <td>Any risky surfaces? <em>(asked)</em></td>
+      <td>destructive data ops · archives · untrusted writes · credentials · untrusted HTML · installers</td>
+      <td>The <b>risk triggers</b> — risk overrides tier: each declared surface gets deeper verification, and at Full it arms CI enforcement of the append-only ledgers.</td>
     </tr>
     <tr>
-      <td>Deliverable type</td>
+      <td>Deliverable type <em>(derived + confirmed)</em></td>
       <td>CLI · Web-UI · Library · Service · Other</td>
       <td>The <b>deliverable_type</b> — orthogonal to tier. Decides <em>which</em> gates apply: <code>web</code> turns on a design brief (<code>docs/design.md</code>) plus browser-load and design-conformance verifier passes; <code>library</code> adds an API-surface contract; <code>service</code> adds endpoint contracts; <code>cli</code> adds command-surface checks. Usually inferred from your description rather than asked outright.</td>
     </tr>
     <tr>
-      <td>Verification &amp; CI cost</td>
+      <td>Verification &amp; CI cost <em>(derived + confirmed)</em></td>
       <td>Local-first · Cloud · Local-only</td>
       <td>The <b>verification_locus</b> — where the test suite runs and what GitHub Actions costs. Public repo → cloud is free and unlimited; private repo → local-first (hybrid) keeps hosted minutes near-zero. Orthogonal to tier; usually proposed from repo visibility and whether the project ships to macOS.</td>
     </tr>
   </table>
-  <p class="note">Don't know? The safe default is <b>Standard + Familiar + Standard</b> (deliverable type inferred). Re-tiering later is cheap and tracked.</p>
+  <p class="note">Don't know? The default is <b>greenfield + Full, no declared risk</b> (everything else derived and confirmed). Re-tiering later is cheap and tracked.</p>
 
   <h2>Step 4 — The per-milestone build loop</h2>
   <p>Every milestone runs through the same pipeline. Each box is a <b>fresh Claude session</b> — context is cleared between stages on purpose, so each stage reads only what it needs and nothing stale carries over.</p>
@@ -234,13 +234,13 @@
     <h3>Stage E — Closeout</h3>
     <ul>
       <li>Cumulative review of everything shipped this milestone vs. the spec</li>
-      <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Standard &amp; Full) — never edited, only appended; CI enforces this in Full tier</li>
+      <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Full) — never edited, only appended; CI enforcement arms when a risk trigger is declared</li>
       <li>You review three artifacts together: the code diff, the retrospectives, and the ledger entry</li>
     </ul>
   </div>
 
-  <h2>Two roles — orchestrator and build (Standard &amp; Full)</h2>
-  <p>At Standard and Full tier, the agent runs as two distinct session types that never share a session. You — the human — are the conduit between them; only one acts at a time. These roles are the kit's agents — separated by hooks, not by request.</p>
+  <h2>Two roles — orchestrator and build (Full)</h2>
+  <p>At Full tier, the agent runs as two distinct session types that never share a session. You — the human — are the conduit between them; only one acts at a time. These roles are the kit's agents — separated by hooks, not by request.</p>
   <div class="cols">
     <div class="panel">
       <h3>Orchestrator</h3>
@@ -280,7 +280,7 @@ cd my-project</code></pre>
   <h3>Start</h3>
   <pre><code>claude
 # The kit's CLAUDE.md auto-loads.
-# It presents the 5-question calibration interview as its first response.
+# It presents the 3-ask calibration interview as its first response.
 # Answer the questions (or describe your project and let it propose a calibration).
 # Then tell it what you want to build — a paragraph is enough.</code></pre>
   <h3>Then</h3>
@@ -289,14 +289,15 @@ cd my-project</code></pre>
 
   <h2>Pick a tier</h2>
   <table>
-    <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill standard">Standard</span></th><th><span class="pill full">Full</span></th></tr>
-    <tr><td>Best for</td><td>Weekend tool, prototype, ≤1 week</td><td>Real project, 1–4 weeks</td><td>Multi-month, regulated, or audited</td></tr>
-    <tr><td>Scaffold files</td><td>~36</td><td>~68</td><td>~69</td></tr>
-    <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td><td>Per stage</td></tr>
-    <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td><td>3 axes (+ pattern)</td></tr>
-    <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory)</td><td>Append-only (CI-enforced)</td></tr>
-    <tr><td>Verifier</td><td>1 pass (inventory)</td><td>3 passes</td><td>4 passes + project-specific</td></tr>
-    <tr><td>Review time / stage</td><td>~10 min</td><td>~30 min</td><td>~60–90 min</td></tr>
+    <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill full">Full</span> (default)</th></tr>
+    <tr><td>Best for</td><td>Weekend tool, prototype, ≤1–2 weeks solo</td><td>Anything with a second reader, an audit need, or a longer horizon</td></tr>
+    <tr><td>Scaffold files</td><td>~44</td><td>~108 (+2 when risk-armed)</td></tr>
+    <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td></tr>
+    <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td></tr>
+    <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory; CI-enforced when a risk trigger is declared)</td></tr>
+    <tr><td>Validators</td><td>Advisory (--warn)</td><td>Blocking</td></tr>
+    <tr><td>Verifier</td><td>1 pass (inventory)</td><td>4 passes (hooks · behavior · security · code quality)</td></tr>
+    <tr><td>Review time / stage</td><td>~10 min</td><td>~30–40 min</td></tr>
   </table>
 
   <h2>What you get · what it doesn't do</h2>
@@ -307,7 +308,7 @@ cd my-project</code></pre>
         <li>Calibrated ceremony — discipline scales to the project</li>
         <li>A do-not-commit-without-approval guarantee</li>
         <li>Fresh-context verification that catches "tests pass but it's broken"</li>
-        <li>An append-only forensic audit trail (Standard+)</li>
+        <li>An append-only forensic audit trail (Full)</li>
         <li>A schema validator enforced at pre-commit + CI</li>
         <li>Stack-agnostic — Rust, Python, TypeScript, Go, anything</li>
       </ul>
@@ -318,7 +319,7 @@ cd my-project</code></pre>
         <li>Doesn't run the agent for you — you drive Claude Code</li>
         <li>Doesn't enforce gates itself — your CI does</li>
         <li>Doesn't replace specs or design discussion — it frames them</li>
-        <li>Doesn't pretend Lite is auditable — pick Standard+ if you need a trail</li>
+        <li>Doesn't pretend Lite is auditable — pick Full if you need a trail</li>
       </ul>
     </div>
   </div>
