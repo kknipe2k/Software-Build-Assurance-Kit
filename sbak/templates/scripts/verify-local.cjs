@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid).

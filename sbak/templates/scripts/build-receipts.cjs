@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // scripts/build-receipts.cjs
 //
 // The build-receipts CLI — diagnostics (M20.6.A) + collectors (M20.6.C) + the

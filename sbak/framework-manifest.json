@@ -55,7 +55,7 @@
     "kit_version": {
       "kind": "declared",
       "source": "the release identity, stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "1.0.1"
+      "value": "1.0.2"
     },
     "operating_mode_count": {
       "kind": "bound",

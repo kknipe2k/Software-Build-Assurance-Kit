@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side

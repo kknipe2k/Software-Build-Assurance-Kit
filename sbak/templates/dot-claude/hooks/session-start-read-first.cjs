@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // session-start-read-first.js
 //
 // Claude Code SessionStart hook. Auto-loads the read-first orientation files

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // scripts/lib/settings-merge.cjs
 //
 // The VERIFIED .claude/settings.json merge (M27.B, KF-56; rider §4 + owner

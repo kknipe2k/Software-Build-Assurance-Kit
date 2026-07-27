@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg)](https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status: GA v1.0.1](https://img.shields.io/badge/status-GA%20v1.0.1-green)](RELEASE-NOTES.md)
+[![Status: GA v1.0.2](https://img.shields.io/badge/status-GA%20v1.0.2-green)](RELEASE-NOTES.md)
 [![SLSA Level 2](https://img.shields.io/badge/SLSA-Level%202-blue)](https://slsa.dev/spec/v1.0/levels)
 
 A drop-in kit that wraps a coding agent in controls you can check. AI agents write a lot of code, and the hard part is no longer getting code written — it is knowing whether what got written is the thing you asked for, and being able to show your work later. This kit gives an agent a spec to build against, a red-first test gate, a second agent that reviews the first one blind, and an evidence trail bound to real commits. The agent does not have to be perfect. The process has to make a miss visible.
@@ -11,7 +11,7 @@ A drop-in kit that wraps a coding agent in controls you can check. AI agents wri
 
 **Want to see it first?** Open [HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html) — a few minutes, in your browser. **Deciding if it's worth your evening?** [WHY-THIS-KIT.md](WHY-THIS-KIT.md) — two pages, honest costs.
 
-**Want to try it?** For most users the recommended path is the signed release ZIP — download **`sbak-v1.0.1-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` — SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Want to try it?** For most users the recommended path is the signed release ZIP — download **`sbak-v1.0.2-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` — SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 **Evaluating or contributing** to the kit itself? Clone the repo instead — the **contributor / evaluator** path:
 
@@ -25,7 +25,7 @@ The CLI waits for you to speak first. Your opening message can simply be what yo
 
 **Nothing is pushed or opened as a PR without your explicit approval.**
 
-**This is the v1.0.1 GA release** — the 1.0 bar is an integrity bar, not a feature bar; pin a tag. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the evidence for both.
+**This is the v1.0.2 GA release** — the 1.0 bar is an integrity bar, not a feature bar; pin a tag. See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the evidence for both.
 
 The kit was built with its own process — [its own build receipt](example-receipt.html) is derived from real commits, findings, and rework, not a staged demo.
 
@@ -94,10 +94,10 @@ There is no controlled study showing that a heavyweight process framework beats 
 
 ## Quickstart
 
-Full detail — the ZIP-first install, the directory-not-empty case, and a file map — is in [QUICKSTART.md](sbak/QUICKSTART.md). The short version, **from the recommended `sbak-v1.0.1-starter.zip`** (verify the `.sha256` first):
+Full detail — the ZIP-first install, the directory-not-empty case, and a file map — is in [QUICKSTART.md](sbak/QUICKSTART.md). The short version, **from the recommended `sbak-v1.0.2-starter.zip`** (verify the `.sha256` first):
 
 ```
-unzip sbak-v1.0.1-starter.zip -d my-project && cd my-project
+unzip sbak-v1.0.2-starter.zip -d my-project && cd my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude
@@ -185,7 +185,7 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 ## Install and download
 
-**Recommended:** download `sbak-v1.0.1-starter.zip` and its `.sha256` from the releases page and verify before you unpack — the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.1-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Node.js is the only runtime requirement for the validators and hooks; the kit itself is stack-agnostic.
+**Recommended:** download `sbak-v1.0.2-starter.zip` and its `.sha256` from the releases page and verify before you unpack — the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.2-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Node.js is the only runtime requirement for the validators and hooks; the kit itself is stack-agnostic.
 
 Cloning the repository (above) is the **contributor / evaluator** alternative — you get the kit's own history, tests, and templates.
 

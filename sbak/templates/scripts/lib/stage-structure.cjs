@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.1
+// @kit-version 1.0.2
 // scripts/lib/stage-structure.cjs
 //
 // The ONE structural reader for the framework's stage-prompt grammar (M27.C, KF-57;
