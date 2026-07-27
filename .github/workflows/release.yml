@@ -31,11 +31,12 @@ name: release
 # deviation (M25.F retro): the base action would require hand-authoring the SLSA v1.0
 # provenance predicate the wrapper fills correctly; the SLSA level (Build L2) is identical.
 #
-# DEFERRED to the clean-environment verify at E (M25.F retro E-handoff): whether this job's
-# `contents: read` GITHUB_TOKEN can read a DRAFT release's assets. Draft releases are
-# visible only to accounts with push access; if `gh release view`/`download` 403s here, the
-# fallback (a short-lived elevated token, or passing the asset in as a workflow input) is an
-# OWNER decision surfaced at E as a numbered ask — never silently widened to contents: write.
+# RESOLVED (2026-07-26, this workflow's first live run — the E verify never happened): the
+# read-only token CANNOT see a draft release ("release not found"). GitHub has no
+# draft-read-only scope, and draft visibility is authorization-based — a release id does not
+# bypass it. Per this note's own escalation path, the OWNER decided the widening to
+# `contents: write`; the repository's immutable-release setting is the tamper guard on
+# published releases, and a failed attest leaves only an unpublished draft (fail-safe).
 
 on:
   workflow_dispatch:
@@ -44,15 +45,16 @@ on:
         description: The annotated, signed release tag to verify and attest (e.g. v0.2.0).
         required: true
 
-# Least-privilege floor, widened only for what attestation needs — never contents: write.
+# Least-privilege floor, widened only for what attestation needs — contents: write is
+# required so the token can SEE draft releases (owner-decided; see the RESOLVED note above).
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   attest:
     runs-on: ubuntu-latest
     permissions:
-      contents: read         # read the tag + the draft release's asset (see the DEFERRED note)
+      contents: write        # SEE + read the draft release's asset (see the RESOLVED note — no narrower scope exists)
       id-token: write        # mint the OIDC token the attestation is bound to
       attestations: write    # record the provenance statement
     env:
