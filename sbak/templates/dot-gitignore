@@ -4,9 +4,10 @@
 .claude/build-status.md
 
 # The session's current role (work / verifier / orchestrator / refactor). Local to
-# the machine; not part of the project's shared state. `.claude/role` is the canonical
-# marker; `.claude/active-mode` is the one-release read-compatible alias (both written
-# through the M20.B alias-window; the alias is retired one release after v0.2.0).
+# the machine; not part of the project's shared state. `.claude/role` is the ONLY
+# marker written or read — its compatibility alias was retired. The retired name stays
+# listed below on purpose: nothing writes it any more, but a project that predates the
+# removal can still have one on disk, and it must never be committable.
 .claude/role
 .claude/active-mode
 

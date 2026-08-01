@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Software Build Assurance Kit — How It Works</title>
+<title>Software Build Assurance Kit - How It Works</title>
 <style>
   :root {
     --ink: #1a1f2b;
@@ -17,7 +17,6 @@
     --amber: #d98a00;
     --red: #d23f3f;
     --lite: #3a9b78;
-    --standard: #2f6fed;
     --full: #7a4fd0;
   }
   * { box-sizing: border-box; }
@@ -74,12 +73,23 @@
   .node .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
   .node.work { border-color: #c3d4f7; }
   .node.verify { border-color: #f7d9a8; background: #fffaf0; }
+  .node.refactor { border-color: #d9c9f2; background: #f9f5ff; }
   .node.closeout { border-color: #cfeede; background: #f3fbf6; }
   .arrow { color: var(--accent); font-size: 18px; font-weight: 700; }
   .loop {
     font-size: 12px; color: var(--amber); border: 1px dashed var(--amber);
     border-radius: 8px; padding: 8px 12px; margin: 6px 0 0; display: inline-block;
   }
+
+  /* the three-gate strip */
+  .gates { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
+  .gate {
+    flex: 1 1 0; min-width: 220px; background: var(--card); border: 1.5px solid var(--red);
+    border-radius: 9px; padding: 12px 14px;
+  }
+  .gate .gn { font-size: 11px; font-weight: 700; color: var(--red); letter-spacing: .5px; }
+  .gate .gt { font-weight: 650; font-size: 14px; margin: 3px 0 3px; }
+  .gate .gd { font-size: 12.5px; color: var(--muted); }
 
   /* layer stack */
   .layers { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; }
@@ -96,6 +106,26 @@
   .layer.immut { background: #fdf3f3; border-color: #f0caca; }
   .layer.immut .ln { color: var(--red); }
 
+  /* human-conduit centerpiece */
+  .hub { display: grid; grid-template-columns: 1fr auto 1.2fr auto 1fr; gap: 0; align-items: center; margin: 22px 0 8px; }
+  .hubcol { display: flex; flex-direction: column; gap: 10px; }
+  .hubcard { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .hubcard .ht { font-weight: 700; font-size: 15px; }
+  .hubcard .hd { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .hubcard.human { background: var(--accent-soft); border: 2px solid var(--ink); padding: 24px 20px; }
+  .hubcard.human .ht { font-size: 17px; }
+  .hublink { color: var(--accent); font-size: 22px; font-weight: 700; padding: 0 10px; text-align: center; }
+  .hubdocs {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+    padding: 10px 14px; margin: 10px 0 0; font-size: 12px; color: var(--muted); letter-spacing: .5px;
+  }
+  .chip {
+    display: inline-block; font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 12px; background: var(--accent-soft); color: var(--accent);
+    border-radius: 6px; padding: 2px 8px; margin: 2px 3px; letter-spacing: 0;
+  }
+  .hubci { border: 1px solid var(--line); border-radius: 10px; background: var(--card); padding: 14px 16px; margin: 10px 0 0; }
+
   /* table */
   table { width: 100%; border-collapse: collapse; margin: 18px 0; font-size: 14px; }
   th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -103,7 +133,6 @@
   td:first-child { font-weight: 650; }
   .pill { display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; color:#fff; }
   .pill.lite { background: var(--lite); }
-  .pill.standard { background: var(--standard); }
   .pill.full { background: var(--full); }
 
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 18px 0; }
@@ -119,6 +148,8 @@
     .cols { grid-template-columns: 1fr; }
     .step + .step { margin-left: 0; margin-top: 28px; }
     .step + .step::before { left: 50%; top: -22px; transform: translateX(-50%) rotate(90deg); }
+    .hub { grid-template-columns: 1fr; }
+    .hublink { transform: rotate(90deg); padding: 4px 0; }
   }
 </style>
 </head>
@@ -127,72 +158,72 @@
 
   <span class="tag">SOFTWARE BUILD ASSURANCE KIT</span>
   <h1>How It Works</h1>
-  <p class="lede">A drop-in framework that turns Claude Code into a disciplined building partner. You describe what to build; it calibrates how much process to apply, then runs a structured loop with human approval gates, fresh-context verification, and an append-only audit trail.</p>
+  <p class="lede">A drop-in framework that turns a coding agent into a disciplined building partner. You describe what to build; it calibrates how much process to apply, then runs a structured loop with human approval gates, fresh-context verification, and an append-only audit trail.</p>
 
   <h2>What it does, in one picture</h2>
   <div class="flow">
     <div class="step">
       <div class="n">1 · DROP IN</div>
-      <div class="t">Copy the kit into your project directory</div>
-      <div class="d">Open it in Claude Code. The kit's CLAUDE.md auto-loads and takes over.</div>
+      <div class="t">Unzip the release ZIP, run adopt</div>
+      <div class="d">The adopt step arms the Git hooks and verifies itself: exit 0 means every enforcement layer is active. Then open the folder in your agent.</div>
     </div>
     <div class="step">
       <div class="n">2 · CALIBRATE</div>
       <div class="t">Answer 3 asks</div>
-      <div class="d">Project size, your experience, approval cadence, deliverable type, verification &amp; CI cost. Sets how much ceremony and which gates apply.</div>
+      <div class="d">What kind of work, how much assurance, any risky surfaces. Everything else is derived and confirmed back to you. Sets how much ceremony and which gates apply.</div>
     </div>
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
-      <div class="t">Spec → milestones → scaffold</div>
-      <div class="d">Generates ~44 files for Lite, ~108 for Full. Then hands off to the build loop.</div>
+      <div class="t">Spec, milestones, scaffold</div>
+      <div class="d">Generates 41 files for Lite, 97 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
     </div>
     <div class="step">
       <div class="n">4 · BUILD LOOP</div>
       <div class="t">Stages, verified, approved</div>
-      <div class="d">Each milestone runs as stages. You approve before every commit.</div>
+      <div class="d">Each milestone runs as stages behind three human approval gates. No commit without your approval.</div>
     </div>
     <div class="step">
       <div class="n">5 · SHIP</div>
       <div class="t">PR per milestone</div>
-      <div class="d">Code + retrospectives + audit ledger reviewed together, then merged.</div>
+      <div class="d">Code, retrospectives, audit ledger, and the build receipt reviewed together, then merged.</div>
     </div>
   </div>
-  <p class="note">The core promise: <b>human reviews, agent implements, CI enforces.</b> The agent never commits without your explicit approval — that rule holds in every tier and every mode.</p>
+  <p class="note">The core promise: <b>human reviews, agent implements, hooks and CI enforce.</b> The agent never commits without your explicit approval. That rule holds in every tier and every mode.</p>
 
-  <h2>Step 2 — Calibration (3 asks + a confirmation turn)</h2>
+  <h2>Step 2 - Calibration (3 asks + a confirmation turn)</h2>
   <p>The first thing the framework asks. Each answer maps to settings stored in <code>project-config.md</code>; everything not asked is derived and confirmed back to you in plain English. You can change them later via an append-only override log.</p>
   <table>
     <tr><th>Question</th><th>Options</th><th>What it controls</th></tr>
     <tr>
       <td>What kind of work is this? <em>(asked)</em></td>
       <td>greenfield · bug_fix · research_publish · audit</td>
-      <td>The <b>operating mode</b> — which discovery questions follow and the top-level shape of the work.</td>
+      <td>The <b>operating mode</b>: which discovery questions follow and the top-level shape of the work.</td>
     </tr>
     <tr>
       <td>How much assurance? <em>(asked)</em></td>
       <td><span class="pill full">Full</span> (default) <span class="pill lite">Lite</span></td>
-      <td>The <b>tier</b> — how much ceremony. Scaffold size, retrospective depth, validator severity (Full blocks, Lite warns).</td>
+      <td>The <b>tier</b>: how much ceremony. Scaffold size, retrospective depth, validator severity (Full blocks, Lite warns).</td>
     </tr>
     <tr>
       <td>Any risky surfaces? <em>(asked)</em></td>
       <td>destructive data ops · archives · untrusted writes · credentials · untrusted HTML · installers</td>
-      <td>The <b>risk triggers</b> — risk overrides tier: each declared surface gets deeper verification, and at Full it arms CI enforcement of the append-only ledgers.</td>
+      <td>The <b>risk triggers</b>. Risk overrides tier: each declared surface gets deeper verification, and at Full it arms CI enforcement of the append-only ledgers. This is the risk escalation path.</td>
     </tr>
     <tr>
       <td>Deliverable type <em>(derived + confirmed)</em></td>
       <td>CLI · Web-UI · Library · Service · Other</td>
-      <td>The <b>deliverable_type</b> — orthogonal to tier. Decides <em>which</em> gates apply: <code>web</code> turns on a design brief (<code>docs/design.md</code>) plus browser-load and design-conformance verifier passes; <code>library</code> adds an API-surface contract; <code>service</code> adds endpoint contracts; <code>cli</code> adds command-surface checks. Usually inferred from your description rather than asked outright.</td>
+      <td>The <b>deliverable_type</b>, orthogonal to tier. Decides <em>which</em> gates apply: <code>web</code> turns on a design brief (<code>docs/design.md</code>) plus browser-load and design-conformance verifier passes; <code>library</code> adds an API-surface contract; <code>service</code> adds endpoint contracts; <code>cli</code> adds command-surface checks. Usually inferred from your description rather than asked outright.</td>
     </tr>
     <tr>
       <td>Verification &amp; CI cost <em>(derived + confirmed)</em></td>
       <td>Local-first · Cloud · Local-only</td>
-      <td>The <b>verification_locus</b> — where the test suite runs and what GitHub Actions costs. Public repo → cloud is free and unlimited; private repo → local-first (hybrid) keeps hosted minutes near-zero. Orthogonal to tier; usually proposed from repo visibility and whether the project ships to macOS.</td>
+      <td>The <b>verification_locus</b>: where the test suite runs and what GitHub Actions costs. Public repo: cloud is free and unlimited. Private repo: local-first (hybrid) keeps hosted minutes near zero. Orthogonal to tier; usually proposed from repo visibility and whether the project ships to macOS.</td>
     </tr>
   </table>
   <p class="note">Don't know? The default is <b>greenfield + Full, no declared risk</b> (everything else derived and confirmed). Re-tiering later is cheap and tracked.</p>
 
-  <h2>Step 4 — The per-milestone build loop</h2>
-  <p>Every milestone runs through the same pipeline. Each box is a <b>fresh Claude session</b> — context is cleared between stages on purpose, so each stage reads only what it needs and nothing stale carries over.</p>
+  <h2>Step 4 - The per-milestone build loop</h2>
+  <p>Every milestone runs through the same pipeline. Each box is a <b>fresh agent session</b>: context is cleared between stages on purpose, so each stage reads only what it needs and nothing stale carries over.</p>
   <div class="pipe">
     <div class="node work"><div class="lbl">A</div><div class="sub">work · TDD</div></div>
     <span class="arrow">→</span>
@@ -202,130 +233,242 @@
     <span class="arrow">→</span>
     <div class="node work"><div class="lbl">D</div><div class="sub">work · TDD</div></div>
     <span class="arrow">→</span>
-    <div class="node verify"><div class="lbl">V</div><div class="sub">verify · 4 passes</div></div>
+    <div class="node verify"><div class="lbl">V</div><div class="sub">verify · fresh context</div></div>
+    <span class="arrow">→</span>
+    <div class="node refactor"><div class="lbl">R?</div><div class="sub">refactor decision</div></div>
     <span class="arrow">→</span>
     <div class="node closeout"><div class="lbl">E</div><div class="sub">closeout · ledger</div></div>
     <span class="arrow">→</span>
     <div class="node"><div class="lbl">PR</div><div class="sub">review · merge</div></div>
   </div>
-  <div class="loop">↺ If Stage V finds a critical issue → a scoped <b>D.fix</b> stage runs, then V re-runs. Capped at 2 iterations before it escalates to you.</div>
+  <div class="loop">↺ If Stage V finds a critical issue, a scoped <b>D.fix</b> stage runs, then V re-runs. Capped at 2 D.fix rounds per milestone; a third escalates to you instead of iterating on.</div>
+
+  <h3>Three human approval gates, every work stage</h3>
+  <div class="gates">
+    <div class="gate">
+      <div class="gn">GATE 1 · PLAN</div>
+      <div class="gt">Plan approval</div>
+      <div class="gd">The agent states its deliverable and test plan and waits. No work before you approve the plan.</div>
+    </div>
+    <div class="gate">
+      <div class="gn">GATE 2 · RED</div>
+      <div class="gt">The red gate</div>
+      <div class="gd">The agent writes failing tests first and stops. A hook <b>blocks implementation edits</b> until you review the failing tests and approve them. This stops tests being written to fit code that already exists.</div>
+    </div>
+    <div class="gate">
+      <div class="gn">GATE 3 · STAGE END</div>
+      <div class="gt">Stage-end approval</div>
+      <div class="gd">Implementation done, gates green, retrospective filled: the agent surfaces the diff and waits. <b>No commit without your approval</b>, and pushes are your call too.</div>
+    </div>
+  </div>
 
   <div class="cols" style="margin-top:24px">
     <div class="panel">
-      <h3>Stages A–D — Work</h3>
+      <h3>Stages A-D - Work</h3>
       <ul>
-        <li>Test-driven: write a failing test, make it pass, refactor</li>
+        <li>Test-driven: failing tests first (the red gate above), then implementation, then green gates</li>
         <li>All quality gates green; no skips, no <code>--no-verify</code></li>
-        <li>Agent states its plan, you confirm, it works, it surfaces the diff</li>
+        <li>The agent surfaces the diff and the retrospective at stage end</li>
         <li><b>No commit until you approve.</b> Then a fresh session opens for the next stage.</li>
       </ul>
     </div>
     <div class="panel">
-      <h3>Stage V — Verifier</h3>
+      <h3>Stage V - Verifier</h3>
       <ul>
-        <li>Fresh session with <b>prior retrospectives deliberately hidden</b> — the bias guard</li>
+        <li>Fresh session with <b>prior retrospectives deliberately hidden</b>: the bias guard</li>
         <li>Asks "does the code do what was promised?" not "did the tests pass?"</li>
-        <li>Four passes: inventory · wire-tracing · multi-call · runtime behavior</li>
+        <li>Full runs four passes by default: hooks (every wire claim traced from source to consumer), behavior (the running thing observed, not just the suite), security, and code quality. Lite runs the inventory pass only.</li>
+        <li>Every Verifier stage also runs a required <b>plan-challenge</b> pass: what dangerous properties did the plan and its acceptance criteria leave unproven?</li>
         <li>Findings graded <span class="dot r"></span>blocks merge · <span class="dot a"></span>carry forward · <span class="dot g"></span>tech-debt</li>
       </ul>
     </div>
   </div>
+  <div class="cols" style="margin-top:18px">
+    <div class="panel">
+      <h3>Stage R - Refactorer (the refactor decision)</h3>
+      <ul>
+        <li>Checked at every <b>milestone boundary, after the Verifier</b>: Stage R runs when the tech-debt ledger reaches the threshold count OR the milestone interval elapses, whichever comes first</li>
+        <li>Asks "is the code maintainable?": duplication, complexity, drift, assessed against the cumulative codebase</li>
+        <li>Fresh session under the <b>strictest bias guard</b>: prior retrospectives AND prior R findings both hidden</li>
+        <li>A critical structural finding opens a scoped <b>D.refactor</b> stage; the <b>Verifier re-runs first</b> (the refactor broke no contracts), <b>then Stage R re-runs</b>. That second run is the post-refactor verification. Capped at 2 rounds per milestone.</li>
+        <li>Lite skips Stage R (<code>refactor_mode: skip</code>)</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Stage E - Closeout</h3>
+      <ul>
+        <li>Cumulative review of everything shipped this milestone vs. the spec</li>
+        <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Full): never edited, only appended; CI enforcement arms when a risk trigger is declared</li>
+        <li>You review three artifacts together: the code diff, the retrospectives, and the ledger entry</li>
+      </ul>
+    </div>
+  </div>
   <div class="panel" style="margin-top:18px">
-    <h3>Stage E — Closeout</h3>
+    <h3>The build receipt (receipt generation)</h3>
     <ul>
-      <li>Cumulative review of everything shipped this milestone vs. the spec</li>
-      <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Full) — never edited, only appended; CI enforcement arms when a risk trigger is declared</li>
-      <li>You review three artifacts together: the code diff, the retrospectives, and the ledger entry</li>
+      <li>Every session leaves an event ledger under <code>.claude/receipts/</code>: a session hook records stage lifecycle events as they happen</li>
+      <li><code>node scripts/build-receipts.cjs render</code> folds those ledgers and the committed history into a deterministic build receipt (JSON, HTML, and Markdown) under <code>reports/</code></li>
+      <li>What it looks like on real work: <code>example-receipt.html</code>, generated from this kit's own build, never hand-edited</li>
     </ul>
   </div>
 
-  <h2>Two roles — orchestrator and build (Full)</h2>
-  <p>At Full tier, the agent runs as two distinct session types that never share a session. You — the human — are the conduit between them; only one acts at a time. These roles are the kit's agents — separated by hooks, not by request.</p>
+  <h2>Four roles, separated by hooks - and you in the middle</h2>
+  <p>The kit runs your coding agent as four distinct agents. Each is a separate session with its own read list, its own permissions, and its own job; a session-layer guard blocks a prompt whose role disagrees with the session's role marker.</p>
+  <div class="hub">
+    <div class="hubcol">
+      <div class="hubcard"><div class="ht">Orchestrator</div><div class="hd">long-lived planning session</div></div>
+    </div>
+    <div class="hublink">⇄</div>
+    <div class="hubcard human"><div class="ht">Human</div><div class="hd">you - gatekeeper · conduit</div></div>
+    <div class="hublink">⇄</div>
+    <div class="hubcol">
+      <div class="hubcard"><div class="ht">Builder</div><div class="hd">fresh session per stage</div></div>
+      <div class="hubcard"><div class="ht">Verifier</div><div class="hd">fresh context, narrowed reads</div></div>
+      <div class="hubcard"><div class="ht">Refactorer</div><div class="hd">fresh context, strictest bias guard</div></div>
+    </div>
+  </div>
+  <div class="hubdocs">DOCUMENTS - THE SHARED MEMORY&nbsp;
+    <span class="chip">CLAUDE.md</span><span class="chip">Phase doc</span><span class="chip">retrospectives</span><span class="chip">V findings</span><span class="chip">gap-analysis ledger</span><span class="chip">spec</span>
+  </div>
+  <div class="hubci">
+    <div class="ht">Git hooks + CI</div>
+    <div class="hd">machine - enforcement on every push: the validators, the append-only ledger check, the full gate suite. The session layer sits above them (orientation stamp, role guard, red gate) and runs in Claude Code; the machine layers run everywhere.</div>
+  </div>
+  <p class="note">The two truths this picture carries: the session types <b>never share a context</b>, and <b>you carry the surfaces between them</b> (the conduit pattern). On this host the mode split is structural, not honor-system: the role guard is a hook. Each role's card follows below.</p>
   <div class="cols">
     <div class="panel">
       <h3>Orchestrator</h3>
       <ul>
-        <li>Authors Phase docs, ADRs, protocol docs</li>
-        <li>Adjudicates the build's surfaces; routes Verifier findings</li>
-        <li>Sequences milestones; runs the PR and merge</li>
-        <li>Governed by <code>ORCHESTRATOR.md</code> — its own operating manual</li>
+        <li>Plans and routes: authors Phase docs, ADRs, protocol docs</li>
+        <li>Adjudicates the builder's gate surfaces; routes Verifier findings</li>
+        <li>Never edits code</li>
       </ul>
     </div>
     <div class="panel">
-      <h3>Build</h3>
+      <h3>Builder</h3>
       <ul>
         <li>Executes one stage per fresh session from a pasted prompt</li>
-        <li>Does the TDD, runs gates, fills the retrospective</li>
+        <li>Writes the failing tests first; the red gate holds until a human approves them</li>
         <li>Does not sequence, route, or author Phase docs</li>
-        <li>Governed by <code>CLAUDE.md</code> + the stage prompt; never reads <code>ORCHESTRATOR.md</code></li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Verifier</h3>
+      <ul>
+        <li>Starts blind: it structurally cannot see the builder's notes</li>
+        <li>Verifies the promise, not the tests; findings graded by severity</li>
+        <li>Calibrated: it must catch seeded defects before its findings count</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Refactorer</h3>
+      <ul>
+        <li>Runs at milestone boundaries when the trigger fires (Stage R above)</li>
+        <li>Reads under the strictest bias guard of the four</li>
+        <li>Appends its findings to the tech-debt ledger</li>
       </ul>
     </div>
   </div>
-  <p class="note">Why split them: the build machine doesn't drift — each stage is a fresh scoped session. The orchestrator runs long, so it gets its own hardened manual to keep it from drifting. Recommended hosting: two Claude Code CLIs + git worktrees on one machine. At <b>Lite</b> tier the two roles collapse into one session.</p>
+
+  <h2>What is enforced, where</h2>
+  <p>Three enforcement layers back the process. The session layer is the deepest and is specific to Claude Code; the Git hooks and CI are mechanical on any host, for any agent, once the adopt step has armed them.</p>
+  <table>
+    <tr><th>Layer</th><th>What it does</th><th>Where it runs</th></tr>
+    <tr>
+      <td>Session layer</td>
+      <td>Four session hooks: orientation auto-load with a verifiable stamp at session start, the role guard on every prompt, the red gate on implementation edits, and the receipts event recorder.</td>
+      <td><b>Claude Code only.</b> Other hosts (for example GitHub Copilot) never run these hooks; there the same steps are honor-system procedure that host's QUICKSTART teaches, and picking a Claude model inside another host does not change that.</td>
+    </tr>
+    <tr>
+      <td>Git hooks</td>
+      <td>Pre-commit runs the validators over what is staged; pre-push runs the verification floor before anything leaves your machine.</td>
+      <td><b>Any host, mechanically</b>, once <code>--adopt</code> has armed them via <code>core.hooksPath</code>. They run no matter what wrote the commit.</td>
+    </tr>
+    <tr>
+      <td>CI</td>
+      <td>Pull-request checks (smoke run, stage-prompt validation) and, when a risk trigger armed it, enforcement of the append-only ledgers.</td>
+      <td><b>Any host</b>: GitHub Actions, independent of the agent entirely.</td>
+    </tr>
+  </table>
+  <p class="note"><b>Commit and push boundaries, every host:</b> the agent never commits and never pushes without your explicit approval. The session layer enforces the discipline around that promise where it runs; the Git hooks and CI verify the content regardless of who wrote it.</p>
 
   <h2>How memory works (why it stays coherent across many sessions)</h2>
   <p>The framework is built on five layers. Lower layers read from higher layers. The top two auto-load on every single session, so the agent always re-orients before doing anything.</p>
   <div class="layers">
     <div class="layer"><div class="ln">Layer 1</div><div class="lc"><b>Static contract</b><span>The spec. Changes only via a formal decision record (ADR).</span></div></div>
-    <div class="layer"><div class="ln">Layer 2</div><div class="lc"><b>Slow protocol — auto-loaded every session</b><span>CLAUDE.md, project-config.md, the playbook, identity, gates. A SessionStart hook injects these so the agent can't "forget" to read them.</span></div></div>
-    <div class="layer"><div class="ln">Layer 3</div><div class="lc"><b>Per-milestone Phase doc</b><span>The plan for the current milestone — stages, scope, the XML prompts pasted into each fresh session.</span></div></div>
-    <div class="layer"><div class="ln">Layer 4</div><div class="lc"><b>Per-session working memory</b><span>Ephemeral. One stage's context. Cleared when the stage ends — on purpose.</span></div></div>
-    <div class="layer immut"><div class="ln">Layer 5</div><div class="lc"><b>Stage outputs — committed; some append-only forever</b><span>Code commits, retrospectives, the gap-analysis ledger, the session register. The audit trail. Append-only items are never rewritten.</span></div></div>
+    <div class="layer"><div class="ln">Layer 2</div><div class="lc"><b>Slow protocol - auto-loaded every session</b><span>CLAUDE.md, project-config.md, the playbook, identity, gates. A SessionStart hook injects these so the agent can't "forget" to read them.</span></div></div>
+    <div class="layer"><div class="ln">Layer 3</div><div class="lc"><b>Per-milestone Phase doc</b><span>The plan for the current milestone: stages, scope, the XML prompts pasted into each fresh session.</span></div></div>
+    <div class="layer"><div class="ln">Layer 4</div><div class="lc"><b>Per-session working memory</b><span>Ephemeral. One stage's context. Cleared when the stage ends, on purpose.</span></div></div>
+    <div class="layer immut"><div class="ln">Layer 5</div><div class="lc"><b>Stage outputs - committed; some append-only forever</b><span>Code commits, retrospectives, the gap-analysis ledger, the build receipts. The audit trail. Append-only items are never rewritten.</span></div></div>
   </div>
 
   <h2>How to use it</h2>
-  <h3>Get the kit</h3>
-  <pre><code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project
-cd my-project</code></pre>
+  <h3>Get the kit (recommended: the release ZIP)</h3>
+  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.3-starter.zip</code>.</p>
+  <pre><code># macOS / Linux
+unzip sbak-v1.0.3-starter.zip -d my-project &amp;&amp; cd my-project
+git init
+node sbak/templates/scripts/kit-update.cjs --adopt
+claude</code></pre>
+  <pre><code># Windows (cmd or PowerShell)
+mkdir my-project
+tar -xf sbak-v1.0.3-starter.zip -C my-project
+cd my-project
+git init
+node sbak\templates\scripts\kit-update.cjs --adopt
+claude</code></pre>
+  <p><b>The adopt step verifies itself, and its exit code is the contract.</b> Exit 0 means adoption COMPLETE: every required enforcement layer is active. Anything less exits non-zero and says why: exit 1 is <code>ADOPTION INCOMPLETE</code> with the missing control named and a <code>repair:</code> command that runs as printed. An incomplete install cannot silently look complete. Re-running <code>--adopt</code> is always safe; a clean re-run changes nothing.</p>
+  <p><b>Prefer to clone?</b> The alternate path: <code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project</code>, then <code>cd my-project</code>, the same adopt step, and <code>claude</code>. One heads-up: <code>origin</code> still points at the kit's repository until the bootstrap resets it at handoff; don't <code>git push</code> before then.</p>
   <h3>Start</h3>
   <pre><code>claude
 # The kit's CLAUDE.md auto-loads.
-# It presents the 3-ask calibration interview as its first response.
-# Answer the questions (or describe your project and let it propose a calibration).
-# Then tell it what you want to build — a paragraph is enough.</code></pre>
+# It echoes your folder first - confirm it's the right one.
+# Then it presents the 3-ask calibration interview.
+# Then tell it what you want to build - a paragraph is enough.</code></pre>
   <h3>Then</h3>
-  <p>The agent runs bootstrap (spec → milestones → scaffold), replaces the kit's CLAUDE.md with your project's own, and hands off. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
-  <p class="note">Runs anywhere Claude Code runs — terminal CLI or the web app at claude.ai/code. Cross-platform (the hooks are Node, which Claude Code already requires — no bash/WSL needed on Windows).</p>
+  <p>The agent runs bootstrap (spec, milestones, scaffold), replaces the kit's CLAUDE.md with your project's own, and hands off. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
+  <p class="note">The full session layer runs in Claude Code. Other agents work with the enforcement split above: the Git hooks and CI stay mechanical everywhere (the README's host table and the Copilot QUICKSTART cover that path). Cross-platform: the hooks are Node, which the kit already requires; no bash or WSL needed on Windows.</p>
 
   <h2>Pick a tier</h2>
   <table>
     <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill full">Full</span> (default)</th></tr>
-    <tr><td>Best for</td><td>Weekend tool, prototype, ≤1–2 weeks solo</td><td>Anything with a second reader, an audit need, or a longer horizon</td></tr>
-    <tr><td>Scaffold files</td><td>~44</td><td>~108 (+2 when risk-armed)</td></tr>
+    <tr><td>Best for</td><td>Under a week, low audit needs</td><td>A second reader, an audit need, or a multi-week horizon</td></tr>
+    <tr><td>Scaffold files</td><td>41</td><td>97</td></tr>
     <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td></tr>
     <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td></tr>
     <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory; CI-enforced when a risk trigger is declared)</td></tr>
     <tr><td>Validators</td><td>Advisory (--warn)</td><td>Blocking</td></tr>
-    <tr><td>Verifier</td><td>1 pass (inventory)</td><td>4 passes (hooks · behavior · security · code quality)</td></tr>
-    <tr><td>Review time / stage</td><td>~10 min</td><td>~30–40 min</td></tr>
+    <tr><td>Verifier</td><td>1 pass (inventory)</td><td>4 passes (hooks · behavior · security · code quality) + plan-challenge</td></tr>
+    <tr><td>Review time / stage</td><td>~10 min</td><td>~30 min</td></tr>
   </table>
+  <p class="note">Declaring a risk trigger at calibration arms CI enforcement of the append-only ledger and adds 2 files to the scaffold: the manifest row set's 2 risk-armed rows (the append-only checker and its CI workflow). That count is derived from the row set, and the kit's own verification floor pins this page to it.</p>
 
   <h2>What you get · what it doesn't do</h2>
   <div class="cols">
     <div class="panel">
       <h3>What you get</h3>
       <ul>
-        <li>Calibrated ceremony — discipline scales to the project</li>
-        <li>A do-not-commit-without-approval guarantee</li>
+        <li>Calibrated ceremony: discipline scales to the project</li>
+        <li>A do-not-commit-without-approval guarantee, hook-enforced where the host runs hooks</li>
         <li>Fresh-context verification that catches "tests pass but it's broken"</li>
         <li>An append-only forensic audit trail (Full)</li>
-        <li>A schema validator enforced at pre-commit + CI</li>
-        <li>Stack-agnostic — Rust, Python, TypeScript, Go, anything</li>
+        <li>Validators enforced at pre-commit and in CI</li>
+        <li>Stack-agnostic: Rust, Python, TypeScript, Go, anything</li>
       </ul>
     </div>
     <div class="panel">
       <h3>What it doesn't do</h3>
       <ul>
-        <li>Doesn't run the agent for you — you drive Claude Code</li>
-        <li>Doesn't enforce gates itself — your CI does</li>
-        <li>Doesn't replace specs or design discussion — it frames them</li>
-        <li>Doesn't pretend Lite is auditable — pick Full if you need a trail</li>
+        <li>Doesn't run the agent for you: you drive it</li>
+        <li>Doesn't mechanically enforce judgment: the hooks and CI enforce what they can check; the review gates stay human</li>
+        <li>Doesn't replace specs or design discussion: it frames them</li>
+        <li>Doesn't pretend Lite is auditable: pick Full if you need a trail</li>
       </ul>
     </div>
   </div>
 
   <footer>
-    <b>Roadmap (mostly shipped):</b> the Refactor health-check stage (<code>proposals/STAGE-R-REFACTOR.md</code>) and all three further operating modes — bug-fix, research-publish, audit (<code>proposals/OPERATING-MODES.md</code>) — are now live; only <code>proposals/RUNTIME-CREATION-MODE.md</code> remains deferred. &nbsp;·&nbsp; Framework references: <code>BUILD-PLAYBOOK.md</code> (methodology) · <code>FRAMEWORK-CONFIG.md</code> (the dial) · <code>persistence-architecture.md</code> (the layer model) · <code>STAGE-PROMPT-PROTOCOL.md</code> (the XML schema) · <code>PROCESS-VALIDATION.md</code> (the scoring).
+    <b>Framework references</b> (all included): <code>BUILD-PLAYBOOK.md</code> (methodology) · <code>FRAMEWORK-CONFIG.md</code> (the dial) · <code>persistence-architecture.md</code> (the layer model) · <code>STAGE-PROMPT-PROTOCOL.md</code> (the XML schema) · <code>PROCESS-VALIDATION.md</code> (the scoring)
   </footer>
 
 </div>

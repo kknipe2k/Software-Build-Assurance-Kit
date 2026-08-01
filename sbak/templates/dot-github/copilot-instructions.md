@@ -29,15 +29,15 @@ If the user hasn't specified which role this session is for, **ask before procee
 
 ## Invoking a stage (Copilot has no slash commands)
 
-Claude Code can use `.claude/commands/`; Copilot can't. The convention here: the user types **`Stage M01 A`** (milestone, then stage letter). When you see that, treat it as: open `docs/build-prompts/M01-*.md`, find the §A.5 stage prompt (the fenced `xml` block for that stage), and execute it exactly as if it were pasted — after completing your first-action orientation for the matching mode. `Verify M01` → the Stage V (verifier) prompt; `Closeout M01` → the closeout prompt.
+Claude Code can use `.claude/commands/`; Copilot can't. The convention here: the user types **`Stage M01 A`** (milestone, then stage letter). When you see that, treat it as: open `docs/build-prompts/M01-*.md`, find the §A.5 stage prompt (the fenced `xml` block for that stage), and execute it exactly as if it were pasted — after completing your first-action orientation for the matching mode. `Verify M01` → the Stage V (verifier) prompt; `Refactor M01` → the Stage R (refactor) prompt, when its milestone-boundary trigger fires; `Closeout M01` → the closeout prompt.
 
 ## Mode-aware reading — honor-system in Copilot
 
 The framework distinguishes session types. In Claude Code the SessionStart hook in `.claude/` selects the right read-first list automatically based on `.claude/role`. **In Copilot the hook does not run** — it is your responsibility to read the right files for the role:
 
 - **Work / build session** (executing a stage from a §X.5 prompt) — read every entry in `.claude/read-first-list.txt`. Mode: `work`.
-- **Verifier session** (Stage V — Standard+ only) — read every entry in `.claude/read-first-list-verifier.txt`. **Critical:** do NOT read prior retrospectives (`retrospectives/M[NN].*-retrospective.md`) — that is the fresh-context bias guard. Reading them defeats the Verifier's job.
-- **Orchestrator session** (Standard+ only — authoring Phase docs / ADRs, routing Verifier findings, running PRs) — read every entry in `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`. Build / verifier / closeout sessions must NOT read `ORCHESTRATOR.md`.
+- **Verifier session** (Stage V — Full only) — read every entry in `.claude/read-first-list-verifier.txt`. **Critical:** do NOT read prior retrospectives (`retrospectives/M[NN].*-retrospective.md`) — that is the fresh-context bias guard. Reading them defeats the Verifier's job.
+- **Orchestrator session** (Full only — authoring Phase docs / ADRs, routing Verifier findings, running PRs) — read every entry in `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`. Build / verifier / closeout sessions must NOT read `ORCHESTRATOR.md`.
 
 At Lite tier the roles collapse into one session and only `work` mode applies.
 
@@ -47,7 +47,7 @@ In Claude Code the orchestrator is a long-lived `claude --resume` session that h
 
 ## Model-class transparency (honor-system)
 
-Copilot tiers ration Opus credits. When they run out, Copilot may silently fall back to Haiku mid-project — and a stage that needs heavy reasoning (spec authoring, `design.md` authoring, Phase-doc authoring, any verifier pass, closeout summarization) is materially degraded on Haiku without anything surfacing the swap. The framework does not promise Opus-equivalent output on Haiku; it asks you to make the condition visible:
+Copilot meters premium model usage. When your plan's premium requests run out, chat continues on an included base model — generally not a Claude model at all — and a stage that needs heavy reasoning (spec authoring, `design.md` authoring, Phase-doc authoring, any verifier pass, closeout summarization) is materially degraded on a lighter or non-Claude model without anything surfacing the swap. The framework does not promise Opus-equivalent output on Haiku; it asks you to make the condition visible:
 
 **1. Always report your model in the orientation stamp** — `[orientation loaded: mode=<X>, model=<your model>, N files]`. State the actual model (e.g. `model=claude-opus-4-8`, `model=claude-haiku-4-5`). If you cannot determine it, say `model=unknown` and treat the session as potentially-degraded.
 
@@ -75,4 +75,4 @@ The framework does **not** promise Opus-equivalent output on Haiku. It promises 
 
 - `sbak/QUICKSTART-COPILOT.md` (under the kit dir, if present) — Copilot-specific operational notes
 - `sbak/BUILD-PLAYBOOK.md` §2.2 — the four-role model (Human / Orchestrator / Build / CI)
-- `ORCHESTRATOR.md` (Standard+) — orchestration operating manual; for orchestrator sessions only. §1 includes Copilot in the topology table.
+- `ORCHESTRATOR.md` (Full) — orchestration operating manual; for orchestrator sessions only. §1 includes Copilot in the topology table.

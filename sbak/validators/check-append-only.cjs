@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/check-append-only.cjs
 //
 // Byte-prefix append-only validator — the shared primitive the kit's ledgers
@@ -57,6 +57,7 @@ function git(args) {
 // CRLF (and lone CR) → LF, so a Windows checkout doesn't read as a false
 // violation against an LF-committed baseline.
 function normalize(s) {
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); // BOM — match validators/lib/fenced-block.cjs's normalize
   return s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 

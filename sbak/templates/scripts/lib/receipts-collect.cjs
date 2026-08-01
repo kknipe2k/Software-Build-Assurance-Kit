@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // scripts/lib/receipts-collect.cjs
 //
 // The collectors (M20.6.C) — committed artifacts become receipts. This is the
@@ -46,7 +46,19 @@ const { spawnSync } = require('child_process');
 // the same way — "consume, don't fork"). No parallel parser in this file.
 const fenced = require('../../validators/lib/fenced-block.cjs');
 
-const COLLECTOR_VERSION = '1.0.2';
+// DERIVED from this file's own @kit-version stamp, which the smoke stamp lock already
+// binds to the manifest fact — so the collector version and the kit version cannot drift
+// apart, and a release bump moves both without a hand edit here.
+// Consumes the established in-repo idiom (scripts/lib/settings-merge.cjs KIT_VERSION)
+// rather than reading the release manifest: this is a SHIPPED library, and adding a
+// runtime read of an external file to it would buy a second failure mode in adopted
+// projects to solve a problem the stamp already solves. Consume, don't fork.
+const COLLECTOR_VERSION = (function () {
+  try {
+    const m = /@kit-version\s+(\S+)/.exec(fs.readFileSync(__filename, 'utf8'));
+    return m ? m[1] : 'unstamped';
+  } catch (_) { return 'unstamped'; }
+})();
 
 // A stage commit ships a surface: M<NN>[.<NN>...].<Stage>: <subject>.
 const STAGE_COMMIT_RE = /^M\d+(?:\.\d+)*\.[A-Za-z0-9]+:/;
@@ -131,6 +143,12 @@ function classify(rec) {
     default: return 'unclassified';
   }
 }
+
+// The collectors' class table, DERIVED from classify's own source (M28.L, owner
+// requirement 3 round 2): the record kinds the report knows how to summarize are
+// exactly the classifier's case list — one authority, nothing typed by hand, so
+// the rendered "N specific record types" can never drift from the switch above.
+const RECORD_KINDS = Object.freeze([...classify.toString().matchAll(/case '([a-z-]+)':/g)].map((m) => m[1]));
 
 // ---------------------------------------------------------------------------
 // git collector — hash/subject/date only. Author identity stays OUT (J4).
@@ -455,10 +473,10 @@ function collectReleaseState(opts) {
     let limitation = 'transition parsed from the release-state ledger; ' + FROZEN_TAIL;
     if (att) {
       // LINK the signed attestation by reference + digest — never an embedded
-      // unsigned hash. The live path is DORMANT until v0.1.0 produces a real one.
+      // unsigned hash. The live path has produced real attestations since v1.0.2.
       attestation = { ref: att[1], sha256: att[2] };
       subjects.push({ name: 'attestation:' + att[1], digest: { sha256: att[2] } });
-      limitation = 'attestation LINKED by reference + digest (never an embedded unsigned hash); the live attestation path is dormant until v0.1.0 (no real attestation produced yet). ' + FROZEN_TAIL;
+      limitation = 'attestation LINKED by reference + digest (never an embedded unsigned hash). ' + FROZEN_TAIL;
     }
     emitReceipt(out, {
       kind: 'release-transition',
@@ -566,6 +584,7 @@ module.exports = {
   STAGE_COMMIT_RE,
   emitReceipt,
   classify,
+  RECORD_KINDS,
   collectCommits,
   collectChangelog,
   collectRetros,

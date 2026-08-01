@@ -1,5 +1,5 @@
 ---
-fixture: bare-startswith.md
+fixture: dest-check-diff.md
 class: bare-startswith
 expected: must-flag
 ---

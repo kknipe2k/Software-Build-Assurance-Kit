@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/validate-entry-docs.cjs
 //
 // THE DOC-SYNC ENGINE — one source of truth for what the kit SAYS about
@@ -251,6 +251,13 @@ function bindRoleNames(root) {
   const toks = m[1].match(/'([a-z_]+)'|"([a-z_]+)"/g);
   return toks ? toks.map((x) => x.replace(/['"]/g, '')) : null;
 }
+// The kit's release identity, from the ONE source: release-manifest.json `version` (what
+// build-release composes the artifact name from). Fails CLOSED to null: an underivable
+// version must surface as a manifest error, never as a plausible-looking default.
+function deriveKitVersion(root) {
+  try { return JSON.parse(readIf(path.join(root, 'release-manifest.json'))).version || null; }
+  catch (_) { return null; }
+}
 // REFERENCED: golden-manifest.json's per-tier rendered counts (read LIVE, never copied).
 function referenceScaffoldCounts(root) {
   try {
@@ -306,10 +313,10 @@ function deriveManifest(root) {
     operating_mode_count: { value: bindOperatingModes(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md operating_mode value list' },
     scaffold_counts: { value: referenceScaffoldCounts(root), kind: 'referenced', source: 'golden-manifest.json tiers[tier].counts.rendered (read live)' },
     entry_docs: { value: ENTRY_DOCS.slice(), kind: 'derived', source: 'validate-entry-docs.cjs ENTRY_DOCS (the policed entry-doc set; shrunk EXPLICITLY at M19.C — guarded by entryDocSetConsistency)' },
-    // ── the kit's release identity — the @kit-version stamp source. DECLARED
-    //    per the red ruling: no machine source exists pre-release (no git tag, no package.json),
-    //    and a version file invented purely to be derived from is tag-discipline theater. ──
-    kit_version: { value: '0.2.0', kind: 'declared', source: "the kit's release identity — no machine source exists pre-release (no git tag, no package.json); bumped by the release stage (v0.1.0 next), at which point it can graduate to derived-from-tag; stamped into every scaffolded enforcement file (I13) and locked by the smoke stamp lock" },
+    // ── the kit's release identity — the @kit-version stamp source. DERIVED from
+    //    release-manifest.json `version` (the pre-release "no machine source" era ended at
+    //    v0.1.0); one root for the whole stamp chain, matching the shipped manifest's record. ──
+    kit_version: { value: deriveKitVersion(root), kind: 'derived', source: 'the release identity, DERIVED from release-manifest.json version — one root for the whole stamp chain; stamped into every scaffolded enforcement file and locked by the smoke stamp lock' },
     // ── IDENTITY FACTS. DECLARED = a decision with no machine source (the manifest
     //    IS its home; selfCheck re-derives a constant to itself -> rot-proof; the classes police the
     //    docs against it). role_names is BOUND (a real machine source the rename never touches). ──
@@ -319,8 +326,7 @@ function deriveManifest(root) {
     tier_names: { value: ['Lite', 'Full'], kind: 'declared', source: 'M26.D (the ratified collapse, calibration-core.json tiers): two tiers — Full the merged default, Lite the low-ceremony escape; what project-config.md persists' },
     tier_names_legacy: { value: ['Light', 'Mid', 'Complex', 'Standard'], kind: 'declared', source: 'the retired tier labels: Light/Mid/Complex retired at M20 I9; Standard retired at M26.D (the two-tier collapse — merged into Full, fork ruling 1)' },
     role_names: { value: bindRoleNames(root), kind: 'bound', source: 'scripts/set-mode.cjs VALID_MODES (the role values — the axis rename never touches them)' },
-    state_file: { value: '.claude/role', kind: 'declared', source: 'M20 I9: the renamed session-axis state file (was .claude/active-mode)' },
-    state_file_legacy: { value: '.claude/active-mode', kind: 'declared', source: 'M20 I9: the one-release read-compatible alias (removal milestone named at B); legitimate only in the state-contract note + fallback comments (the alias-window carve-out)' },
+    state_file: { value: '.claude/role', kind: 'declared', source: 'M20 I9 renamed the session axis; M28.F closed its compatibility alias — this is now the ONLY session-role marker' },
     // ── the stack-coverage boundary — DERIVED from the two gate validators'
     //    own per-language tables (G15 LANG_WRITE_CALLS ∩ G9 EVALUATED_LANGS; derivation
     //    REFUSES a one-sided extension), never hand-declared, so the claim cannot drift
@@ -495,9 +501,6 @@ const LEGACY_TIER_TRIPLE = /\b(Light|Mid|Complex)\b[^\n]*[/|+][^\n]*\b(Light|Mid
 // out — every real calibration tuple is a +/,-joined list.
 const CALIB_AXIS = /\b(New|Familiar|Experienced|Novice|Intermediate|Expert|Minimum|Maximum)\b/;
 const CALIB_TUPLE = (line) => /[+,]/.test(line) && CALIB_AXIS.test(line) && /\b(Light|Mid|Complex)\b/.test(line);
-// the declared alias-window carve-out: `active-mode` on a line B marks `alias-window` (the one
-// state-contract note + fallback comments) is legitimate during the one-release window.
-const ROLE_ALIAS_MARKER = /alias-window/i;
 // M26.D: a RETIRED tier name (now incl. "Standard") on a line that marks itself as history is
 // a record, not drift — the same marker set the workshop smoke sweep exempts.
 const TIER_LEGACY_MARKER = /legacy|retired|formerly|was Standard|superseded|pre-M26|M26\.D|erratum|historical/i;
@@ -720,14 +723,15 @@ const VALUE_CLASSES = [
   },
   // ROLE_TERMS — the legacy axis/filename token `active-mode`. ASYMMETRIC by necessity: the
   // current token `role` is a common English word, unmatchable bare, so the class matches only the
-  // legacy token and every UNEXEMPTED hit is drift. The declared alias-window marker exempts the
-  // state-contract note + fallback comments during B's one-release window.
+  // legacy token and EVERY hit is drift. M28.F retired the alias-window carve-out with
+  // the alias itself and declared NO replacement: the class now has zero exemptions, which is the
+  // end-state this comment always described. The retired filename survives in the historical
+  // records (the development history), which this class does not scan.
   {
     name: 'role_terms', field: 'state_file', docSet: ROLE_DOCS,
     find(text) {
       const out = [];
       eachLine(text, (line, ln) => {
-        if (ROLE_ALIAS_MARKER.test(line)) return; // declared alias-window carve-out
         const re = /\bactive-mode\b/g; let m;
         while ((m = re.exec(line)) !== null) out.push({ line: ln, value: 'active-mode', quoted: hitQuoted(line, m[0]) });
       });

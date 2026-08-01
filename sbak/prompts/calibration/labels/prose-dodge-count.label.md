@@ -1,5 +1,5 @@
 ---
-fixture: prose-dodge-count.md
+fixture: closeout-summary-m03.md
 class: prose-dodge-count
 expected: must-flag
 ---

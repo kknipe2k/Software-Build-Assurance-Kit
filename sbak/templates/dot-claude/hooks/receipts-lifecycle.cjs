@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -88,7 +88,7 @@ function readStdinBounded() {
   return Buffer.concat(out).toString('utf8');
 }
 
-// ---- session-role resolution (mirror the A-stage hooks; alias-window aware) ----
+// ---- session-role resolution (mirror the A-stage hooks; single marker) ----
 const VALID_ROLES = ['work', 'verifier', 'orchestrator', 'refactor'];
 const NUL = String.fromCharCode(0);
 function decodeBytes(b) {
@@ -107,15 +107,14 @@ function readRoleToken(claudeDir, name) {
   const v = readMarkerFile(claudeDir, name);
   return v === undefined ? undefined : v.toLowerCase();
 }
-// PREFER `.claude/role`, FALL BACK to the legacy `.claude/active-mode` ONLY when role
-// is ABSENT (I9 alias-window). A present-but-garbage marker resolves to null (unknown)
-// and does NOT fall through — validateEvent then coerces role to 'unknown' (never
-// guessed). Returns a valid role token or null.
+// SINGLE MARKER (M28.F — the alias-window's fallback is removed). `.claude/role`
+// is the only marker consulted. A present-but-garbage marker resolves to null (unknown)
+// and validateEvent then coerces role to 'unknown' (never guessed); an absent marker is
+// likewise null, so the ledger stops attributing work to a role the session layer does not
+// believe in. Returns a valid role token or null.
 function resolveRole(claudeDir) {
   const r = readRoleToken(claudeDir, 'role');
   if (r !== undefined) return VALID_ROLES.indexOf(r) !== -1 ? r : null;
-  const a = readRoleToken(claudeDir, 'active-mode');
-  if (a !== undefined) return VALID_ROLES.indexOf(a) !== -1 ? a : null;
   return null;
 }
 

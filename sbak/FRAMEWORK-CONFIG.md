@@ -2,7 +2,7 @@
 
 > **Human reader: you can skip this file.** It is part of the agent's operating manual — a reference the build sessions consult, deliberately exhaustive. Start at `README.md` → `QUICKSTART.md`, and ask questions in-session rather than reading ahead.
 
-> The framework's overhead is **knowable, changeable, and pays off** — but only if you choose the right calibration. This file defines the calibration model: three tiers, a toggle schema for fine-grained overrides, decision aids for picking, and the protocol for changing tier mid-project.
+> The framework's overhead is **knowable, changeable, and pays off** — but only if you choose the right calibration. This file defines the calibration model: two tiers, a toggle schema for fine-grained overrides, decision aids for picking, and the protocol for changing tier mid-project.
 >
 > Companion to `BUILD-PLAYBOOK.md` (the methodology), `STAGE-PROMPT-PROTOCOL.md` (the XML schema), `PROCESS-VALIDATION.md` (the scoring), and `persistence-architecture.md` (the layer model). This file is the **dial** the others read.
 
@@ -215,13 +215,13 @@ Default is `enforced` for all tiers because honor-system compliance is a known r
 
 Controls how much the agent narrates what it's doing during a stage.
 
-| Value | Behavior | Default for |
+| Value | Behavior | Who picks it |
 |---|---|---|
-| `verbose` | The agent explains its reasoning before every non-trivial decision; states why it picked a library/pattern/approach; calls out reversible vs irreversible choices. | Novice expertise |
-| `standard` | The agent narrates significant decisions; routine implementation details are silent. | Intermediate expertise |
-| `terse` | The agent works as written in the playbook — minimal narration; surfaces results, not thinking. | Expert expertise |
+| `verbose` | The agent explains its reasoning before every non-trivial decision; states why it picked a library/pattern/approach; calls out reversible vs irreversible choices. | Users who want teaching-level narration (explicit choice) |
+| `standard` | The agent narrates significant decisions; routine implementation details are silent. | Every project (the one default - the expertise ask was retired at M26.D) |
+| `terse` | The agent works as written in the playbook — minimal narration; surfaces results, not thinking. | Users who want minimal narration (explicit choice) |
 
-Verbose mode is the "highly explanatory" default for novices. The cost is more text in every session; the benefit is a user who learns the framework and the stack as they ship, instead of guessing why the agent did what it did.
+Verbose mode is the "highly explanatory" explicit choice. The cost is more text in every session; the benefit is a user who learns the framework and the stack as they ship, instead of guessing why the agent did what it did.
 
 ### 4.10 Verifier mode — `verifier_mode`
 
@@ -628,11 +628,10 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~108 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +1 workflow when a declared risk trigger arms the ledger CI.)
+- Bootstrap generates ~108 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +2 files when a declared risk trigger arms the ledger CI, the manifest row set's 2 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml`.)
 - Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
 - Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.
-- Total recurring overhead per stage: ~25–40 minutes of human review.
 - Total recurring overhead per stage: ~60–90 minutes of human review.
 
 The numbers are estimates. Your project will land where it lands. If a tier's recurring overhead is consistently 2× the estimate after the first milestone, that's a signal to re-tier — not to push through.

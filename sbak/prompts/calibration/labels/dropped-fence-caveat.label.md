@@ -1,5 +1,5 @@
 ---
-fixture: dropped-fence-caveat.md
+fixture: findings-revisions-m04.md
 class: dropped-fence-caveat
 expected: must-flag
 ---

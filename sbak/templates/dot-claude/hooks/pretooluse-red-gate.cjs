@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit). The HARD form of
@@ -9,13 +9,17 @@
 // can blow past — which is exactly what happened in M09.A.
 //
 // It BLOCKS (exit 2) only when ALL FOUR positively confirm:
-//   1. the session is `work` mode             (.claude/role, falling back to .claude/active-mode; absent -> work)
+//   1. the session is `work` mode             (.claude/role; absent -> work)
 //   2. a stage is open                         (.claude/stage-active present)
 //   3. the open stage is NOT red-approved      (.claude/red-approved absent or != stage)
 //   4. the target is an IMPLEMENTATION path    (not a test / doc / .claude / allow-listed path)
-// Anything else -> ALLOW (exit 0). Test paths, docs/, retrospectives/, .claude/,
-// a verifier/orchestrator session, or no open stage all proceed — the builder MUST
-// be able to write the failing tests and fill the retro before approval.
+//      — OR one of the gate's OWN control files (the self-approval carve), which are denied
+//        even though the rest of .claude/** is allowed: an engaged gate must not be
+//        agent-writable into approving itself.
+// Anything else -> ALLOW (exit 0). Test paths, docs/, retrospectives/, .claude/
+// (minus the three control files), a verifier/orchestrator session, or no open stage
+// all proceed — the builder MUST be able to write the failing tests and fill the
+// retro before approval.
 //
 // FAIL-OPEN BY DESIGN. This is a PROCESS gate, not a security boundary:
 //   * it exits 2 ONLY on a positively-confirmed block; ANY error / ambiguity /
@@ -64,7 +68,7 @@ function readStdinBounded() {
   return Buffer.concat(out).toString('utf8');
 }
 
-// ---- strict marker reads (mirror the A-stage hooks; absent active-mode -> work) ----
+// ---- strict marker reads (mirror the A-stage hooks; absent role marker -> work) ----
 const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 const NUL = String.fromCharCode(0);
 function decodeBytes(b) {
@@ -87,14 +91,14 @@ function classifyRole(t) {
   const low = t.toLowerCase();
   return VALID_MODES.includes(low) ? low : 'unresolved';
 }
-// I9 alias-window resolution (M20.B): PREFER `.claude/role`, FALL BACK to the legacy
-// `.claude/active-mode` ONLY when role is ABSENT (no file). A present-but-garbage role
-// FAILS CLOSED to 'unresolved' and does NOT fall through to a valid legacy file (DF-005).
-// ABSENT-both is the lone legitimate default -> 'work'. Retired at v0.2.0 with the alias.
+// SINGLE-MARKER resolution (M28.F — the alias-window's fallback is removed).
+// `.claude/role` is the only marker consulted. A present-but-garbage role FAILS CLOSED to
+// 'unresolved' (DF-005) — the gate ENGAGES rather than guessing. ABSENT is the lone
+// legitimate default -> 'work', which is also what a pre-rename project now resolves to:
+// a retired marker can no longer DISENGAGE this gate.
 function readMode(claudeDir) {
   if (fs.existsSync(path.join(claudeDir, 'role'))) return classifyRole(readMarker(claudeDir, 'role'));
-  if (fs.existsSync(path.join(claudeDir, 'active-mode'))) return classifyRole(readMarker(claudeDir, 'active-mode'));
-  return 'work'; // ABSENT both -> the lone legitimate default
+  return 'work'; // ABSENT -> the lone legitimate default
 }
 
 // ---- allow-list (CONFIG-DRIVEN; the hook hardcodes NO project's test file) ----
@@ -194,12 +198,13 @@ function main() {
   if (!stageActive) process.exit(ALLOW);
 
   // (1) only a work session builds; verifier/orchestrator/refactor never implement -> ALLOW.
-  //     DF-005 (M16.B): an UNRESOLVED (garbage) active-mode value must NOT silently disable
+  //     DF-005 (M16.B): an UNRESOLVED (garbage) role value must NOT silently disable
   //     the gate (the fail-open outlier — the same value blocks/warns in the other two hooks).
   //     It fails CLOSED by ENGAGING the gate exactly as `work` does (fall through), so an
   //     implementation edit is blocked while a test/doc path still passes the (4) allow check.
-  //     This adds NO new exit-2 site — the single confirmed-block below stays the only one.
-  //     ABSENT active-mode remains the legitimate work default (readMode returns 'work').
+  //     This adds NO new exit-2 site of its own — the two confirmed blocks below (the
+  //     control-file carve + the implementation-path block) stay the only ones.
+  //     ABSENT role marker remains the legitimate work default (readMode returns 'work').
   const mode = readMode(claudeDir);
   if (mode !== 'work' && mode !== 'unresolved') process.exit(ALLOW);
 
@@ -210,9 +215,36 @@ function main() {
   // (4) non-implementation path (tests / docs / .claude / allow-listed) -> allow.
   //     Relativize first (PROC-003) so an absolute tool path matches the repo-relative globs.
   const relPath = toRepoRel(rawPath, sessionCwd);
+
+  // Self-approval deny-carve: the gate's OWN control files are refused BEFORE the allow
+  // globs are consulted — no allow entry (the built-in '.claude/**' included, or any
+  // red-gate-allow.txt line) may let an EDIT-TOOL write approve the agent's own
+  // stage (red-approved), widen the allow list (red-gate-allow.txt), or rewire the
+  // hooks (settings.json). The human path is untouched: /approve-red runs
+  // scripts/approve-red.cjs as a plain process, not an edit tool. The compare is
+  // dot-dot-normalized + lowercased (Windows FS is case-insensitive; over-blocking
+  // an odd-cased path on a case-sensitive FS is the fail-closed direction). Honest
+  // residual: the carve binds only the ENGAGED gate — outside an open un-approved
+  // work stage these files are as editable as ever, and a Bash write still bypasses
+  // the hook entirely (it is a bar-raise, not a wall).
+  const CONTROL_FILES = ['.claude/red-approved', '.claude/red-gate-allow.txt', '.claude/settings.json'];
+  const denyRel = normRel(path.normalize(relPath)).toLowerCase();
+  if (CONTROL_FILES.indexOf(denyRel) !== -1) {
+    process.stderr.write(
+      `\n[red-gate] REFUSED — '${normRel(relPath)}' is a red-gate control file (self-approval carve).\n` +
+      `  The gate's approval marker, allow-list, and hook wiring are not agent-writable while\n` +
+      `  a stage is open and un-approved. RED approval is the HUMAN's action: after they review\n` +
+      `  the failing tests, they run\n` +
+      `      /approve-red     (or: node scripts/approve-red.cjs)\n` +
+      `  Allow-list or settings changes during a gated stage are likewise theirs to make.\n\n`
+    );
+    process.exit(BLOCK);
+  }
+
   if (isAllowedPath(relPath, loadAllowGlobs(claudeDir))) process.exit(ALLOW);
 
-  // All four confirmed -> BLOCK (the only exit-2 in this hook).
+  // All four confirmed -> BLOCK (the implementation-path block; the control-file carve
+  // above is the hook's only other exit-2).
   process.stderr.write(
     `\n[red-gate] Implementation edit blocked — RED tests not yet approved for stage ${stageActive}.\n` +
     `  '${normRel(relPath)}' is an implementation path, the stage is open, and there is no\n` +

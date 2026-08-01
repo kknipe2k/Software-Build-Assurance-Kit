@@ -453,8 +453,9 @@ for (const hook of ['session-start-read-first.cjs', 'user-prompt-submit-mode-che
   const hp = path.join(baked, '.claude', 'hooks', hook);
   if (!fs.existsSync(hp)) continue; // presence handled above / by the hook-specific check
   const src = fs.readFileSync(hp, 'utf8');
-  // Alias-window: parameterized over BOTH role markers — a baked hook must teach neither
-  // `> .claude/role` (the new marker) nor `> .claude/active-mode` (the alias, retired one release after v0.2.0).
+  // Parameterized over BOTH role-marker names — a baked hook must teach neither
+  // `> .claude/role` (the marker) nor its retired alias (the alias-window is closed; the
+  // ban outlives the alias, because a stale tutorial can still teach the redirect).
   if (/>\s*\.claude\/(?:role|active-mode)\b/.test(src)) {
     findings.push(`hook-text inheritance broken — baked .claude/hooks/${hook} still teaches the banned truncate-write redirect to the role/mode file (must remediate via node scripts/set-mode.cjs).`);
   }
@@ -592,13 +593,15 @@ const GATES = [
     validator: 'validate-transition.cjs',
     fire() {
       // a NON-test source file doing a truncate-then-write of a durable-state file
-      // (.claude/active-mode) instead of write-temp-rename → the truncate-write race, blocked.
+      // (.claude/role) instead of write-temp-rename → the truncate-write race, blocked.
+      // The fixture names the CANONICAL marker: when the guarded set narrowed, a fixture
+      // on the retired name would prove the gate DEAD rather than live.
       const body =
         "'use strict';\n" +
         "const fs = require('fs');\n" +
-        "function setMode(mode) { fs.writeFileSync('.claude/active-mode', mode); }\n" +
+        "function setMode(mode) { fs.writeFileSync('.claude/role', mode); }\n" +
         'module.exports = { setMode };\n';
-      const f = write('set-active-mode.cjs', body);
+      const f = write('set-role.cjs', body);
       return runBaked('validate-transition.cjs', [f]);
     },
   },
@@ -1005,6 +1008,15 @@ try {
     const spr = path.join(goldenRoot, '.claude', 'settings.json');
     fs.writeFileSync(spr, bakedUserSettings, 'utf8');
     fs.copyFileSync(path.join(KIT_ROOT, 'release-manifest.json'), path.join(goldenRoot, 'release-manifest.json'));
+    // The fixture is made a REAL repository before this adopt. THE RULE: --adopt is
+    // fail-closed on hook activation, so a successful exit means every required enforcement
+    // layer is live — which a git-less directory can never satisfy. This leg used to run in
+    // one and assert exit 0, true only while adoption soft-succeeded with the hook layer
+    // inactive. The fix is to give the leg the state a real adopted project is in, NOT to
+    // relax the assertion: `kuS.status === 0` below is unchanged and still load-bearing.
+    // (`git init` is idempotent — the leg at the foot of this file re-inits the same root
+    // and is unaffected.)
+    spawnSync('git', ['init', '-q'], { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
     const kuS = spawnSync('node', [path.join(goldenRoot, 'scripts', 'kit-update.cjs'), '--adopt', '--kit', KIT_ROOT],
       { cwd: goldenRoot, encoding: 'utf8', env: sandbox.scrubGitEnv() });
     let mergedS = null;

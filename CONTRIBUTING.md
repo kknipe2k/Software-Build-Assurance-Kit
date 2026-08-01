@@ -1,14 +1,14 @@
 # Contributing
 
-Thank you for looking at the Software Build Assurance Kit. Please read this first — the contribution model here is unusual, and knowing it up front will save you effort.
+Thank you for looking at the Software Build Assurance Kit. Please read this first - the contribution model here is unusual, and knowing it up front will save you effort.
 
 ## The posture, plainly
 
 **Development happens in a private repository.** What you see here is a published snapshot. Its history starts at v0.1.0 by design; there is no upstream commit log to read, and there is nowhere for a pull request to merge back to.
 
-**Pull requests are not the model at v0.x.** If you open one, it will not be rude — it will just be stranded. Please open an issue instead and describe the change you would have made. That reaches the same place with less of your time spent.
+**Pull requests are not the model.** If you open one, it will not be rude - it will just be stranded. Please open an issue instead and describe the change you would have made. That reaches the same place with less of your time spent.
 
-**Issues are read and reviewed. No response time is promised.** This is a solo, experimental project. Silence means a queue, not a verdict.
+**Issues are read and reviewed. No response time is promised.** This is a solo project. Silence means a queue, not a verdict.
 
 **Pull requests may open in a later version.** If and when they do, this file will say so, and the requirement below will apply.
 

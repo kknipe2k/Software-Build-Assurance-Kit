@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -87,7 +87,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 // The confinement primitive travels with the tool (red ruling D2 — extend, don't fork).
-const { assertInside } = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
+const { assertInside, classifyDestination } = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
 const { repairHookModes } = require(path.join(__dirname, 'lib', 'hook-chmod.cjs'));
 const { applySettingsMerge, deriveKitSettings, flattenRegistrations } = require(path.join(__dirname, 'lib', 'settings-merge.cjs'));
 
@@ -359,31 +359,80 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   let hookRefused = 0; // KF-55: refused .githooks entries — a non-zero count means activation is INCOMPLETE and adopt exits non-zero
   let settingsIncomplete = 0; // KF-56: unparseable/aborted/restored settings merge, or reported conflicts — INCOMPLETE, non-zero
   let settingsConflicts = 0;
+  let rowRefused = 0; // KF-58 (M28.E): symlink refusals at NON-.githooks destination rows
+  let missingSources = 0;
+  const refusedRows = new Set();
+  // Finding 4 (M28.E): the named enforcement layers this run could not activate. A successful
+  // --adopt means every one of them is LIVE, so anything landing here also decides the exit.
+  // `repair` is a command that RUNS IN THE STATE IT IS PRINTED IN or it is null — the whole
+  // point of A's decision 4 was that `git config core.hooksPath .githooks`, printed in a
+  // directory with no repository, returns exit 128. Guidance that cannot run is not guidance.
+  // `alt` carries a non-executable alternative when one honestly exists.
+  const missingControls = [];
+  const missing = (control, why, repair, alt) =>
+    missingControls.push({ control: control, why: why, repair: repair || null, alt: alt || null });
   for (const t of ADOPT_TREES) {
     const srcRoot = path.join(kitRoot, t.from);
-    if (!fs.existsSync(srcRoot)) { W('  missing-source ' + t.from + '/ — template tree absent in the kit source, skipped (partial kit copy?)'); continue; }
+    if (!fs.existsSync(srcRoot)) {
+      // Finding 4 (M28.E): this used to print and fall through to exit 0 — a partial kit copy
+      // installed NOTHING under this tree and adoption still reported success. For
+      // templates/dot-claude that means every session control, including the receipts hook
+      // (#0), is absent while the summary says "installed".
+      W('  missing-source ' + t.from + '/ — template tree absent in the kit source, skipped (partial kit copy?)');
+      missingSources++;
+      missing('kit template tree ' + t.from + '/ (installs ' + t.to + '/)',
+        'the template tree is absent from the kit source, so nothing under ' + t.to + '/ was installed',
+        null,
+        'point --adopt at a complete kit checkout: node scripts/kit-update.cjs --adopt --kit <path-to-a-kit-checkout>');
+      continue;
+    }
     for (const rel of walkFiles(srcRoot)) {
       const destRel = t.to + '/' + rel;
       const srcAbs = path.join(srcRoot, rel);
       const tpl = fs.readFileSync(srcAbs);
       const tplText = tpl.toString('utf8');
-      // KF-55 (M27.A, owner condition C2b): a .githooks entry that is a SYMLINK is
-      // refused up front, and the check runs on the PLAIN JOINED path BEFORE the
-      // confinement assert — assertInside resolves symlinks by design, so asserting
-      // first would either throw the generic confinement error (external target) or
-      // hand back the TARGET path (internal target) and make the link invisible. A
-      // DANGLING link reads as absent below (readIf follows the link), and the
-      // install rename would silently REPLACE the user's link with template bytes —
-      // the existsSync-false path. Refuse visibly instead; the exec-bit pass below
-      // refuses symlinks the same way.
-      if (destRel.startsWith('.githooks/')) {
-        const joined = path.join(projRoot, destRel);
-        let lst = null;
-        try { lst = fs.lstatSync(joined); } catch (_) { lst = null; }
-        if (lst && lst.isSymbolicLink()) {
-          hookRefused++;
-          W('  refused    ' + destRel + ' — symlink' + (fs.existsSync(joined) ? '' : ' (dangling)')
-            + '; adopt never installs over or chmods through a symlink — replace it with a regular file to activate this hook');
+      // KF-55 (M27.A, owner condition C2b) GENERALIZED to every destination row at M28.E
+      // (KF-58). A SYMLINK at any managed destination is refused up front, and the check runs
+      // on the PLAIN JOINED path BEFORE the confinement assert — assertInside resolves
+      // symlinks by design, so asserting first would either throw the generic confinement
+      // error (external target) or hand back the TARGET path (internal target) and make the
+      // link invisible. A DANGLING link reads as absent below (readIf follows the link), and
+      // the install rename would silently REPLACE the user's link with template bytes — the
+      // existsSync-false path. M27.A closed that for `.githooks/` only; every other row still
+      // took it, which is KF-58. Measured on the pre-fix tree: 5457 bytes written over a
+      // dangling scripts/set-mode.cjs link and 2101 over .claude/commands/stage.md, exit 0,
+      // no refusal line.
+      //
+      // The COUNTER is routed by tree so the KF-55 report stays exactly as it shipped: a
+      // .githooks refusal still means "hook activation INCOMPLETE"; any other row is this
+      // stage's own never-overwrite refusal. Both are visible and both exit non-zero.
+      {
+        const cls = classifyDestination(path.join(projRoot, destRel));
+        if (cls.kind === 'symlink') {
+          refusedRows.add(destRel);
+          const dang = cls.dangling ? ' (dangling)' : '';
+          if (destRel.startsWith('.githooks/')) {
+            hookRefused++;
+            W('  refused    ' + destRel + ' — symlink' + dang
+              + '; adopt never installs over or chmods through a symlink — replace it with a regular file to activate this hook');
+          } else if (destRel === '.claude/settings.json') {
+            // The settings row earns its own repair text: refusing here means the KF-56
+            // verified merge never ran, so the kit's registrations are not merely uninstalled
+            // — they are DORMANT, which is the failure KF-56 exists to prevent. Saying
+            // "replace it with a regular file" alone would hide that.
+            rowRefused++;
+            W('  refused    ' + destRel + ' — symlink' + dang
+              + '; adopt never writes over or through a symlink, so the verified settings merge (KF-56) did NOT run'
+              + ' and the kit session controls are dormant — repair: materialize it as a regular file (copy the'
+              + ' link\'s contents in place of the link) and re-run --adopt to merge, or merge the "hooks" section'
+              + ' by hand from the kit template');
+          } else {
+            rowRefused++;
+            W('  refused    ' + destRel + ' — symlink' + dang
+              + '; adopt never installs over a symlink, so your link and its target are left exactly as they are'
+              + ' (#16 never-overwrite) — repair: replace it with a regular file to let adopt install this row,'
+              + ' or merge the template by hand');
+          }
           continue;
         }
       }
@@ -475,13 +524,62 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   }
 
   // hooksPath: copy without install was exactly the UAT #2 gap.
+  //
+  // FINDING 4 (M28.E) — ACTIVATION IS VERIFIED, NOT ATTEMPTED AND ASSUMED. M28.A's executed
+  // baseline: this block printed a FAILED line and fell through, feeding neither exit counter,
+  // so adoption reported "36 installed" and exited 0 with the entire commit-gate layer
+  // inactive. Worse, the repair it printed — `git config core.hooksPath .githooks` — returns
+  // exit 128 in a directory with no repository, so the guidance was not thin but WRONG.
+  //
+  // The repository is therefore probed BEFORE the write, for two distinct reasons:
+  //   (a) no repository at all -> the honest repair is `git init`, which this branch prints
+  //       and which actually runs where it is printed;
+  //   (b) the repository's root is ELSEWHERE -> git resolves a RELATIVE core.hooksPath from
+  //       the repository root, so hooks installed here would never fire, and the pre-fix code
+  //       wrote core.hooksPath into an enclosing repository the kit was never pointed at.
+  //       Refusing is both the fail-closed answer and the confinement one.
+  const gitTopR = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: projRoot, encoding: 'utf8' });
+  const gitTop = gitTopR.status === 0 ? String(gitTopR.stdout || '').trim() : '';
+  const samePath = (a, b) => {
+    try {
+      const n = (s) => { const r = path.resolve(fs.realpathSync(s)); return process.platform === 'win32' ? r.toLowerCase() : r; };
+      return n(a) === n(b);
+    } catch (_) { return false; }
+  };
   const hp = spawnSync('git', ['config', 'core.hooksPath'], { cwd: projRoot, encoding: 'utf8' });
   const hpCur = String(hp.stdout || '').trim();
-  if (hpCur === '.githooks') W('  hooksPath  already .githooks');
-  else if (dryRun) W('  would-set  core.hooksPath = .githooks');
-  else {
-    const r = spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projRoot, encoding: 'utf8' });
-    W(r.status === 0 ? '  hooksPath  set to .githooks' : '  hooksPath  FAILED to set (' + String(r.stderr || '').trim() + ') — run: git config core.hooksPath .githooks');
+  if (gitTop === '') {
+    W('  hooksPath  NOT ARMED — this directory is not a Git repository, so there are no hooks to arm');
+    missing('Git hook activation (core.hooksPath)',
+      'this directory is not a Git repository, so Git has no hooks to arm',
+      'git init');
+  } else if (!samePath(gitTop, projRoot)) {
+    W('  hooksPath  NOT ARMED — the enclosing Git repository is at ' + gitTop + ', not here');
+    missing('Git hook activation (core.hooksPath)',
+      'the enclosing Git repository is at ' + gitTop + ', not here; Git resolves a relative '
+        + 'core.hooksPath from the repository root, so hooks installed here would never run — and '
+        + 'adopt will not write configuration into a repository it was not pointed at',
+      'git init',
+      'adopt the enclosing repository instead — run --adopt from ' + gitTop);
+  } else {
+    if (hpCur === '.githooks') W('  hooksPath  already .githooks');
+    else if (dryRun) W('  would-set  core.hooksPath = .githooks');
+    else {
+      const r = spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projRoot, encoding: 'utf8' });
+      W(r.status === 0 ? '  hooksPath  set to .githooks' : '  hooksPath  FAILED to set (' + String(r.stderr || '').trim() + ') — run: git config core.hooksPath .githooks');
+    }
+    // READ IT BACK. A write that reported success and a value that reads back wrong are the
+    // same inactive control, and only one of them is visible in the write's exit status.
+    if (!dryRun) {
+      const back = spawnSync('git', ['config', 'core.hooksPath'], { cwd: projRoot, encoding: 'utf8' });
+      const now = String(back.stdout || '').trim();
+      if (now !== '.githooks') {
+        missing('Git hook activation (core.hooksPath)',
+          'the hooks path could not be set — core.hooksPath reads ' + (now === '' ? '(unset)' : now)
+            + ' after the attempt, so the commit and push gates are not armed',
+          'git config core.hooksPath .githooks');
+      }
+    }
   }
 
   // Hook executability (the M26 Linux-CI finding): POSIX git SILENTLY IGNORES a
@@ -509,6 +607,18 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   if (dryRun && rcptLive === null) W('  receipts   hook would be installed and verified (byte-identical to its template)');
   else if (rcptLive !== null && rcptTpl !== null && normalize(rcptLive) === normalize(rcptTpl)) W('  receipts   hook verified byte-identical — the kit can account for itself again (UAT #0)');
   else W('  receipts   hook NOT verified — live copy ' + (rcptLive === null ? 'absent' : 'differs from its template') + '; the kit cannot account for its own runs until this lands');
+  // Finding 4 (M28.E), narrowly: ABSENT is a missing control, DIFFERS is not. A live copy that
+  // differs is the user's own file, kept by the #16 never-overwrite contract — making that
+  // non-zero would fail every adopt into a repo with a customized hook, which is the overshoot
+  // this stage was warned about. Absent means the #0 telemetry hook simply is not there.
+  // Suppressed when a missing template tree or a refused row already named the same root cause,
+  // so one defect is reported once.
+  if (!dryRun && rcptLive === null && missingSources === 0
+      && !refusedRows.has('.claude/hooks/receipts-lifecycle.cjs')) {
+    missing('receipts lifecycle hook (.claude/hooks/receipts-lifecycle.cjs)',
+      'the hook is absent after adoption, so the kit cannot account for its own runs (UAT #0)',
+      'node scripts/kit-update.cjs --apply .claude/hooks/receipts-lifecycle.cjs');
+  }
 
   // Root paperwork audit: repo-identity names are the HOST repo's files; adopt
   // never installs or overwrites them (C.3.5 route table; #16's real fix).
@@ -526,6 +636,13 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
     W('=> hook activation INCOMPLETE — ' + hookRefused + ' .githooks entr' + (hookRefused === 1 ? 'y' : 'ies')
       + ' refused (symlinks are never installed over or chmodded through). The commit gates are NOT fully'
       + ' armed until each refused hook is replaced with a regular file; exiting non-zero.');
+    // M28.E: also carried in the named-control list, so the verdict block below can never
+    // report a count it does not itemize. The wording above is byte-unchanged from M27.A.
+    missing('Git hook activation (.githooks entries)',
+      hookRefused + ' .githooks entr' + (hookRefused === 1 ? 'y is a symlink and was' : 'ies are symlinks and were')
+        + ' refused, so the commit gates are not fully armed',
+      null,
+      'replace each refused hook with a regular file, then re-run --adopt');
   }
   if (settingsIncomplete > 0) {
     // KF-56: same rule at the control plane — a conflicted, unparseable, or
@@ -534,11 +651,57 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       + (settingsConflicts > 0 ? settingsConflicts + ' conflict(s) reported above; ' : '')
       + 'everything non-conflicted was merged and your own rules and commands were NOT modified. '
       + 'Resolve the reported items by hand, then re-run --adopt; exiting non-zero.');
+    missing('kit session controls (.claude/settings.json)',
+      'the settings merge did not complete cleanly ('
+        + (settingsConflicts > 0 ? settingsConflicts + ' conflict(s) reported above' : 'see the report above')
+        + '), so some kit registrations may be dormant',
+      null,
+      'resolve the reported items by hand, then re-run --adopt');
+  }
+
+  // ── THE VERDICT (Finding 4, M28.E). One line, always, in both directions. Before this,
+  // the only summary was "=> 36 installed, 0 verified ok, …", which reads as success no matter
+  // what did not activate — and no PARTIAL INSTALLATION label existed anywhere in the tree.
+  // The KF-55 and KF-56 blocks above keep their own wording byte-for-byte; they are counted
+  // here as controls so the run ends with a single, countable statement of what is live.
+  if (rowRefused > 0) {
+    W('=> destination refusals — ' + rowRefused + ' managed path' + (rowRefused === 1 ? ' is a symlink and was' : 's are symlinks and were')
+      + ' left untouched (adopt never installs over a link, dangling included; #16 never-overwrite).');
+    missing('managed file installation (' + rowRefused + ' destination row' + (rowRefused === 1 ? '' : 's') + ')',
+      rowRefused + ' managed destination' + (rowRefused === 1 ? ' is a symlink and was' : 's are symlinks and were')
+        + ' refused, so ' + (rowRefused === 1 ? 'that file was' : 'those files were') + ' not installed'
+        + ' (each is named on its own `refused` line above)',
+      null,
+      'replace each refused path with a regular file, then re-run --adopt');
+  }
+  // EVERY control is itemized. The count and the list are the same list — an earlier build of
+  // this block counted hookRefused/rowRefused/settingsIncomplete separately and then printed
+  // no MISSING group for them, so a refused-row run announced "1 required control NOT active"
+  // and named none of them in the block. A count you cannot itemize is the shape of claim this
+  // whole stage exists to remove.
+  const controlsMissing = missingControls.length;
+  if (controlsMissing > 0) {
+    W('=> ADOPTION INCOMPLETE — ' + controlsMissing + ' required control' + (controlsMissing === 1 ? '' : 's')
+      + ' NOT active. A successful --adopt means every required enforcement layer is live, so this'
+      + ' run exits non-zero; nothing downstream may read it as armed.');
+    for (const m of missingControls) {
+      W('   MISSING: ' + m.control);
+      W('       why: ' + m.why);
+      if (m.repair) W('    repair: ' + m.repair);
+      if (m.alt) W('        or: ' + m.alt);
+    }
+    W('   Then re-run: node scripts/kit-update.cjs --adopt   (adoption is idempotent — a clean re-run writes nothing)');
+  } else if (dryRun) {
+    W('=> dry-run PLAN complete — no required control was found blocked, and nothing was written.'
+      + ' Re-run without --dry-run to install.');
+  } else {
+    W('=> adoption COMPLETE — every required enforcement layer is active: Git hooks armed'
+      + ' (core.hooksPath=.githooks), no destination refused, no incomplete settings merge.');
   }
 
   if (!dryRun) cmdIngest(projRoot, false);
   else W('  (dry-run: the known-issue ingest also runs on a real adopt — nothing harvested now)');
-  return (hookRefused > 0 || settingsIncomplete > 0) ? 1 : 0;
+  return (hookRefused > 0 || rowRefused > 0 || settingsIncomplete > 0 || missingControls.length > 0) ? 1 : 0;
 }
 
 function main() {
@@ -664,6 +827,24 @@ function main() {
         'placeholder template.\n'
       );
       process.exit(2);
+    }
+    // KF-58 (M28.E) — the artifact sweep's SECOND site. --apply is the deliberate overwrite
+    // door, but "restore this file" is not permission to replace the LINK the user placed with
+    // a regular file, nor to write through it onto its target. assertInside cannot catch this:
+    // it RESOLVES symlinks by design, so a dangling link resolves to its own path and reads as
+    // absent, and an internal link hands back its target so the write lands there instead.
+    // Measured pre-fix: --apply replaced a dangling scripts/set-mode.cjs link with 5457 bytes,
+    // exit 0. Classify first, then confine — the same order the install loop uses.
+    {
+      const cls = classifyDestination(path.join(projRoot, target));
+      if (cls.kind === 'symlink') {
+        process.stderr.write(
+          `kit-update: refused — ${target} is a symlink${cls.dangling ? ' (dangling)' : ''}; --apply never writes over ` +
+          'or through a link (that would replace the link you placed with a regular file, or silently overwrite its ' +
+          'target instead). Remove or replace the link first, then re-run --apply.\n'
+        );
+        process.exit(2);
+      }
     }
     let liveAbs;
     try {

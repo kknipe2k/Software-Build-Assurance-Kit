@@ -1,5 +1,5 @@
 ---
-fixture: assert-a-constant.md
+fixture: guard-suite-listing.md
 class: assert-a-constant
 expected: must-flag
 ---

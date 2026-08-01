@@ -156,7 +156,7 @@ Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Full) 
 
 The bootstrap is complete. Surface the final state:
 
-- All scaffold files generated and listed (with realistic counts: ~44 for Lite, ~108 for Full (the unarmed reference; +1 when a risk trigger arms the ledger workflow) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
+- All scaffold files generated and listed (with realistic counts: ~44 for Lite, ~108 for Full (the unarmed reference; +2 files when a risk trigger arms the ledger workflow, the manifest row set's 2 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
 - `CLAUDE.md` replaced with the project version
 - `project-config.md` written with the agreed tier and toggles
 - `.claude/` hooks installed; SessionStart hook will auto-load the read-first list on the next session

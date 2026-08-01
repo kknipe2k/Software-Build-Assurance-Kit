@@ -53,9 +53,9 @@
       "value": 3
     },
     "kit_version": {
-      "kind": "declared",
-      "source": "the release identity, stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "1.0.2"
+      "kind": "derived",
+      "source": "the release identity, DERIVED from release-manifest.json version — one root for the whole stamp chain; stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
+      "value": "1.0.3"
     },
     "operating_mode_count": {
       "kind": "bound",
@@ -141,13 +141,8 @@
     },
     "state_file": {
       "kind": "declared",
-      "source": "the session-axis state file",
+      "source": "the session-axis state file — the only session-role marker",
       "value": ".claude/role"
-    },
-    "state_file_legacy": {
-      "kind": "declared",
-      "source": "the one-release read-compatible alias; legitimate only in the state-contract note + fallback comments",
-      "value": ".claude/active-mode"
     },
     "tier_names": {
       "kind": "declared",

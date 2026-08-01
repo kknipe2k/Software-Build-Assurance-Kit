@@ -1,5 +1,5 @@
 ---
-fixture: forged-ledger.md
+fixture: reconcile-excerpt-m12.md
 class: forged-ledger
 expected: must-flag
 ---

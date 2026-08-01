@@ -1,11 +1,16 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // scripts/lib/sandbox.cjs
 //
-// The fixture-confinement primitive (M18.A, spec A-07/A-08). ONE module consumed by
-// every fixture-creating site in the kit's test tooling — smoke.cjs (4 sites),
+// The PATH-SAFETY primitives (M18.A, spec A-07/A-08). ONE module consumed by every
+// fixture-creating site in the kit's test tooling — smoke.cjs (4 sites),
 // bake-inheritance.cjs (2 sites), check-template-precommit.cjs (1 site, the site-7
-// rider) — extend-not-fork: a parallel guard copy is a defect.
+// rider) — AND, since M27.A/M28.E, by the shipped install path itself: kit-update.cjs
+// (--adopt's install loop and --apply) and lib/hook-chmod.cjs both mutate destinations
+// inside a user's repository and both route their guards through here. Extend-not-fork:
+// a parallel guard copy is a defect. (The locus line said "test tooling" through M27;
+// assertInside had production consumers by then, so M28.E corrected the description
+// rather than leaving a stale one next to a widened export list.)
 //
 // Why this exists (the A-08 incident, 2026-07-03): a linked-worktree pre-push hook
 // exports an ABSOLUTE GIT_DIR into the hook environment (a primary-checkout pre-push
@@ -118,6 +123,42 @@ function assertInside(root, target) {
   );
 }
 
+// CLASSIFY BEFORE MUTATE (M28.E, KF-58) — the mandatory pre-step to assertInside, never an
+// alternative to it. assertInside RESOLVES symlinks by design; that is exactly what makes it
+// a confinement primitive, and exactly why it cannot be the thing that decides whether a
+// destination is safe to write. By the time it has answered, a link at the target path is
+// invisible in three different ways: an INTERNAL link hands back its TARGET (so the write
+// lands on the target instead of being refused), an EXTERNAL one throws the generic
+// confinement error (so the caller reports the wrong reason), and a DANGLING one resolves to
+// the link's own path and reads as "nothing is there" — which is how the install path came to
+// replace user links with template bytes at every non-.githooks row (KF-58, measured: 5457
+// bytes written over a dangling scripts/set-mode.cjs link, exit 0, no refusal line).
+//
+// So: classify the PLAIN JOINED path FIRST, decide, and only then confine. This function
+// never follows a link and never throws — an unreadable path is a classification, not an
+// exception, because a caller that must fail closed cannot be handed a stack trace instead of
+// an answer. Returns { kind, abs, dangling, target, mode }:
+//   'symlink' — a symlink of ANY sort (external, internal, intra-directory, dangling).
+//               `dangling` says whether it resolves; `target` is the link's own target string.
+//   'absent'  — nothing at the path (a genuine absence, not a dangling link reading as one)
+//   'file'    — a regular file; `mode` carries its permission bits
+//   'dir'     — a directory
+//   'other'   — socket/fifo/device: not a regular file, never a mutation candidate
+function classifyDestination(p) {
+  const abs = path.resolve(p);
+  let st;
+  try { st = fs.lstatSync(abs); } catch (_) { return { kind: 'absent', abs: abs, dangling: false, target: null, mode: null }; }
+  const mode = st.mode & 0o7777;
+  if (st.isSymbolicLink()) {
+    let target = null;
+    try { target = fs.readlinkSync(abs); } catch (_) { target = null; }
+    return { kind: 'symlink', abs: abs, dangling: !fs.existsSync(abs), target: target, mode: mode };
+  }
+  if (st.isDirectory()) return { kind: 'dir', abs: abs, dangling: false, target: null, mode: mode };
+  if (st.isFile()) return { kind: 'file', abs: abs, dangling: false, target: null, mode: mode };
+  return { kind: 'other', abs: abs, dangling: false, target: null, mode: mode };
+}
+
 // Child env for fixture git ops: repo state pinned INSIDE the fixture repo, discovery
 // ceilinged at its parent, inherited git state scrubbed. `git init` under this env
 // creates a normal (non-bare) repo exactly at repoDir regardless of any hostile
@@ -174,6 +215,7 @@ module.exports = {
   scrubProcessEnv,
   sandboxRoot,
   assertInside,
+  classifyDestination,
   fixtureEnv,
   armTeardown,
   trackedInHead,

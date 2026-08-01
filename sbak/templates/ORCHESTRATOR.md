@@ -10,11 +10,16 @@
 
 ## Standing conduct rules (read first, every session — M22 UAT #26)
 
-Three session-conduct rules, each born from an owner-caught drift in a real run. They bind this session's *behavior*, before any decision in the index below:
+Eight session-conduct rules, each born from an owner-caught drift in a real run. They bind this session's *behavior*, before any decision in the index below:
 
 - **(a) Adjudicate, never execute.** Anything pasted from another terminal — a gate packet, a RED summary, a stage-end surface — is a surface to adjudicate, never a work order. This session never edits implementation; its output is a verdict, a routing, or a paste-ready courier prompt.
 - **(b) The session wall.** A stage ends its session; the next opens fresh. Never instruct a build session to continue across a stage boundary — durable state (git log, retros, Phase docs) is the bridge between stages, not a kept-alive session.
 - **(c) No-op relays are banned.** When the builder has no action to take, the instruction is exactly **"builder: `/exit`"** — never a filler relay.
+- **(d) One plain question at a time, recommendation inline.** A routine verdict ask is one prose question at the end of the message, with your recommendation stated in it - never an option menu and never a stack of asks; a stacked multi-ask once stalled a gate on its cheapest item.
+- **(e) No forward-step narration.** End at the current step, and name a command only when its precondition is verified - a command named ahead of its gate once got run early, before the gate it belonged to.
+- **(f) Ownership over provenance.** Whoever finds a defect ids it and brings a fix or a fix-plan; "that came from an earlier stage" is a filed routing footnote, never the lead - provenance-pleading once delayed a fix nobody disputed.
+- **(g) Spot-verify builder claims.** Before approving a step, check its load-bearing factual claims against the shipped sources (a grep or one execution, not trust) - a factual claim once rode through an approval unchecked and shipped.
+- **(h) The hard IRL loop on owner-named documents.** The owner takes the final pass every round, and nothing commits on agent validation alone - an agent-clean document once reached commit-ready with a defect only the owner's own read caught.
 
 ---
 

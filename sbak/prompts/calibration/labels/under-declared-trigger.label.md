@@ -1,5 +1,5 @@
 ---
-fixture: under-declared-trigger.md
+fixture: project-config-excerpt.md
 class: under-declared-trigger
 expected: must-flag
 ---

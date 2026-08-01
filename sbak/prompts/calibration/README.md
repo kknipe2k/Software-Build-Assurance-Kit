@@ -4,9 +4,9 @@
 
 ## What this is
 
-One **seeded-defect fixture per escape class** in the verifier's standing catalog. The set is a **shadow of `STAGE-PROMPT-PROTOCOL.md` §8.5** — the §8.5 catalog is the canonical source, this set is its mirror. The 11 classes:
+One **seeded-defect fixture per escape class** in the verifier's standing catalog. The set is a **shadow of `STAGE-PROMPT-PROTOCOL.md` §8.5** — the §8.5 catalog is the canonical source, this set is its mirror. **Fixture filenames are neutral by design and this table deliberately does not map classes to files** — the class↔fixture binding exists only in `labels/` (each label's `fixture:` pointer), so knowing the catalog never tells a verifier which artifact carries which defect. The 11 classes:
 
-| # | Class (fixture) | The seeded defect | §8.5 |
+| # | Class | The seeded defect | §8.5 |
 |---|---|---|---|
 | 1 | `false-na` | an `n/a` that is false | §8.5 #1 |
 | 2 | `prose-dodge-count` | a count/verdict in prose, no fenced `reconcile` | §8.5 #2 |
@@ -26,7 +26,12 @@ Class 11 has no §8.5 entry: **G13's floor checks a covering test is *named*, no
 
 ## The seal — read this before touching a fixture
 
-Each fixture in `fixtures/` carries the planted defect **with no answer**. The ground-truth verdict lives in an **independent `labels/<class>.label.md`** file. **The verifier reads `fixtures/` during the calibration challenge; it never reads `labels/`.** If the answer sat in the fixture, the verifier would read it and FNR = 0 would prove nothing. `validators/validate-calibration.cjs` enforces the seal mechanically — a fixture containing its own `expected:` / `must-flag` answer token is a **seal-broken** finding.
+Each fixture in `fixtures/` carries the planted defect **with no answer**. The ground-truth verdict lives in an **independent `labels/<class>.label.md`** file, whose `fixture:` pointer is the **only** place the class↔fixture binding exists. **The verifier reads `fixtures/` during the calibration challenge; it never reads `labels/`.** If the answer sat in the fixture, the verifier would read it and FNR = 0 would prove nothing. `validators/validate-calibration.cjs` enforces the seal mechanically, in two layers:
+
+- **the answer-token seal** — a fixture containing its own `expected:` / `must-flag` answer token is a **seal-broken** finding;
+- **the announcement seal** — a fixture whose **filename or headings** name its own defect class is a **seal-broken** finding (class tokens derived from the labels). A set that announces its classes lets FNR = 0 prove the verifier can *read*, not that it can *detect*: a filename-only probe scored 11/11 on the pre-fix set. Fixtures therefore carry realistic, artifact-style names and headings; the defect is expressed only in the artifact's content.
+
+The validator also polices the binding itself: every label's `fixture:` pointer must resolve, and every fixture must be claimed by exactly one label — with neutral names the mapping cannot be derived, so a hole in it is a hole in the ground truth.
 
 ## How Stage V uses it (G14)
 

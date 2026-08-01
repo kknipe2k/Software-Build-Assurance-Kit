@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // session-start-read-first.js
 //
 // Claude Code SessionStart hook. Auto-loads the read-first orientation files
@@ -10,15 +10,14 @@
 // requires Node.js. No bash, no GNU coreutils, no PATH surprises on Windows.
 //
 // How it works:
-//   - Reads .claude/role (falling back to the legacy .claude/active-mode alias
-//     during the M20.B window) to determine session mode (default: "work").
+//   - Reads .claude/role to determine the session role (default: "work").
 //     If mode is "verifier", loads .claude/read-first-list-verifier.txt
 //     instead of the standard list — deliberately omits prior retrospectives
 //     so the verifier session has a fresh-context bias guard.
 //   - Reads project-config.md to get the active operating_mode (default:
 //     "greenfield") and read_first_cap.
 //   - Composes the read-first list from BOTH axes: operating_mode
-//     (project-scoped work-shape) picks the list FAMILY; active-mode (the
+//     (project-scoped work-shape) picks the list FAMILY; the role marker (the
 //     session-scoped 3-brain axis) picks the bias-guard VARIANT. It loads the
 //     first list that exists, most-specific first:
 //         read-first-list-<op>-<active>.txt
@@ -125,7 +124,7 @@ function decodeBytes(buf) {
   return buf.toString('utf8');
 }
 
-// STRICT resolution: `.claude/active-mode` is canonical BARE-TOKEN state, written
+// STRICT resolution: `.claude/role` is canonical BARE-TOKEN state, written
 // only by scripts/set-mode.cjs (atomic). Decode, strip NULs (no-BOM UTF-16 tail),
 // trim, lowercase — then accept ONLY an exact token match. No annotation/multi-
 // token recovery: a decorated value ("mode: verifier # …") resolves to '' here.
@@ -154,16 +153,13 @@ function readMarkerState(claudeDir, name) {
   if (VALID_MODES.includes(token)) return { state: 'ok', mode: token };
   return { state: 'unresolved', reason: `non-canonical ${name} (expected a bare token)` };
 }
-// I9 alias-window resolution (M20.B): PREFER `.claude/role`, FALL BACK to the legacy
-// `.claude/active-mode` ONLY when role is ABSENT. A present-but-garbage role FAILS CLOSED
-// (state 'unresolved') and must NOT fall through to a valid legacy file — the DF-005
-// discipline ("prefer role, fall back" never leaks garbage past the preferred marker).
-// Retired at v0.2.0 with the alias.
+// SINGLE-MARKER resolution (M28.F — the alias-window's fallback is removed).
+// `.claude/role` is the only marker consulted. A project that predates the I9 rename now
+// reads as ABSENT — which is the `work` default, never a role resurrected from a retired
+// file. The DF-005 discipline is unchanged and now unconditional: a present-but-garbage
+// role is 'unresolved' and fails closed, with no second marker to leak through to.
 function readActiveMode(root) {
-  const claudeDir = path.join(root, '.claude');
-  const role = readMarkerState(claudeDir, 'role');
-  if (role.state === 'absent') return readMarkerState(claudeDir, 'active-mode');
-  return role;
+  return readMarkerState(path.join(root, '.claude'), 'role');
 }
 
 const VALID_OPERATING_MODES = ['greenfield', 'bug_fix', 'audit', 'research_publish'];
@@ -275,12 +271,12 @@ const modeRes = readActiveMode(root);
 const op = operatingMode(root);
 const configFile = path.join(root, 'project-config.md');
 
-// FAIL CLOSED in spirit (ERR-002): a present-but-unresolvable active-mode must
+// FAIL CLOSED in spirit (ERR-002): a present-but-unresolvable role marker must
 // NOT silently load the work orientation — that injects prior retrospectives into
 // what may be a verifier/refactor session and defeats the bias guard exactly when
 // the mode is changing. A SessionStart hook cannot block a session, so make it
 // LOUD: refuse to guess, label the mode unresolved, load no mode-specific
-// orientation, and tell the agent to stop and fix active-mode. ABSENT stays the
+// orientation, and tell the agent to stop and fix the role marker. ABSENT stays the
 // lone legitimate default (-> work); a clean value resolves as before.
 if (modeRes.state === 'unresolved') {
   console.log('## ⚠️ Orientation NOT loaded — the session role marker (`.claude/role`) is unreadable');
@@ -288,7 +284,7 @@ if (modeRes.state === 'unresolved') {
   console.log(`**[read-first stamp]** role=unresolved, op=${op}, loaded 0 files, 0 bytes.`);
   console.log(`**[read-first stamp]** reason: ${modeRes.reason}`);
   console.log();
-  console.log('`.claude/role` (or its legacy `.claude/active-mode` alias) exists but does not name');
+  console.log('`.claude/role` exists but does not name');
   console.log('a single recognizable role (work / verifier / orchestrator / refactor). The hook refuses to');
   console.log('guess — silently assuming `work` would load prior retrospectives into what may');
   console.log('be a verifier/refactor session and defeat the fresh-context bias guard.');
@@ -303,7 +299,7 @@ const mode = modeRes.state === 'absent' ? 'work' : modeRes.mode;
 // Compose the read-first list from both axes, most-specific first.
 // The op filename token strips underscores so operating_mode "bug_fix" composes
 // "read-first-list-bugfix.txt" (the shipped filename convention has no
-// underscores). The per-active-mode base (LIST_BY_MODE) is the existing
+// underscores). The per-role base (LIST_BY_MODE) is the existing
 // per-session file — work maps to the bare "read-first-list.txt", which is also
 // the final catch-all, so greenfield resolves byte-identically to today.
 const opSlug = op.replace(/_/g, '');
@@ -314,7 +310,7 @@ const candidates = [
   'read-first-list.txt',
 ];
 // I7 fallback visibility: the list this project INTENDED to provide for (op, mode) —
-// the op-specific list for a non-greenfield op, else the per-active-mode base. When the
+// the op-specific list for a non-greenfield op, else the per-role base. When the
 // resolved list is not that one (the op/mode list is absent and a less-specific catch-all
 // loaded), the stamp announces the fallback rather than degrading silently. Greenfield/work
 // resolves intended===resolved (read-first-list.txt), so today's behavior emits NO notice.

@@ -9,7 +9,7 @@ Arguments: `$ARGUMENTS` (milestone id then stage letter, e.g. `M01 A`).
 
 Steps:
 
-1. Confirm orientation loaded — the SessionStart hook should have emitted a `[read-first stamp] mode=work …` line. If it didn't, stop and tell the user orientation failed (don't run a stage blind).
+1. Confirm orientation loaded — the SessionStart hook should have emitted a `[read-first stamp] role=work …` line. If it didn't, stop and tell the user orientation failed (don't run a stage blind).
 2. Confirm `.claude/role` is `work` (or absent). If it's `verifier`/`orchestrator`, stop — the UserPromptSubmit guard would block a stage prompt anyway; the user is in the wrong session type.
 3. Open the milestone Phase doc: `docs/build-prompts/<milestone>-*.md` (match by the milestone id from the arguments).
 4. Mark the stage open for the PROC-001 red-gate: run `node scripts/stage-active.cjs <milestone>.<stage>` (e.g. `M01.A`). This writes `.claude/stage-active` and clears any stale `.claude/red-approved` — a fresh stage starts un-approved, so the hard red-gate now blocks implementation edits until the human runs `/approve-red`.

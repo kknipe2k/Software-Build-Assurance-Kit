@@ -4,7 +4,7 @@
 >
 > **The bias guard (G_AUDIT_C1).** The challenge session reads **only the prior pass's output** — never the original session's working context or reasoning. Stock Claude Code is single-model, so model-diversity is unavailable (Path A); the fresh-context, no-shared-reasoning property is what preserves the "diverse blind spots" benefit. Run it in a **fresh** session with `role: verifier`, after the pass it challenges has completed.
 >
-> Tier-conditional: challenge **every** pass at Full; the **security-focused** passes at Standard; **skip** at Lite (per `proposals/OPERATING-MODES.md` §5.6).
+> Tier-conditional: challenge **every** pass at Full; **skip** at Lite (per `bootstrap/MODE-audit.md` + `BUILD-PLAYBOOK.md` §3.8).
 
 ---
 

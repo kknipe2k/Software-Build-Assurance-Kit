@@ -1,5 +1,5 @@
 ---
-fixture: false-na.md
+fixture: zip-import-excerpt.md
 class: false-na
 expected: must-flag
 ---

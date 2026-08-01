@@ -1,5 +1,5 @@
 ---
-fixture: stub-passes-assembled.md
+fixture: app-map-row-m05.md
 class: stub-passes-assembled
 expected: must-flag
 ---

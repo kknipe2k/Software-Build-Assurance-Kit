@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/validate-transition.cjs
 //
 // The G15 transition gate, shipped framework-wide so
@@ -158,11 +158,12 @@ function normalize(s) {
 // clause 1 could never fire on the two files it most needs to protect (a truncate-write of either
 // is the exact truncate-write corruption class).
 //
-// Alias-window: the session-role marker was renamed `.claude/active-mode` ->
-// `.claude/role`. Through the one-release window set-mode.cjs writes BOTH, so BOTH must be guarded
-// — a non-atomic truncate-write of EITHER is the same truncate-write corruption. `role` (the new canonical
-// marker) and `active-mode` (the alias, retired one release after v0.2.0) are both covered here.
-const STATE_PATH_RE = /\.claude\/(?:role|active-mode|stage-active|red-approved)\b|[\w-]*-state\.md\b/;
+// M28.F: the session-role marker's compatibility alias is RETIRED, so the guarded set
+// narrows to `.claude/role`. Nothing writes the retired name any more, and a rule that guards a
+// path the product no longer has is a rule that quietly stops meaning anything — the honest move
+// is to drop it, not to carry it for reassurance. The retired name is recorded in
+// the development history.
+const STATE_PATH_RE = /\.claude\/(?:role|stage-active|red-approved)\b|[\w-]*-state\.md\b/;
 
 // A temp form or a tmpdir/scratch target — the SAFE half of write-temp-rename, never flagged.
 // Extended with the per-language temp idioms — Python tempfile/mkstemp,

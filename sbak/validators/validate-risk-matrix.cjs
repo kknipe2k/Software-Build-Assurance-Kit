@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/validate-risk-matrix.cjs
 //
 // The G13 risk-matrix gate, shipped framework-wide so

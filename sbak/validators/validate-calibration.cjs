@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/validate-calibration.cjs
 //
 // The G14 verifier-proof gate, shipped framework-wide so
@@ -25,17 +25,29 @@
 //
 // ── THE MECHANICAL FLOOR ───────────────────────────────────────────────────────────────────
 //   --set <dir>  (the calibration set, default prompts/calibration/):
-//     • COVERAGE (from fixture FILENAMES): every catalog class in REQUIRED_CLASSES has a
-//       fixtures/<class>.md. A missing class → finding (the set must shadow the WHOLE catalog;
-//       a partial set — a fifth of it — cannot pass). This is the FORWARD half (list → fixture).
+//     • THE LABELS ARE THE CLASS AUTHORITY (fixture filenames are NEUTRAL by design — a
+//       filename that named its class would hand the verifier the answer). Each
+//       labels/*.label.md binds `class:` to `fixture:` (the pointer). COVERAGE: every catalog
+//       class in REQUIRED_CLASSES has a label whose fixture pointer RESOLVES. A missing class →
+//       finding (the set must shadow the WHOLE catalog; a partial set — a fifth of it — cannot
+//       pass). This is the FORWARD half (list → label → fixture).
+//     • THE BINDING IS POLICED, not derived: every label's `fixture:` pointer must resolve,
+//       every fixture must be claimed by EXACTLY ONE label (an orphan or doubly-claimed
+//       fixture → finding — with neutral names the mapping exists only in labels/, so a hole
+//       in it is a hole in the ground truth).
 //     • --catalog <STAGE-PROMPT-PROTOCOL.md> adds the REVERSE half: the §8.5
 //       numbered catalog is COUNTED and must equal the shadowed class count, so a new §8.5 hunt
 //       with no fixture is FLAGGED. With both halves the set and the §8.5 catalog cannot silently
 //       drift apart in EITHER direction (without --catalog only the forward half runs).
-//     • THE GROUND-TRUTH-LABEL REQUIREMENT (the mutant target, see fixtureMissingLabel): every
-//       fixture carries labels/<base>.label.md with `expected: must-flag` + a `class:`.
-//     • SEALING: a fixture that contains its own answer token (`expected:` / `must-flag`) →
-//       seal-broken finding (the verifier would read the answer; FNR=0 would prove nothing).
+//     • THE GROUND-TRUTH-LABEL REQUIREMENT (the mutant target, see unclaimedFixtures): every
+//       fixture is claimed by a sealed label carrying `expected: must-flag` + a `class:`.
+//     • SEALING, two layers: (a) a fixture that contains its own answer token (`expected:` /
+//       `must-flag`) → seal-broken finding (the verifier would read the answer; FNR=0 would
+//       prove nothing); (b) the ANNOUNCEMENT seal — a fixture whose FILENAME or HEADING lines
+//       name its own defect class (class tokens derived from the labels, never hand-listed) →
+//       seal-broken finding. FNR=0 on a set that announces its classes proves the verifier can
+//       READ, not that it can DETECT (the announcement-leak class, fixed 2026-08-01; the leak
+//       probe measured 11/11 from filenames+headings alone pre-fix).
 //   <findings-file>...  (or --staged over *-findings.md):
 //     • a file asserting a "Sound" verdict with NO fenced ```calibration block (seeds / FNR) →
 //       finding. FNR unrecorded = the verifier-proof never ran for this milestone → untrusted.
@@ -87,35 +99,82 @@ const EXPECTED_CATALOG_COUNT = REQUIRED_CLASSES.length - OWED_EXTRA.length;
 // The SEAL: an answer token must NEVER appear in a fixture — the verdict lives only in labels/.
 const ANSWER_TOKEN = /expected:|must-flag/i;
 
-function classOf(fixtureName) { return fixtureName.replace(/\.md$/i, ''); }
-
 // FAIL CLOSED: refuse to pass on an unknown set / unreadable fixture.
 function failClosed(msg) {
   process.stderr.write(`FAIL  ${msg}\n      Refusing to pass the calibration gate on an unknown set (fail-closed).\n`);
   process.exit(2);
 }
 
-// THE MUTANT TARGET. Every seeded fixture MUST carry a sealed ground-truth
-// label. Reverting this to `return []` ("any file in the set passes") makes the "unlabeled
-// fixture -> flagged" smoke test go RED while coverage (computed from filenames) stays
-// satisfied — the mutation isolates EXACTLY the label requirement (no second finding survives).
-function fixtureMissingLabel(labelsDir, fixtureName) {
-  const base = classOf(fixtureName);
-  const labelPath = path.join(labelsDir, `${base}.label.md`);
-  let lb;
+// Read the labels — THE CLASS AUTHORITY. Fixture filenames are neutral by design, so the
+// class↔fixture binding exists ONLY here: each label carries `class:` (which escape class it
+// seeds), `fixture:` (the pointer into fixtures/), and `expected: must-flag` (the sealed
+// verdict). Returns { labels: [{name, cls, fixture}], findings } — incomplete labels are
+// findings, not crashes; an unreadable label is fail-closed.
+function readLabels(labelsDir) {
+  const findings = [];
+  const labels = [];
+  let names;
   try {
-    lb = fs.readFileSync(labelPath, 'utf8');
-  } catch (_) {
-    return [`fixtures/${fixtureName} has NO ground-truth label (labels/${base}.label.md) — every seeded fixture MUST carry a sealed must-flag label (G14).`];
+    names = fs.readdirSync(labelsDir).filter((n) => /\.label\.md$/i.test(n));
+  } catch (e) {
+    failClosed(`cannot enumerate calibration labels at ${labelsDir}: ${e && e.message ? e.message : 'unknown error'}`);
   }
-  if (!/expected:\s*must-flag/i.test(lb) || !/\bclass:\s*\S/i.test(lb)) {
-    return [`labels/${base}.label.md is incomplete — a sealed ground-truth label needs \`expected: must-flag\` and a \`class:\` (G14).`];
+  for (const n of names) {
+    let lb;
+    try {
+      lb = fs.readFileSync(path.join(labelsDir, n), 'utf8');
+    } catch (e) {
+      failClosed(`unreadable calibration label labels/${n}: ${e && e.message ? e.message : 'unknown error'}`);
+    }
+    const cls = (lb.match(/\bclass:\s*(\S+)/i) || [])[1] || null;
+    const fixture = (lb.match(/\bfixture:\s*(\S+)/i) || [])[1] || null;
+    if (!/expected:\s*must-flag/i.test(lb) || !cls || !fixture) {
+      findings.push(`labels/${n} is incomplete — a sealed ground-truth label needs \`expected: must-flag\`, a \`class:\`, and a \`fixture:\` pointer (with neutral fixture names the label IS the class↔fixture binding) (G14).`);
+      continue;
+    }
+    labels.push({ name: n, cls, fixture });
+  }
+  return { labels, findings };
+}
+
+// THE MUTANT TARGET. Every seeded fixture MUST be claimed by a sealed ground-truth label.
+// Reverting this to `return []` ("any file in the set passes") makes the "orphan fixture ->
+// flagged" smoke test go RED while coverage (computed from the labels) and the pointer checks
+// stay satisfied — the mutation isolates EXACTLY the every-fixture-is-labeled requirement
+// (no second finding survives, because the orphan's class is still covered by its own label
+// set in the smoke fixture).
+function unclaimedFixtures(fixtureNames, claimedBy) {
+  const out = [];
+  for (const n of fixtureNames) {
+    if (!claimedBy.has(n.toLowerCase())) {
+      out.push(`fixtures/${n} is claimed by NO ground-truth label — every seeded fixture MUST be bound by exactly one sealed must-flag label's \`fixture:\` pointer (G14; with neutral names an unclaimed fixture has no ground truth at all).`);
+    }
+  }
+  return out;
+}
+
+// THE ANNOUNCEMENT SEAL. A fixture whose FILENAME or HEADING lines name its own defect class
+// hands the verifier the answer without any `expected:` token — FNR=0 then proves reading, not
+// detection (the leak probe scored 11/11 on the pre-fix set this way). The class-token list is
+// DERIVED from the label's own `class:` value, never hand-listed: the fixture is flagged when
+// EVERY hyphen-separated token of its class appears (word-bounded, case-insensitive) in the
+// filename + heading lines. All-tokens (not any-token) keeps ordinary technical vocabulary
+// legal — a fixture about tests may say "test"; it may not say its whole class name.
+function announcementLeak(fixtureName, fixtureText, cls) {
+  const headings = fixtureText.split(/\r?\n/).filter((l) => /^\s*#/.test(l)).join(' ');
+  const evidence = `${fixtureName.replace(/\.md$/i, '')} ${headings}`.toLowerCase();
+  const tokens = cls.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const allPresent = tokens.length > 0 &&
+    tokens.every((t) => new RegExp(`\\b${t}\\b`).test(evidence));
+  if (allPresent) {
+    return [`fixtures/${fixtureName} ANNOUNCES its defect class '${cls}' in its filename or headings — the seal is broken; a verifier can classify it without reading the artifact (G14 announcement seal). Use a neutral filename and artifact-realistic headings; the class lives only in labels/.`];
   }
   return [];
 }
 
-// Check a calibration set: coverage (from filenames) + the label requirement + sealing.
-// Fail-closed (exit 2) on an unenumerable fixtures dir or an unreadable fixture.
+// Check a calibration set: label authority (pointers resolve, exactly-one-claim, coverage from
+// the labels' classes) + both seal layers on every fixture.
+// Fail-closed (exit 2) on an unenumerable dir or an unreadable fixture/label.
 function checkSet(setDir) {
   const findings = [];
   const fixturesDir = path.join(setDir, 'fixtures');
@@ -128,7 +187,33 @@ function checkSet(setDir) {
     failClosed(`cannot enumerate calibration fixtures at ${fixturesDir}: ${e && e.message ? e.message : 'unknown error'}`);
   }
 
+  const { labels, findings: labelFindings } = readLabels(labelsDir);
+  findings.push(...labelFindings);
+
+  // The pointer checks: every label's fixture resolves; every fixture claimed at most once.
+  const nameSet = new Set(names.map((n) => n.toLowerCase()));
+  const claimedBy = new Map(); // fixture name (lowercased) -> claiming label name
   const covered = new Set();
+  for (const lb of labels) {
+    if (!nameSet.has(lb.fixture.toLowerCase())) {
+      findings.push(`labels/${lb.name}: fixture pointer '${lb.fixture}' does NOT resolve in fixtures/ — a dangling ground-truth binding (G14; the mapping is not derivable from neutral names, so a dead pointer is a dead class).`);
+      continue;
+    }
+    const prior = claimedBy.get(lb.fixture.toLowerCase());
+    if (prior) {
+      findings.push(`fixtures/${lb.fixture} is claimed by TWO labels (labels/${prior} and labels/${lb.name}) — the class↔fixture binding must be exactly one label per fixture (G14).`);
+      continue;
+    }
+    claimedBy.set(lb.fixture.toLowerCase(), lb.name);
+    covered.add(lb.cls);
+  }
+
+  // THE GROUND-TRUTH-LABEL REQUIREMENT (mutant target): no orphan fixtures.
+  findings.push(...unclaimedFixtures(names, claimedBy));
+
+  // Per-fixture seals. The class for the announcement seal comes from the claiming label.
+  const classByFixture = new Map();
+  for (const lb of labels) if (nameSet.has(lb.fixture.toLowerCase())) classByFixture.set(lb.fixture.toLowerCase(), lb.cls);
   for (const n of names) {
     let fx;
     try {
@@ -136,20 +221,21 @@ function checkSet(setDir) {
     } catch (e) {
       failClosed(`unreadable calibration fixture fixtures/${n}: ${e && e.message ? e.message : 'unknown error'}`);
     }
-    covered.add(classOf(n));
-    // SEALING — the answer must not live in the fixture the verifier reads.
+    // SEALING (a) — the answer must not live in the fixture the verifier reads.
     if (ANSWER_TOKEN.test(fx)) {
-      findings.push(`fixtures/${n} CONTAINS its own ground-truth answer (\`expected:\` / \`must-flag\`) — the seal is broken; the verifier would read the answer. Keep the verdict in labels/${classOf(n)}.label.md only (G14 sealing).`);
+      findings.push(`fixtures/${n} CONTAINS its own ground-truth answer (\`expected:\` / \`must-flag\`) — the seal is broken; the verifier would read the answer. Keep the verdict in labels/ only (G14 sealing).`);
     }
-    // THE GROUND-TRUTH-LABEL REQUIREMENT (mutant target).
-    findings.push(...fixtureMissingLabel(labelsDir, n));
+    // SEALING (b) — the announcement seal (filename/headings must not name the class).
+    const cls = classByFixture.get(n.toLowerCase());
+    if (cls) findings.push(...announcementLeak(n, fx, cls));
   }
 
-  // COVERAGE of the WHOLE catalog (from filenames), so the omitted-label case above does not
-  // also drop a class (that would let the mutation survive via a second finding).
+  // COVERAGE of the WHOLE catalog, from the LABELS' classes (the authority): the omitted-claim
+  // case above does not also drop a class in the mutant-kill fixture, so the mutation isolates
+  // exactly the orphan check.
   for (const cls of REQUIRED_CLASSES) {
     if (!covered.has(cls)) {
-      findings.push(`${setDir}: calibration set does not cover escape class '${cls}' — the set must shadow the full §8.5 catalog (one fixture per class). FNR=0 must prove the WHOLE catalog.`);
+      findings.push(`${setDir}: calibration set does not cover escape class '${cls}' — no label claims a resolving fixture for it. The set must shadow the full §8.5 catalog (one fixture per class); FNR=0 must prove the WHOLE catalog.`);
     }
   }
 

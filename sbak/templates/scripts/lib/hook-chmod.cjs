@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // scripts/lib/hook-chmod.cjs
 //
 // The CONFINED .githooks exec-bit repair (M27.A, KF-55; rider §3 + the three-site
@@ -42,7 +42,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { assertInside } = require('./sandbox.cjs');
+const { assertInside, classifyDestination } = require('./sandbox.cjs');
 
 // The kit's shipped hook set — the manifest-owned names that are ever chmod
 // candidates. kit-update passes its row-derived list (same source of truth,
@@ -88,20 +88,24 @@ function repairHookModes(opts) {
       continue;
     }
     const hookPath = path.join(hooksDir, name);
-    let entry;
-    try { entry = fs.lstatSync(hookPath); } catch (_) { continue; } // absent — nothing to repair
-    if (entry.isSymbolicLink()) {
+    // Contract 2, via the SHARED primitive (M28.E). This classification used to be a local
+    // lstat here and a second, separately-written one in kit-update's install loop — two
+    // copies of one rule, which is how the .githooks-only guard and the general install path
+    // came to disagree in the first place (KF-58). One classifier, every caller.
+    const cls = classifyDestination(hookPath);
+    if (cls.kind === 'absent') continue; // nothing to repair
+    if (cls.kind === 'symlink') {
       res.refused.push({ name, why: 'symlink' });
-      log('refused    .githooks/' + name + ' — symlink' + (fs.existsSync(hookPath) ? '' : ' (dangling)')
+      log('refused    .githooks/' + name + ' — symlink' + (cls.dangling ? ' (dangling)' : '')
         + '; adoption never chmods through symlinks — replace it with a regular file to activate this hook');
       continue;
     }
-    if (!entry.isFile()) {
+    if (cls.kind !== 'file') {
       res.refused.push({ name, why: 'not-a-regular-file' });
       log('refused    .githooks/' + name + ' — not a regular file; never a chmod candidate');
       continue;
     }
-    const mode = entry.mode & 0o7777;
+    const mode = cls.mode;
     if ((mode & 0o111) !== 0) { res.kept.push({ name, mode }); continue; } // already executable — preserved byte-exact
     assertInside(hooksDir, hookPath); // contract 3: the (now known-regular) entry's resolved path stays confined
     const derived = mode | ((mode & 0o444) >> 2); // contract 5: exec from read bits

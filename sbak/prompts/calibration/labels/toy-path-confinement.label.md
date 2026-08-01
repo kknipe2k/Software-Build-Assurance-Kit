@@ -1,5 +1,5 @@
 ---
-fixture: toy-path-confinement.md
+fixture: traversal-suite-listing.md
 class: toy-path-confinement
 expected: must-flag
 ---

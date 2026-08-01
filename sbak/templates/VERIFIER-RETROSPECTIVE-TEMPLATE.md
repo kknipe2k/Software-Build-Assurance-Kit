@@ -81,7 +81,7 @@ If the verification was clean (Sound on the first pass, no C.fix), write the fou
 
 ---
 
-## User experience stamp (REQUIRED at Standard+; asked-and-transcribed — the verdict's content is exclusively the owner's)
+## User experience stamp (REQUIRED at Full; asked-and-transcribed — the verdict's content is exclusively the owner's)
 
 > The pass self-checks above are agent-authored. This stamp is the owner's independent verdict on the verification stage (V retros are stamped like any stage retro; the pre-commit validator enforces it). **Flow (M22 ruling 4):** the agent **asks** for the verdict at approval, **transcribes the owner's reply verbatim** into the block, and appends a `transcribed:` line marking when it was asked — the owner never hand-edits this file. **Default = pass** — fail only on an explicit owner fix/fail before proceeding; an explicit `fail` forces Friction-heavy (per `sbak/PROCESS-VALIDATION.md`). `note:` is optional.
 

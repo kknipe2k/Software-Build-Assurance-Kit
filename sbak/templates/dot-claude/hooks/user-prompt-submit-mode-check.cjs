@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /
 // orchestrator / refactor) by checking that a pasted stage prompt matches the
-// session's declared role in .claude/role (falling back to the legacy .claude/active-mode alias).
+// session's declared role in .claude/role.
 //
 // Why UserPromptSubmit and not SessionStart: SessionStart fires before any
 // prompt exists, so it cannot see what the user is about to paste. The
@@ -30,7 +30,7 @@
 //                  <refactor_stage_prompt>  -> refactor  (Stage R health check)
 //                  <audit_pass_prompt>      -> verifier  (audit IS verification; the
 //                                             persona/checklist ride on the prompt, NOT a
-//                                             new active-mode value)
+//                                             new role value)
 //   partial   -> an unclosed opening tag. ENFORCED when the tag is grammar-conformant
 //                (it carries a real stage id — a truncated REAL prompt); treated as ad-hoc
 //                when it is not (a bare tag in prose).
@@ -40,18 +40,18 @@
 // A <mode> annotation is NOT a stage root and is never consulted: it may agree with the
 // structure but can never override it (the C1-001 evasion).
 //
-// .claude/active-mode holds the session's mode. ABSENT is the one legitimate
+// .claude/role holds the session's role. ABSENT is the one legitimate
 // default -> "work" (a greenfield work session, or a project predating the dial).
-// A PRESENT-but-unreadable / empty / unrecognized active-mode is a misconfiguration,
+// A PRESENT-but-unreadable / empty / unrecognized role marker is a misconfiguration,
 // NOT a "work" default: silently assuming work there would disable the 3-brain
 // bias guard exactly when the mode is changing (ERR-002). So this hook FAILS CLOSED
 // on a present-but-unresolvable mode — it blocks and tells the user to fix it.
 //
 // Exit codes:
-//   0  -> allow the prompt (match; ad-hoc/no stage prompt; or absent active-mode
+//   0  -> allow the prompt (match; ad-hoc/no stage prompt; or an absent role marker
 //         resolving to the legitimate work default).
 //   2  -> block: a real mode mismatch, an ambiguous or malformed stage prompt, a
-//         present-but-unresolvable active-mode (fail-closed, ERR-002), or an
+//         present-but-unresolvable role marker (fail-closed, ERR-002), or an
 //         unreachable/mis-wired classifier module. stderr explains and how to fix it.
 //
 // Cross-platform (Node, no shell-isms).
@@ -79,8 +79,8 @@ const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 // Map a stage-prompt root element to the mode that should be executing it.
 // audit_pass_prompt maps to 'verifier' (not a new mode): an audit pass IS a
 // fresh-context verification session. Widening this entry is what lets
-// a pasted audit pass run under active-mode: verifier; it does NOT add a fifth
-// active-mode (VALID_MODES is unchanged), so a real mismatch — e.g. an audit pass
+// a pasted audit pass run under role: verifier; it does NOT add a fifth
+// role value (VALID_MODES is unchanged), so a real mismatch — e.g. an audit pass
 // pasted into a work session — STILL blocks.
 const ROOT_TO_MODE = {
   work_stage_prompt: 'work',
@@ -167,7 +167,7 @@ function decodeBytes(buf) {
   return buf.toString('utf8');
 }
 
-// STRICT resolution: `.claude/active-mode` is canonical BARE-TOKEN state, written
+// STRICT resolution: `.claude/role` is canonical BARE-TOKEN state, written
 // only by scripts/set-mode.cjs (atomic). Decode, strip NULs (no-BOM UTF-16 tail),
 // trim whitespace, lowercase — then accept ONLY an exact token match. No
 // annotation/multi-token recovery: a decorated value ("mode: verifier # …",
@@ -197,14 +197,13 @@ function readMarkerState(claudeDir, name) {
   if (VALID_MODES.includes(token)) return { state: 'ok', mode: token };
   return { state: 'unresolved', reason: `non-canonical ${name} (expected a bare token)` };
 }
-// I9 alias-window resolution (M20.B): PREFER `.claude/role`, FALL BACK to the legacy
-// `.claude/active-mode` ONLY when role is ABSENT. A present-but-garbage role FAILS CLOSED
-// and must NOT fall through to a valid legacy file (the DF-005 discipline). Retired at
-// v0.2.0 with the alias.
+// SINGLE-MARKER resolution (M28.F — the alias-window's fallback is removed).
+// `.claude/role` is the only marker consulted; a pre-rename project reads as ABSENT, which
+// is the `work` default and never a role resurrected from a retired file. DF-005 is
+// unchanged and now unconditional: a present-but-garbage role fails closed with no second
+// marker to leak through to.
 function readActiveMode(claudeDir) {
-  const role = readMarkerState(claudeDir, 'role');
-  if (role.state === 'absent') return readMarkerState(claudeDir, 'active-mode');
-  return role;
+  return readMarkerState(claudeDir, 'role');
 }
 
 function main() {
@@ -264,12 +263,12 @@ function main() {
   const claudeDir = path.join(process.cwd(), '.claude');
   const res = readActiveMode(claudeDir);
 
-  // FAIL CLOSED (ERR-002): a present-but-unresolvable active-mode must block,
+  // FAIL CLOSED (ERR-002): a present-but-unresolvable role marker must block,
   // never silently default to 'work'. Absent is the lone legitimate -> 'work'.
   if (res.state === 'unresolved') {
     process.stderr.write(
       `\nMode undeterminable — prompt not run (fail-closed).\n` +
-      `  .claude/role (or its legacy .claude/active-mode alias) exists but its role could not be resolved: ${res.reason}.\n` +
+      `  .claude/role exists but its role could not be resolved: ${res.reason}.\n` +
       `  Refusing to assume "work" — that would silently disable the 3-brain bias guard\n` +
       `  (e.g. run a ${declared} prompt with a work read-first list).\n\n` +
       `  Fix: write a single valid mode (work | verifier | orchestrator | refactor),\n` +

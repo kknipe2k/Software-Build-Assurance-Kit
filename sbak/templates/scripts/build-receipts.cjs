@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // scripts/build-receipts.cjs
 //
 // The build-receipts CLI — diagnostics (M20.6.A) + collectors (M20.6.C) + the
@@ -122,8 +122,8 @@ function deriveReleaseOrigin(events) {
   }
   if (releases.length > 0) return { releases: releases };
   const reading = scriptReleases > 0
-    ? 'no hook-observed release in this window; release action(s) observed only as script events (' + scriptReleases + ') — consistent with the human\'s own outside shell (the always-sanctioned path)'
-    : 'no release events observed in the ledger window — nothing to classify (absence stated, never omitted)';
+    ? 'no hook-observed release in this window; release action(s) observed only as script events (' + scriptReleases + ') - consistent with the human\'s own outside shell (the always-sanctioned path)'
+    : 'no release events observed in the ledger window - nothing to classify (absence stated, never omitted)';
   return { releases: releases, reading: reading };
 }
 
@@ -431,7 +431,7 @@ const VERIFICATION_LABELS = Object.freeze({
   FIXED: 'a finding was caught and corrected',
   SKIPPED: 'deliberately not run',
   NOT_RUN: 'not executed in this run',
-  UNKNOWN: 'not observed — never inferred',
+  UNKNOWN: 'not observed - never inferred',
   BLOCKED: 'could not run (a precondition failed)',
 });
 const VOCAB_DISPLAY = Object.freeze({
@@ -595,7 +595,7 @@ function coverHeadline(model, mode, verdict) {
   const tail = [mode];
   if (recs !== null) tail.push(recs + ' records');
   if (vf !== null) tail.push(vf + ' caught & fixed');
-  return head + ' — ' + tail.join(', ') + '.';
+  return head + ' - ' + tail.join(', ') + '.';
 }
 function coverSubline(model) {
   const id = model.identity || {};
@@ -684,7 +684,7 @@ function renderCover(model) {
 
   push('<section class="rc rc-sheet">\n');
   push('<div class="rc-hero"><div class="rc-bar ' + toneClass(cover.verdict.tone) + '"></div><div class="rc-body">\n');
-  push('<p class="rc-eyebrow">Software Build Assurance Kit build receipt — summary</p>\n');
+  push('<p class="rc-eyebrow">Software Build Assurance Kit build receipt - summary</p>\n');
   push('<div><span class="rc-vd ' + toneClass(cover.verdict.tone) + '"><span class="rc-sw"></span> ' + esc(cover.verdict.label) + '</span>');
   push('<span class="rc-mode">' + esc(cover.mode) + '</span></div>\n');
   push('<h1 class="rc-h1">' + esc(cover.headline) + '</h1>\n');
@@ -746,6 +746,11 @@ function renderHtml(model) {
     '.none{color:#666;font-style:italic}\n' +
     '.tell{color:#a12318;border-left:3px solid #a12318;padding-left:.5rem;font-weight:600}\n' +
     '.receipt{margin:.8rem 0;padding:.4rem .8rem;border-left:3px solid #bbb;background:#fafafa}\n' +
+    // M28.L presentation contract (req 5): groups collapse to a summary line via
+    // self-contained details/summary — zero-script stays structurally true.
+    'details{margin:.5rem 0;border:1px solid #ddd;border-radius:.3rem;padding:.25rem .6rem;background:#fcfcfc}\n' +
+    'summary{cursor:pointer;font-weight:600;padding:.15rem 0}\n' +
+    'details[open]>summary{border-bottom:1px solid #eee;margin-bottom:.3rem}\n' +
     COVER_CSS +
     '</style>\n</head>\n<body>\n');
 
@@ -753,126 +758,280 @@ function renderHtml(model) {
   // layer over the audit-grade detail, every figure read from this same model.
   push(renderCover(model));
 
-  push('<h1>Build receipt — ' + title + '</h1>\n');
+  push('<h1>Build receipt - ' + title + '</h1>\n');
   const ident = model.identity || {};
   push('<p>range <code>' + esc(ident.range || '') + '</code>' +
     (ident.commit ? ' · commit <code>' + esc(ident.commit) + '</code>' : '') +
-    (ident.dirty ? ' · <span class="label">working tree DIRTY — uncommitted changes excluded</span>' : '') +
+    (ident.dirty ? ' · <span class="label">working tree DIRTY - uncommitted changes excluded</span>' : '') +
     '</p>\n');
 
   // Coverage first — the honesty header. Unknown/gap states render VISIBLY.
-  push('<h2 id="sec-coverage">Coverage — what was and was not observed</h2>\n');
+  push('<h2 id="sec-coverage">Coverage - what was and was not observed</h2>\n');
   const cov = Array.isArray(model.coverage) ? model.coverage : [];
   if (cov.length === 0) push('<p class="none">no coverage notes recorded</p>\n');
   else { push('<ul>\n'); for (const n of cov) push('<li>' + esc(n) + '</li>\n'); push('</ul>\n'); }
 
   // Roles — unknown durations render as the word, never as zero.
-  push('<h2 id="sec-roles">Roles — observed turn time (unknown is never zero)</h2>\n');
+  push('<h2 id="sec-roles">Roles - observed turn time (unknown is never zero)</h2>\n');
   const roles = model.roles || { per_role: {}, totals: {} };
-  push('<table>\n<tr><th>role</th><th>observed turn time</th><th>complete turns</th><th>incomplete turns</th></tr>\n');
+  push('<table>\n<tr><th>role</th><th>observed turn time</th><th>complete turns</th><th>incomplete turns</th><th>avg per complete turn</th></tr>\n');
   for (const role of Object.keys(roles.per_role || {})) {
     const r = roles.per_role[role];
+    // M28.L (req 6): the average is arithmetic on the model's own figures — observed
+    // time over complete turns; unknown time or zero complete turns stays 'unknown'.
+    const avg = (r.ms == null || !r.complete_turns) ? null : r.ms / r.complete_turns;
     push('<tr><td>' + esc(role) + '</td><td' + (r.ms === null ? ' class="unknown"' : '') + '>' + esc(fmtMs(r.ms)) + '</td><td>' +
-      esc(String(r.complete_turns)) + '</td><td>' + esc(String(r.incomplete_turns)) + '</td></tr>\n');
+      esc(String(r.complete_turns)) + '</td><td>' + esc(String(r.incomplete_turns)) + '</td><td' +
+      (avg === null ? ' class="unknown"' : '') + '>' + esc(avg === null ? 'unknown' : fmtMs(avg)) + '</td></tr>\n');
   }
   push('</table>\n');
   // M22.F (#27): the timing side of the never-observed naming — the roles table
   // shows what was observed; this line names what was not.
   const rNever = neverObservedRoles(roles.per_role);
   if (rNever.length > 0) {
-    push('<p><span class="unknown">never observed</span> in the merged event ledgers: ' + esc(rNever.join(', ')) + ' — named, never omitted.</p>\n');
+    push('<p><span class="unknown">never observed</span> in the merged event ledgers: ' + esc(rNever.join(', ')) + ' - named, never omitted.</p>\n');
   }
   const tot = roles.totals || {};
   push('<ul>\n');
   push('<li>observed turn time (all roles): <span' + (tot.observed_turn_ms == null ? ' class="unknown"' : '') + '>' + esc(fmtMs(tot.observed_turn_ms)) + '</span></li>\n');
   push('<li>calendar span (instrumented event window only): <span' + (tot.calendar_span_ms == null ? ' class="unknown"' : '') + '>' + esc(fmtMs(tot.calendar_span_ms)) + '</span></li>\n');
   push('<li>tool time: <span' + (tot.tool_ms == null ? ' class="unknown"' : '') + '>' + esc(fmtMs(tot.tool_ms)) + '</span>' +
-    (tot.tool_time_included_in_role_time ? ' <span class="label">included in role time — never added on top</span>' : '') + '</li>\n');
-  push('<li>incomplete turns: ' + esc(String(tot.incomplete_turns == null ? 'unknown' : tot.incomplete_turns)) + ' <span class="label">an interrupt is a turn with no stop — incomplete, never synthesized</span></li>\n');
+    (tot.tool_time_included_in_role_time ? ' <span class="label">included in role time - never added on top</span>' : '') + '</li>\n');
+  push('<li>incomplete turns: ' + esc(String(tot.incomplete_turns == null ? 'unknown' : tot.incomplete_turns)) + ' <span class="label">an interrupt is a turn with no stop - incomplete, never synthesized</span></li>\n');
   push('<li>human attention: ' + esc(String(tot.human_attention || 'not measured')) + '</li>\n');
   push('</ul>\n');
+  // M28.L (req 6): the included-session scope, answered FROM the model — which roles'
+  // sessions are in these counts is what per_role's own keys record, never a guess.
+  const rObserved = Object.keys(roles.per_role || {});
+  push('<p id="time-scope">Scope of these times: only sessions whose event ledgers were merged into this model are counted - here the ' +
+    esc(rObserved.join(' and ')) + ' session ledgers. ' +
+    (rNever.length > 0
+      ? 'No ' + esc(rNever.join(' or ')) + ' session appears in the merged ledgers, so no time from those roles is included in any figure above - absent, never zero, and stated from the ledgers rather than guessed.'
+      : 'Every known role appears in the merged ledgers.') +
+    // M28.L round 3 (the traced capture limit; its ledger entry names the fix): a machinery truth, stated so a
+    // reader can weigh the role figures — each session writes its own worktree's
+    // ledger, and the render only merges what it is given.
+    ' One capture limit of the recommended two-CLI worktree topology is recorded on the kit\'s tech-debt ledger: each session\'s events land in its own worktree\'s ledger, and a render that is not given every sibling ledger (the <code>--ledger</code> flag) cannot see that session\'s time - orchestration time in particular can go uncounted.</p>\n');
 
-  // Timeline.
+  // Timeline. M28.L presentation contract: the merged wall of rows becomes grouped
+  // collapsibles (req 5) — same rows, same order within each group, nothing dropped.
   push('<h2 id="sec-timeline">Timeline</h2>\n');
   const tl = Array.isArray(model.timeline) ? model.timeline : [];
   if (tl.length === 0) push('<p class="none">no timeline entries (no events, no dated records)</p>\n');
   else {
-    push('<table>\n<tr><th>at</th><th>kind</th><th>who</th><th>detail</th></tr>\n');
-    for (const t of tl) {
+    const tlRow = (t) => {
       let detail = '';
-      if (t.kind === 'turn') detail = (t.status === 'complete' ? 'complete, ' + fmtMs(t.ms) : 'INCOMPLETE — duration unknown (no stop observed)');
+      if (t.kind === 'turn') detail = (t.status === 'complete' ? 'complete, ' + fmtMs(t.ms) : 'INCOMPLETE - duration unknown (no stop observed)');
       else if (t.kind === 'tool') detail = 'tool: ' + (t.category || 'other');
       else if (t.kind === 'session') detail = 'session started';
       else detail = (t.text || '') + (t.id ? ' [' + t.id + ']' : '');
-      push('<tr><td>' + esc(t.at || '') + '</td><td>' + esc(t.kind || '') + '</td><td>' + esc(t.session || t.role || '') + '</td><td>' + esc(detail) + '</td></tr>\n');
+      return '<tr><td>' + esc(t.at || '') + '</td><td>' + esc(t.kind || '') + '</td><td>' + esc(t.session || t.role || '') + '</td><td>' + esc(detail) + '</td></tr>\n';
+    };
+    const marks = tl.filter((t) => t.kind === 'milestone' || t.kind === 'release');
+    const starts = tl.filter((t) => t.kind === 'session');
+    const turns = tl.filter((t) => t.kind === 'turn');
+    const tools = tl.filter((t) => t.kind === 'tool');
+    // req 7, the never-simulate resolution: entries the ledger recorded WITHOUT a clock
+    // time render the date plus this statement — a time that was never recorded is
+    // never synthesized. A model whose entries carry datetimes renders them in full.
+    const dayOnly = marks.filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(String(t.at)));
+    if (dayOnly.length > 0) {
+      push('<p id="timeline-resolution">' + dayOnly.length + ' of the ' + marks.length +
+        ' milestone/release entries below are recorded at day resolution in this snapshot - the source ledger recorded a date and no clock time for them, so only the date is shown (a time that was never recorded is never invented). Session, turn, and tool events carry their full recorded timestamps.</p>\n');
     }
-    push('</table>\n');
+    if (marks.length > 0) {
+      push('<details open><summary>Milestones &amp; releases - ' + marks.length + ' entries (' +
+        esc(String(marks[0].at)) + ' → ' + esc(String(marks[marks.length - 1].at)) + ')</summary>\n' +
+        '<table>\n<tr><th>at</th><th>kind</th><th>who</th><th>detail</th></tr>\n' +
+        marks.map(tlRow).join('') + '</table>\n</details>\n');
+    }
+    if (starts.length > 0) {
+      push('<details><summary>Sessions - ' + starts.length + ' session starts</summary>\n' +
+        '<table>\n<tr><th>at</th><th>kind</th><th>who</th><th>detail</th></tr>\n' +
+        starts.map(tlRow).join('') + '</table>\n</details>\n');
+    }
+    if (turns.length > 0) {
+      const nComplete = turns.filter((t) => t.status === 'complete').length;
+      push('<details><summary>Turns - ' + turns.length + ' entries (' + nComplete + ' complete, ' +
+        (turns.length - nComplete) + ' incomplete)</summary>\n' +
+        '<table>\n<tr><th>at</th><th>kind</th><th>who</th><th>detail</th></tr>\n' +
+        turns.map(tlRow).join('') + '</table>\n</details>\n');
+    }
+    // req 8: tool events group per session — summary carries the per-session totals
+    // (first observed event → last observed event, span, per-type counts, all
+    // arithmetic on the recorded rows), expanding to the per-event view.
+    if (tools.length > 0) {
+      const bySess = new Map();
+      for (const t of tools) { const s = String(t.session || 'unknown'); if (!bySess.has(s)) bySess.set(s, []); bySess.get(s).push(t); }
+      push('<h3>Tool events - ' + tools.length + ' events across ' + bySess.size + ' sessions</h3>\n');
+      push('<p>Each session collapses to its observed tool span - first recorded event to last - with per-type counts; expand for every event.</p>\n');
+      for (const entry of bySess) {
+        const sid = entry[0], evs = entry[1];
+        const cats = {};
+        for (const e of evs) { const c = e.category || 'other'; cats[c] = (cats[c] || 0) + 1; }
+        const catStr = Object.keys(cats).sort().map((c) => c + ' ×' + cats[c]).join(', ');
+        const spanMs = Date.parse(evs[evs.length - 1].at) - Date.parse(evs[0].at);
+        const span = Number.isFinite(spanMs) ? fmtMs(spanMs) : 'unknown';
+        push('<details class="tool-session"><summary>session <code>' + esc(sid.slice(0, 8)) + '</code> - ' +
+          evs.length + ' tool events - ' + esc(String(evs[0].at)) + ' → ' + esc(String(evs[evs.length - 1].at)) +
+          ' (span ' + esc(span) + ') - ' + esc(catStr) + '</summary>\n' +
+          '<table>\n<tr><th>at</th><th>tool</th></tr>\n' +
+          evs.map((e) => '<tr><td>' + esc(e.at || '') + '</td><td>' + esc(e.category || 'other') + '</td></tr>\n').join('') +
+          '</table>\n</details>\n');
+      }
+    }
   }
 
   // Gates + decisions.
-  push('<h2 id="sec-gates">Gates — demonstrated controls</h2>\n');
+  push('<h2 id="sec-gates">Gates - demonstrated controls</h2>\n');
   const gates = model.gates || { controls: [], verifier_findings: 0 };
   if (!gates.controls || gates.controls.length === 0) push('<p class="none">no control records</p>\n');
-  else { push('<ul>\n'); for (const c of gates.controls) push('<li>' + esc(c.text) + ' <span class="label">' + esc(c.id) + '</span></li>\n'); push('</ul>\n'); }
+  else {
+    push('<details><summary>' + gates.controls.length + ' demonstrated controls - expand for the full list</summary>\n<ul>\n');
+    for (const c of gates.controls) push('<li>' + esc(c.text) + ' <span class="label">' + esc(c.id) + '</span></li>\n');
+    push('</ul>\n</details>\n');
+  }
   push('<p>verifier findings recorded: ' + esc(String(gates.verifier_findings)) + '</p>\n');
 
   // M22.H (V-1): the release-origin block — G.3.4's report side. Three states
   // per session-correlated release; the tell visually distinct (the .tell
   // style) and worded as observation, not accusation; absence STATED.
-  push('<h3 id="sec-release-origin">Release origin — three states per session-correlated release</h3>\n');
+  push('<h3 id="sec-release-origin">Release origin - three states per session-correlated release</h3>\n');
   const ro = (gates.release_origin && typeof gates.release_origin === 'object') ? gates.release_origin : { releases: [], reading: '' };
   const roReleases = Array.isArray(ro.releases) ? ro.releases : [];
   if (roReleases.length === 0) {
-    push('<p class="none">' + esc(ro.reading || 'no release events observed in the ledger window — nothing to classify (absence stated, never omitted)') + '</p>\n');
+    push('<p class="none">' + esc(ro.reading || 'no release events observed in the ledger window - nothing to classify (absence stated, never omitted)') + '</p>\n');
   } else {
     push('<ul>\n');
     for (const r of roReleases) {
       if (r.state === 'line-observed') {
         push('<li>' + esc(r.at) + ' · session ' + esc(r.session) + ' · in-session release (' + esc(r.release) +
-          ') — RED-RELEASE line observed earlier in the same session (the ruling-5-sanctioned path)</li>\n');
+          ') - RED-RELEASE line observed earlier in the same session (the ruling-5-sanctioned path)</li>\n');
       } else {
         push('<li class="tell">' + esc(r.at) + ' · session ' + esc(r.session) + ' · in-session release (' + esc(r.release) +
-          ') with no prior RED-RELEASE line observed in this session — the self-release tell (recorded state; the ledger supports no stronger claim)</li>\n');
+          ') with no prior RED-RELEASE line observed in this session - the self-release tell (recorded state; the ledger supports no stronger claim)</li>\n');
       }
     }
     push('</ul>\n');
   }
 
-  push('<h2 id="sec-decisions">Decisions — human verdicts (read, never invented)</h2>\n');
+  push('<h2 id="sec-decisions">Decisions - human verdicts (read, never invented)</h2>\n');
   const dec = Array.isArray(model.decisions) ? model.decisions : [];
+  // M28.L (req 1): the verdict legend — a reader never meets a bare verdict word.
+  // The four-outcome set is the BUILD-PLAYBOOK §4.4 outcome matrix (the table
+  // PROCESS-VALIDATION shares); every OTHER verdict string this model actually
+  // records gets its own line, explained from the shipped design and rendered
+  // verbatim — recorded vocabulary is never repaired.
+  const MATRIX_OUTCOMES = [
+    ['Sound', 'every hard gate and every soft gate passed - the stage proceeds as-is.'],
+    ['Sound but rough', 'hard gates passed, one or two soft gates failed - playbook/templates get revised first, then the work proceeds.'],
+    ['Friction-heavy', 'hard gates passed but three or more soft gates failed - stop and iterate on the process before the next stage.'],
+    ['Not ready', 'a hard gate failed - diagnose and fix before proceeding; the stage does not close.'],
+  ];
+  const explainRecorded = (v) => {
+    if (v === 'Sound with fixes') return 'a recorded Verifier verdict: sound once the stage\'s named findings were fixed - historical phrasing preserved verbatim from the ledger.';
+    if (/^score \d$/.test(v)) return 'a pre-cutover user stamp: the owner\'s 1–5 stage score, recorded verbatim (the numeric stamps predate the pass/fail stamp cutover and are grandfathered, never rewritten).';
+    if (v === 'pass' || v === 'fail') return 'the owner\'s user-friction stamp at stage close, recorded verbatim.';
+    if (/\{\{/.test(v)) return 'a template placeholder the source document never filled in - rendered exactly as recorded, never repaired.';
+    return 'a verdict string recorded verbatim from the source document - shown as recorded.';
+  };
+  const matrixWords = MATRIX_OUTCOMES.map((p) => p[0]);
+  const recordedExtra = [...new Set(dec.map((d) => String(d.verdict)))].filter((v) => matrixWords.indexOf(v) === -1);
+  push('<details id="verdict-legend"><summary>What the verdict words mean - the full outcome set</summary>\n' +
+    '<p>Stage and milestone outcomes come from the outcome matrix (BUILD-PLAYBOOK §4.4): every retrospective ends in exactly one of the four outcomes below. This ledger also records the additional verdict vocabularies listed after them.</p>\n<ul>\n');
+  for (const p of MATRIX_OUTCOMES) push('<li><strong>' + esc(p[0]) + '</strong> - ' + esc(p[1]) + '</li>\n');
+  for (const v of recordedExtra) push('<li><strong>' + esc(v) + '</strong> - ' + esc(explainRecorded(v)) + '</li>\n');
+  push('</ul>\n</details>\n');
   if (dec.length === 0) push('<p class="none">no recorded verdicts</p>\n');
-  else { push('<ul>\n'); for (const d of dec) push('<li>' + esc(d.stage || d.milestone || '') + ': ' + esc(d.verdict) + ' <span class="label">' + esc(d.id) + '</span></li>\n'); push('</ul>\n'); }
+  else {
+    // req 9: the list collapses to its computed truth — the count and per-verdict
+    // breakdown are tallied from the rows themselves.
+    const vCounts = {};
+    for (const d of dec) { const v = String(d.verdict); vCounts[v] = (vCounts[v] || 0) + 1; }
+    const breakdown = Object.keys(vCounts).map((v) => esc(v) + ' ×' + vCounts[v]).join(', ');
+    push('<details><summary>' + dec.length + ' recorded verdicts - ' + breakdown + '</summary>\n<ul>\n');
+    for (const d of dec) push('<li>' + esc(d.stage || d.milestone || '') + ': ' + esc(d.verdict) + ' <span class="label">' + esc(d.id) + '</span></li>\n');
+    push('</ul>\n</details>\n');
+  }
 
   // The four headline sections — every substantive claim links its receipt.
   const HEADS = [
-    ['bau', 'BAU — planned work, rework inside budget (the process working)'],
-    ['worked', 'What worked — demonstrated controls'],
-    ['broke', 'What broke — findings, over-budget rework, post-merge discoveries'],
-    ['shipped', 'What shipped — committed surfaces and transitions'],
+    ['bau', 'BAU - planned work, rework inside budget (the process working)'],
+    ['worked', 'What worked - demonstrated controls'],
+    ['broke', 'What broke - findings, over-budget rework, post-merge discoveries'],
+    ['shipped', 'What shipped - committed surfaces and transitions'],
   ];
   for (const pair of HEADS) {
     const key = pair[0];
     push('<h2 id="sec-' + key + '">' + esc(pair[1]) + '</h2>\n');
     const items = Array.isArray(model[key]) ? model[key] : [];
     if (items.length === 0) { push('<p class="none">none recorded</p>\n'); continue; }
-    push('<ul>\n');
+    push('<details><summary>' + items.length + ' entries - expand for every receipt-linked claim</summary>\n<ul>\n');
     for (const it of items) {
-      push('<li><a href="#' + esc(it.id) + '">' + esc(it.id) + '</a> — ' + esc(it.text) +
+      push('<li><a href="#' + esc(it.id) + '">' + esc(it.id) + '</a> - ' + esc(it.text) +
         ' <span class="label">' + esc(it.source) + '</span></li>\n');
     }
-    push('</ul>\n');
+    push('</ul>\n</details>\n');
   }
 
   // Assurance + limitations.
   push('<h2 id="sec-assurance">Assurance</h2>\n');
   const asr = model.assurance || {};
+  // M28.L (req 2): the block speaks English — what a record is, what valid means, and
+  // what the check proved, with the model's own numbers. The all-valid phrasing is
+  // CONDITIONAL on the numbers actually being equal; a shortfall is stated, not hidden.
+  const asrSame = asr.records != null && String(asr.records) === String(asr.valid_statements);
+  push('<p id="assurance-plain">In plain terms: a record here is one entry the collectors derived from the project\'s committed history - its retrospectives, Verifier findings files, CHANGELOG lines, the tech-debt and release-state ledgers, and git itself. Each of the ' +
+    esc(String(asr.records)) + ' collected records was checked against the receipt schema (<code>software-build-assurance-kit/build-receipt/v1</code>); ' +
+    (asrSame
+      ? 'all ' + esc(String(asr.valid_statements)) + ' parse as valid statements. What that check proved: every claim on this page traces to a schema-valid record - none was dropped, none was rewritten.'
+      : esc(String(asr.valid_statements)) + ' parse as valid statements; the remainder failed schema validation and are counted here, not hidden.') + '</p>\n');
   push('<ul>\n<li>' + esc(String(asr.records)) + ' records → ' + esc(String(asr.valid_statements)) +
     ' valid <code>software-build-assurance-kit/build-receipt/v1</code> statements</li>\n' +
-    '<li>unclassified records (never forced into a class): ' + esc(String(asr.unclassified == null ? 0 : asr.unclassified)) + '</li>\n');
-  for (const f of (asr.fnr || [])) push('<li>calibration FNR (' + esc(f.milestone) + '): ' + esc(String(f.num)) + '/' + esc(String(f.den)) + '</li>\n');
+    // req 3: unclassified is the unknowns-shown-as-unknown rule working, and SAYS so.
+    '<li>unclassified records: ' + esc(String(asr.unclassified == null ? 0 : asr.unclassified)) +
+    ' - these matched no known event class, so they are counted and shown as unknown, never forced into a bin. That is the kit\'s unknowns-shown-as-unknown rule working as designed, not confusion: a class is assigned only when a record\'s own bytes match a defined pattern.</li>\n');
   push('</ul>\n');
+  // M28.L (req 3, round 2): unclassified defines the THING — the four questions a
+  // reader actually has, in order. The class-table size and kind list render from
+  // the collectors' own derived RECORD_KINDS (never typed by hand); the
+  // reconciliation is arithmetic on the model; a descriptor renders only when the
+  // model carries one, else the absence is stated.
+  const uKinds = collect.RECORD_KINDS;
+  const uN = asr.unclassified == null ? 0 : asr.unclassified;
+  push('<details id="unclassified-explained"><summary>What does unclassified mean here?</summary>\n');
+  push('<p>What a record is, versus a classified event: the collectors read the committed history - retrospectives, Verifier findings files, CHANGELOG lines, the tech-debt and release-state ledgers, and git itself - and pull out entries. The report knows how to summarize ' +
+    uKinds.length + ' specific record types from that history: ' + esc(uKinds.join(', ')) +
+    '. Each classified entry lands in one of the four lists above (BAU, worked, broke, shipped).</p>\n');
+  push('<p>What the ' + esc(String(uN)) + ' unclassified are: real entries from that same history that match none of those types - history contains more kinds of lines than the report classifies. By the classifier\'s own rules this includes every tech-debt entry (deferred backlog, never forced into a bin), any commit that is not a stage-shaped commit, and any rework row whose budget was never declared. ' +
+    // round 3: the COMPOSITION, when the model carries one (rows must reconcile
+    // against the count — checked by the caller-side pin); else the stated absence.
+    ((Array.isArray(asr.unclassified_breakdown) && asr.unclassified_breakdown.length > 0)
+      ? 'The composition, from this model: ' + asr.unclassified_breakdown.map((b) => esc(String(b.count)) + ' ' + esc(String(b.label || b.kind || ''))).join('; ') + '.'
+      : 'This frozen snapshot stores the count, not the entries or a per-kind breakdown, so the composition cannot be shown here - stated rather than invented. The capture gap is recorded on the kit\'s tech-debt ledger; a model that carries the breakdown renders it in place of this sentence.') + '</p>\n');
+  (() => {
+    const uClassified = ['bau', 'worked', 'broke', 'shipped'].reduce((n, k) => n + ((Array.isArray(model[k]) ? model[k] : []).length), 0);
+    const uRecon = (asr.records != null && asr.unclassified != null && asr.records - asr.unclassified === uClassified);
+    push('<p>What it means for the numbers: every classified-record summary on this page counts only classified entries; the unclassified are counted and disclosed so the totals stay honest - nothing was silently dropped, and nothing unknown was dressed up as known. ' +
+      (uRecon
+        ? 'The arithmetic is on the page: ' + esc(String(asr.records)) + ' records = ' + uClassified + ' classified + ' + esc(String(asr.unclassified)) + ' unclassified.'
+        : 'The record total does not reconcile against the four classified lists in this model - a discrepancy this page states rather than papers over.') + '</p>\n');
+  })();
+  push('<p>Why that is a feature: the alternative is a report that either hides what it did not understand or mislabels it - this one shows its remainder.</p>\n');
+  push('</details>\n');
+  // req 9: the calibration list collapses to its computed truth — the uniformity claim
+  // is only rendered when the rows really are uniform.
+  const fnr = Array.isArray(asr.fnr) ? asr.fnr : [];
+  if (fnr.length > 0) {
+    const fnrUniform = fnr.every((f) => f.num === 0) && new Set(fnr.map((f) => f.den)).size === 1;
+    const fnrHead = fnr.length + ' live verifier calibrations' +
+      (fnrUniform ? ' - 0/' + fnr[0].den + ' false negatives in every one' : ' - expand for the per-milestone rates');
+    push('<details><summary>' + fnrHead + '</summary>\n<ul>\n');
+    for (const f of fnr) push('<li>calibration FNR (' + esc(f.milestone) + '): ' + esc(String(f.num)) + '/' + esc(String(f.den)) + '</li>\n');
+    push('</ul>\n</details>\n');
+  }
 
-  push('<h2 id="sec-limitations">Limitations — what this report does NOT claim</h2>\n');
+  push('<h2 id="sec-limitations">Limitations - what this report does NOT claim</h2>\n');
   const lims = Array.isArray(model.limitations) ? model.limitations : [];
   if (lims.length === 0) push('<p class="none">none stated</p>\n');
   else { push('<ul>\n'); for (const l of lims) push('<li>' + esc(l) + '</li>\n'); push('</ul>\n'); }
@@ -880,18 +1039,24 @@ function renderHtml(model) {
   // The receipts appendix — every claim link resolves HERE; frozen history is
   // labeled per receipt.
   push('<h2 id="sec-provenance">Receipts &amp; provenance</h2>\n');
-  push('<table>\n<tr><th>source</th><th>pinned</th><th>collector</th><th>basis</th></tr>\n');
-  for (const p of (model.provenance || [])) {
+  const prov = model.provenance || [];
+  push('<details><summary>' + prov.length + ' provenance sources - expand for the pinned-commit table</summary>\n' +
+    '<table>\n<tr><th>source</th><th>pinned</th><th>collector</th><th>basis</th></tr>\n');
+  for (const p of prov) {
     push('<tr><td>' + esc(p.source) + '</td><td>' + esc(p.commit ? p.commit : (p.dirty ? 'dirty tree (stated)' : '')) + '</td><td>' +
       esc(p.collector_version || '') + '</td><td>' + esc(p.basis || '') + '</td></tr>\n');
   }
-  push('</table>\n');
+  push('</table>\n</details>\n');
+  // The receipt records collapse as one group (req 5). Fragment navigation from the
+  // claim links above still lands correctly: browsers auto-reveal <details> ancestors
+  // of a #-target during fragment navigation.
+  const rcptDivs = [];
   const allItems = [].concat(model.bau || [], model.worked || [], model.broke || [], model.shipped || []);
   const seenIds = new Set();
   for (const it of allItems) {
     if (seenIds.has(it.id)) continue;
     seenIds.add(it.id);
-    push('<div class="receipt" id="' + esc(it.id) + '"><strong>' + esc(it.id) + '</strong> · ' + esc(it.kind) +
+    rcptDivs.push('<div class="receipt" id="' + esc(it.id) + '"><strong>' + esc(it.id) + '</strong> · ' + esc(it.kind) +
       ' <span class="label">collector-derived (historical)</span><br>' + esc(it.text) +
       '<br>source: ' + esc(it.source) + ' · evidence: ' + esc(it.evidence) + '</div>\n');
   }
@@ -899,13 +1064,15 @@ function renderHtml(model) {
   for (const c of ((model.gates && model.gates.controls) || [])) {
     if (seenIds.has(c.id)) continue;
     seenIds.add(c.id);
-    push('<div class="receipt" id="' + esc(c.id) + '"><strong>' + esc(c.id) + '</strong> · control <span class="label">collector-derived (historical)</span><br>' + esc(c.text) + '</div>\n');
+    rcptDivs.push('<div class="receipt" id="' + esc(c.id) + '"><strong>' + esc(c.id) + '</strong> · control <span class="label">collector-derived (historical)</span><br>' + esc(c.text) + '</div>\n');
   }
   for (const d of (model.decisions || [])) {
     if (seenIds.has(d.id)) continue;
     seenIds.add(d.id);
-    push('<div class="receipt" id="' + esc(d.id) + '"><strong>' + esc(d.id) + '</strong> · decision <span class="label">collector-derived (historical)</span><br>' + esc(d.verdict) + '</div>\n');
+    rcptDivs.push('<div class="receipt" id="' + esc(d.id) + '"><strong>' + esc(d.id) + '</strong> · decision <span class="label">collector-derived (historical)</span><br>' + esc(d.verdict) + '</div>\n');
   }
+  push('<details><summary>Receipts appendix - ' + rcptDivs.length + ' receipt records (every claim link above resolves here)</summary>\n' +
+    rcptDivs.join('') + '</details>\n');
   push('</body>\n</html>\n');
 
   const html = out.join('');

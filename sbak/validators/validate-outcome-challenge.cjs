@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.2
+// @kit-version 1.0.3
 // validators/validate-outcome-challenge.cjs
 //
 // The Outcome Challenge shape check (companion §6 A–D, Workstream 3; M26.F).

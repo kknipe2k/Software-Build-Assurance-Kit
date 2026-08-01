@@ -8,7 +8,7 @@ name: release
 #   * the maintainer creates a DRAFT release, attaches the asset + its .sha256, and
 #     publishes by hand after verification. Release immutability + Private Vulnerability
 #     Reporting are enabled on the repo FIRST, so the first published release is immutable
-#     with no legacy gotchas — a botched asset then means v0.2.1, not an edit.
+#     with no legacy gotchas — a botched asset then means the next patch release, not an edit.
 #
 # This workflow is the verification-and-attestation control the runbook invokes manually
 # (workflow_dispatch) against that draft. What it proves:
@@ -24,7 +24,12 @@ name: release
 #     on GitHub's hosted runner, with a workload identity this repository cannot forge.
 #
 # What it does NOT do: create or publish a release (no `gh release create`, no undraft),
-# archive this repository's tree (no `git archive`), or widen `contents` to write.
+# or archive this repository's tree (no `git archive`). Its token DOES carry
+# `contents: write` - required solely so it can SEE the maintainer's draft release, because
+# GitHub has no narrower draft-read scope (the RESOLVED note below records that live run).
+# What the grant allows in principle (writing repository contents) is exactly why it is
+# not the tamper guard: published releases are protected by the repository's
+# immutable-release setting, and a failed attest leaves only an unpublished draft.
 #
 # Attest action: the runbook §4 step 5 names actions/attest@v4. This uses its purpose-
 # built wrapper actions/attest-build-provenance (SHA-pinned) — a DELIBERATE, recorded
@@ -42,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: The annotated, signed release tag to verify and attest (e.g. v0.2.0).
+        description: The annotated, signed release tag to verify and attest (e.g. v1.0.2).
         required: true
 
 # Least-privilege floor, widened only for what attestation needs — contents: write is
@@ -61,7 +66,7 @@ jobs:
       TAG: ${{ inputs.tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0            # tag objects and their signatures
           persist-credentials: false

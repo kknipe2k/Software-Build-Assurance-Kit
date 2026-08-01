@@ -1,5 +1,5 @@
 ---
-fixture: gate-contract-skipped.md
+fixture: checklist-row-proposal.md
 class: gate-contract-skipped
 expected: must-flag
 ---

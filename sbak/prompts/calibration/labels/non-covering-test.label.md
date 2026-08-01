@@ -1,5 +1,5 @@
 ---
-fixture: non-covering-test.md
+fixture: import-stage-excerpt.md
 class: non-covering-test
 expected: must-flag
 ---
