@@ -11,27 +11,13 @@
 
 A drop-in kit that wraps a coding agent in controls you can check. AI agents write a lot of code, and the hard part is no longer getting code written - it is knowing whether what got written is the thing you asked for, and being able to show your work later. This kit gives an agent armed with a build spec: oversight, test & build approval gates, a second agent that reviews the first one blind, and an evidence trail bound to real commits. The agents do not have to be perfect. The process has to make a red visible.
 
-## If you read nothing else
+## Orientation
 
-**Want to see it first?** Open [HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html) - a few minutes, in your browser. The topology in one picture:
-
-![You in the middle: the orchestrator on one side; the fresh-session builder, verifier, and refactorer on the other; the shared documents and the machine enforcement underneath](sbak/how-it-works-centerpiece.png)
-
-*The session types never share a context, and you carry the surfaces between them. Captured from [HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html).*
+**Want to see it first?** Open [HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html) - a few minutes, in your browser.
 
 **Deciding if it's worth your evening?** [WHY-THIS-KIT.md](WHY-THIS-KIT.md) - two pages, honest costs.
 
 **Want to try it?** For most users the recommended path is the signed release ZIP - download **`sbak-v1.0.3-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` - SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
-
-**Want to just get the whole kit?** Clone the repo instead - the **Clone** path:
-
-```
-git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project
-cd my-project
-node sbak/templates/scripts/kit-update.cjs --adopt
-claude
-```
-
 
 **This is the v1.0.3 GA release** - See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the notes for both.
 The kit was built with its own process - [its own build receipt](example-receipt.html) is derived from real commits, findings, and rework, not a staged demo.
@@ -127,7 +113,7 @@ claude
 
 **Anything less exits non-zero and says why:** exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed (skip `git init` above and it answers `repair: git init`); exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe - a clean re-run changes nothing.
 
-**Prefer to clone?** `git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project && cd my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude`. One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Prefer to clone?** The clone alternate: `git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project && cd my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude`. One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 Once the kit is in your repo start `claude` from the repo.
 The CLI waits for you to speak first. Your opening message can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`. The kit takes it from there: it echoes your folder (confirm it), then guides with a short interview - three asks: 
