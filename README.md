@@ -1,9 +1,11 @@
-# Software Build Assurance Kit
+<h1 align="center">Software Build Assurance Kit</h1>
 
-[![CI](https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg)](https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Status: GA v1.0.3](https://img.shields.io/badge/status-GA%20v1.0.3-green)](RELEASE-NOTES.md)
-[![SLSA Level 2](https://img.shields.io/badge/SLSA-Level%202-blue)](https://slsa.dev/spec/v1.0/levels)
+<p align="center">
+  <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.3-green" alt="Status: GA v1.0.3"></a>
+  <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
+</p>
 
 ![Build for the next hundred commits - test-first gates, fresh-context verification, durable memory, receipts: the orchestrator and the human gate relay plan, red-test, and close decisions into a fresh build/verify/refactor session, and everything lands in the durable record of contracts, decisions, findings, and receipts](docs/assets/sbak-readme-light.png)
 
