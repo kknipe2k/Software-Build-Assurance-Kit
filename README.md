@@ -5,6 +5,8 @@
 [![Status: GA v1.0.3](https://img.shields.io/badge/status-GA%20v1.0.3-green)](RELEASE-NOTES.md)
 [![SLSA Level 2](https://img.shields.io/badge/SLSA-Level%202-blue)](https://slsa.dev/spec/v1.0/levels)
 
+![Build for the next hundred commits - test-first gates, fresh-context verification, durable memory, receipts: the orchestrator and the human gate relay plan, red-test, and close decisions into a fresh build/verify/refactor session, and everything lands in the durable record of contracts, decisions, findings, and receipts](docs/assets/sbak-readme-light.png)
+
 A drop-in kit that wraps a coding agent in controls you can check. AI agents write a lot of code, and the hard part is no longer getting code written - it is knowing whether what got written is the thing you asked for, and being able to show your work later. This kit gives an agent armed with a build spec: oversight, test & build approval gates, a second agent that reviews the first one blind, and an evidence trail bound to real commits. The agents do not have to be perfect. The process has to make a red visible.
 
 ## If you read nothing else
