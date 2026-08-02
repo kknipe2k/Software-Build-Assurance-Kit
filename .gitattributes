@@ -1,0 +1,10 @@
+# Line-ending policy for this repository's own checkout (distinct from
+# sbak/templates/dot-gitattributes, which is the file generated INTO
+# bootstrapped projects). Without this, a Windows clone with git's common
+# core.autocrlf=true default checks every text file out as CRLF — and the
+# kit's deterministic integrity check (golden-bootstrap --check-manifest)
+# then reports a false STALE, because it hashes bytes that git rewrote on
+# the way to disk. Force LF on disk for all tracked text so a clean clone
+# verifies identically on Windows, macOS, and Linux. (ZIP arrival is
+# unaffected — no git conversion touches ZIP bytes.)
+* text=auto eol=lf
