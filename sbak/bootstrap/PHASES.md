@@ -107,7 +107,7 @@ A web/UI build authors a design brief *before* any interface code, so the UI is 
 
 ### Phase 1.6 — design.md authoring (web/UI only)
 
-Synthesize the Phase 1.5 answers into `docs/design.md` using the 9-section structure in `sbak/templates/design.md` — every `{{placeholder}}` replaced with a concrete value, none left in the instance file. Surface the draft for approval (worth a pre-write look even under `pre_write_surface: spec_and_plan_only` — it drives every UI stage). On approval, write `docs/design.md` and ensure it's on the work read-first list. Then proceed to Phase 2.
+Synthesize the Phase 1.5 answers into `docs/design.md` using the 9-section structure in `sbak/templates/design.md` — every `{{placeholder}}` replaced with a concrete value, none left in the instance file. Surface the draft for approval (worth a pre-write look even under `pre_write_surface: spec_and_plan_only` — it drives every UI stage). On approval, write `docs/design.md` - stage prompts cite it on demand (the I8 read-first restructure deliberately keeps it off the preload list; do not add it). Then proceed to Phase 2.
 
 ## Phase 2 — Phased milestone breakdown (full text)
 
