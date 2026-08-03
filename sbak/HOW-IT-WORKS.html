@@ -405,20 +405,21 @@
   <h2>How to use it</h2>
   <h3>Get the kit (recommended: the release ZIP)</h3>
   <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.3-starter.zip</code>.</p>
+  <p>Run the sequence from the folder the ZIP downloaded to (usually <code>Downloads</code>), and replace <code>&lt;projects-path&gt;</code> with wherever you keep code - the point is that the project gets a real home, not <code>Downloads</code>.</p>
   <pre><code># macOS / Linux
-unzip sbak-v1.0.3-starter.zip -d my-project &amp;&amp; cd my-project
+unzip sbak-v1.0.3-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude</code></pre>
   <pre><code># Windows (cmd or PowerShell)
-mkdir my-project
-tar -xf sbak-v1.0.3-starter.zip -C my-project
-cd my-project
+mkdir &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.3-starter.zip -C &lt;projects-path&gt;\my-project
+cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
 claude</code></pre>
   <p><b>The adopt step verifies itself, and its exit code is the contract.</b> Exit 0 means adoption COMPLETE: every required enforcement layer is active. Anything less exits non-zero and says why: exit 1 is <code>ADOPTION INCOMPLETE</code> with the missing control named and a <code>repair:</code> command that runs as printed. An incomplete install cannot silently look complete. Re-running <code>--adopt</code> is always safe; a clean re-run changes nothing.</p>
-  <p><b>Prefer to clone?</b> The alternate path: <code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project</code>, then <code>cd my-project</code>, the same adopt step, and <code>claude</code>. One heads-up: <code>origin</code> still points at the kit's repository until the bootstrap resets it at handoff; don't <code>git push</code> before then.</p>
+  <p><b>Prefer to clone?</b> The alternate path (same rule - give it a real home): <code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git &lt;projects-path&gt;/my-project</code>, then <code>cd &lt;projects-path&gt;/my-project</code>, the same adopt step, and <code>claude</code>. One heads-up: <code>origin</code> still points at the kit's repository until the bootstrap resets it at handoff; don't <code>git push</code> before then.</p>
   <h3>Start</h3>
   <pre><code>claude
 # The kit's CLAUDE.md auto-loads.

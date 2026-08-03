@@ -53,12 +53,12 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 
 **One Copilot-specific step the install needs:** Copilot auto-loads its instructions from `.github/copilot-instructions.md` at the workspace root, and **neither the ZIP nor a clone of this repo includes that file**. The sequences below create it by copying `CLAUDE.md` into that slot, so every chat opens with the kit's entry rules in context.
 
-**New repo** - the full sequence.
+**New repo** - the full sequence. Run it from the folder the ZIP downloaded to (usually `Downloads`), and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`.
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.3-starter.zip -d my-project && cd my-project
+unzip sbak-v1.0.3-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -68,9 +68,9 @@ cp CLAUDE.md .github/copilot-instructions.md
 Windows (cmd or PowerShell):
 
 ```
-mkdir my-project
-tar -xf sbak-v1.0.3-starter.zip -C my-project
-cd my-project
+mkdir <projects-path>\my-project
+tar -xf sbak-v1.0.3-starter.zip -C <projects-path>\my-project
+cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
 mkdir .github

@@ -85,12 +85,12 @@ There is no guarantee that a heavyweight process framework beats a concise `CLAU
 
 ## Quickstart
 
-[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the ZIP path for a new project or an existing repo, plus the clone alternate. The short version, **from the recommended `sbak-v1.0.3-starter.zip`** (verify the `.sha256` first):
+[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the ZIP path for a new project or an existing repo, plus the clone alternate. The short version, **from the recommended `sbak-v1.0.3-starter.zip`** (verify the `.sha256` first). Run it from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.3-starter.zip -d my-project && cd my-project
+unzip sbak-v1.0.3-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude
@@ -99,9 +99,9 @@ claude
 Windows (cmd or PowerShell):
 
 ```
-mkdir my-project
-tar -xf sbak-v1.0.3-starter.zip -C my-project
-cd my-project
+mkdir <projects-path>\my-project
+tar -xf sbak-v1.0.3-starter.zip -C <projects-path>\my-project
+cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
 claude
@@ -113,7 +113,7 @@ claude
 
 **Anything less exits non-zero and says why:** exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed (skip `git init` above and it answers `repair: git init`); exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe - a clean re-run changes nothing.
 
-**Prefer to clone?** The clone alternate: `git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git my-project && cd my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude`. One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Prefer to clone?** The clone alternate (same rule - give it a real home): `git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git <projects-path>/my-project && cd <projects-path>/my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude`. One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 Once the kit is in your repo start `claude` from the repo.
 The CLI waits for you to speak first. Your opening message can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`. The kit takes it from there: it echoes your folder (confirm it), then guides with a short interview - three asks: 

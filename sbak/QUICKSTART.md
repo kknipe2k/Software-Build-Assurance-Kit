@@ -53,12 +53,13 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 
 **Copy is not install.** Unzip alone lands no `.claude/`, so the session would run unhooked. The `adopt` step installs and verifies the live hook layer.
 
-**New repo** - the full sequence.
+**New repo** - the full sequence. Run it from the folder the ZIP downloaded to (usually `Downloads`), and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`. The project name (`my-project`) is yours to change too.
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.3-starter.zip -d my-project && cd my-project
+unzip sbak-v1.0.3-starter.zip -d <projects-path>/my-project
+cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude
@@ -67,13 +68,15 @@ claude
 Windows (cmd or PowerShell):
 
 ```
-mkdir my-project
-tar -xf sbak-v1.0.3-starter.zip -C my-project
-cd my-project
+mkdir <projects-path>\my-project
+tar -xf sbak-v1.0.3-starter.zip -C <projects-path>\my-project
+cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
 claude
 ```
+
+(Already unpacked into `Downloads` before reading this? The project folder is self-contained - move the whole folder to its real home and carry on; nothing inside it breaks.)
 
 **Existing repo:** unzip into the repo, run the same adopt command, then start `claude`.
 
