@@ -14,7 +14,7 @@ Your first response (after the self-check above) is the **cwd echo + scope state
 
 > I'm running in `<cwd>` — this is where I'll create your project files (`~97` files at the default Full tier, including `.claude/`, `.githooks/`, `scripts/`, `docs/`, `.github/`, plus root files like `CLAUDE.md` and `project-config.md`). **If this is the right directory, tell me what you want to build and we'll start.** If not, exit with Ctrl+C twice, `cd` to the right directory, and re-run `claude` from there — I won't write outside this folder. Type `details` if you want the full file list before we begin.
 >
-> One thing to know up front: **you are in the bootstrap window right now.** This window's job is planning and scaffolding only. When bootstrap completes, you'll be instructed to open **two new terminal windows** - one for the **orchestrator**, one for the **builder** - and those two run the rest of the build. This window retires at that point.
+> Up front: **you are in the bootstrap window** - planning and scaffolding only. At completion you'll be instructed to open **two new terminal windows** (orchestrator + builder) that run the rest of the build; this window retires then.
 
 **If the user types `details`:** quote the scaffold tables *verbatim* from `sbak/bootstrap/SCAFFOLD-TABLES.md`. **Do not synthesize a tier comparison from memory.**
 

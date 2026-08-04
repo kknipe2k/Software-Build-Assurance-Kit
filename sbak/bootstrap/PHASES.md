@@ -170,14 +170,14 @@ The bootstrap is complete. Surface the final state:
 - **Next action:** open a fresh Claude Code session in this directory; the new `CLAUDE.md` will take over as the auto-loaded entry point, and the SessionStart hook will inject the read-first list. For Lite, just say "let's start M01"; for Full, paste the M01.A stage prompt from the Phase doc to begin Stage A.
 - **Opening the build terminals — walk the user through it, one step at a time (Full).** This is the single most confusing moment for a new user: three sessions are in play (this ending bootstrap session plus two new ones), and both new sessions read ONE role file until the worktree split. Do not deliver the topology as prose - give the numbered steps below one at a time, and quote each step's verification line. Say plainly first: **as forecast at the start of bootstrap, this is the moment to open the two new terminal windows - this bootstrap session is retired and is NEITHER of them; the user closes it at step 4.**
 
-  Before step 1, run the unborn-HEAD check yourself (don't let the user discover it): `git rev-parse --verify HEAD`. **Non-zero exit** (ZIP into a fresh `git init` - no commits yet; G1 holds through bootstrap, so the project's first commit is M01.A's): both new sessions run in THIS directory until M01.A's first commit lands; after that commit, `git worktree add ../build-wt <milestone-branch>` and the builder moves there, the orchestrator keeps the main checkout. **Exit 0** (a commit exists - e.g. the clone path): the worktree split is available immediately. (Found the hard way in a live trial - the handoff instructed the worktree topology unconditionally, the repo was empty, and the operator had to invent an undocumented interim mid-milestone. The interim is legitimate; leaving it unwritten is not.)
+  Before step 1, run the unborn-HEAD check yourself (don't let the user discover it): `git rev-parse --verify HEAD`. **Non-zero exit** (ZIP into a fresh `git init` - zero commits yet, an unborn HEAD that `git worktree add` cannot resolve; G1 holds through bootstrap, so the project's first commit is M01.A's): both new sessions run in THIS directory until M01.A's first commit lands; after that commit, `git worktree add ../build-wt <milestone-branch>` and the builder moves there, the orchestrator keeps the main checkout. **Exit 0** (a commit exists - e.g. the clone path): the worktree split is available immediately. (Found the hard way in a live trial - the handoff instructed the worktree topology unconditionally, the repo was empty, and the operator had to invent an undocumented interim mid-milestone. The interim is legitimate; leaving it unwritten is not.)
 
   The steps, given to the user one at a time. Each step's command block is **pasted into a terminal, not into a Claude session** - say that explicitly every time, and substitute `<project-path>` with the project's REAL directory (you know it - this directory) before presenting each block, in the user's OS form:
 
   - **macOS / Linux (Terminal):** the tilde form - e.g. `cd ~/projects/my-project`
   - **Windows (cmd):** `cd /d` plus the full path (the `/d` matters if the project is on another drive); **PowerShell:** plain `cd` with the full path
 
-  1. **Open a NEW terminal window - Terminal 1, the ORCHESTRATOR.** It adjudicates and routes; it never edits code. Say: *"Open a new terminal window and paste this whole block into it:"*
+  1. **Open a NEW terminal window - Terminal 1 = orchestrator.** It adjudicates and routes; it never edits code. Say: *"Open a new terminal window and paste this whole block into it:"*
 
      ```
      cd <project-path>
@@ -199,7 +199,7 @@ The bootstrap is complete. Surface the final state:
 
   3. **In Terminal 2 (the builder session) only**, the user pastes the M01.A stage prompt from `docs/build-prompts/M01-<title>.md` - that paste goes into the **Claude session**, not the shell. If a stage prompt lands in the wrong session, the mode-check hook blocks it; that block is protection working, not an error.
 
-  4. **Close this bootstrap window.** Everything decided here is persisted in the docs, not in this conversation. From here on the user carries the builder's surfaces - gate packets, RED summaries, stage-end packets, retrospectives - to Terminal 1 for adjudication, and only one role acts at a time. Adjudication belongs inside the fenced orchestrator session, not with whatever capable agent sits nearby; repeat this reminder at every stage boundary.
+  4. **Close this bootstrap window.** Everything decided here is persisted in the docs, not in this conversation. From here on the user must carry every surface - gate packets, RED summaries, stage-end packets, retrospectives - to Terminal 1 (the orchestrator) for adjudication, and only one role acts at a time. Adjudication belongs inside the fenced orchestrator session, not with whatever capable agent sits nearby; repeat this reminder at every stage boundary.
 
 After handoff, this bootstrap CLAUDE.md no longer exists — the project's own CLAUDE.md is the entry point.
 
