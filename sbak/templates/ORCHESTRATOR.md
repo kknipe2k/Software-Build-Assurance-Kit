@@ -76,6 +76,22 @@ The role split is the same regardless of hosting. Only cross-machine state handl
 
 **`worktree-after-first-commit` — Topology A may not exist yet on day one.** G1 holds through bootstrap, so the project's first commit is M01.A's. A project that arrived as a ZIP into a fresh `git init` therefore has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD** (a kit clone inherits history and is unaffected). Check with `git rev-parse --verify HEAD`; if it exits non-zero, run **Topology C** (two terminals, one directory, `set-mode` before each session's first prompt) until M01.A's first commit lands, then create the worktree and move the build session into it.
 
+**Deliver the split at the moment, not as a memory — and present it as RECOMMENDED, never "optional."** One working tree per live session is the standing rule (A-06 was a real incident); the shared-directory interim exists only because the worktree could not exist yet, and it ends at the first commit. When that commit lands (the stage-end packet confirms it), if the sessions still share one directory, walk the user through the split BEFORE couriering the next stage — paste-into-terminal blocks with the real path substituted in the user's OS form, one step at a time:
+
+1. Say: *"The first commit exists, so the builder gets its own working tree now — this is the recommended steady state. The builder session has exited; open the BUILD terminal and paste this whole block:"*
+
+   ```
+   cd <project-path>
+   git worktree add ../build-wt <milestone-branch>
+   cd ../build-wt
+   node scripts/set-mode.cjs work
+   claude
+   ```
+
+   **Confirm before continuing:** the new session's stamp says `role=work`. The worktree carries its own `.claude/role`, so the two windows stop sharing the role file from this moment — the set-mode ordering rule retires here.
+
+2. The orchestrator stays in the main checkout; every later builder/verifier session opens in `../build-wt` (shared `.git` — the orchestrator sees commits the instant they land). Then courier the next step as usual, naming where it goes: *"in the builder session, type `/stage M01 B`."*
+
 **Cross-machine pre-flight applies in Topology B only.** In A and C the orchestrator verifies state by reading git directly — no need to ask the user to paste `git log`.
 
 ---
