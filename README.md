@@ -136,11 +136,13 @@ Already have a project? Unzip the ZIP into that repo - the only collision is `CL
 
 The unit of work is a **stage**. A milestone is a few stages; a project is a few milestones. Each stage runs the same loop:
 
-At Full tier (the default), the kit invokes **two separate CLI sessions in two separate windows** that never talk directly, **the user is the conduit between these terminals.**
+At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows** that never talk directly - **you are the conduit between these terminals.**
 
-At start - **the first terminal opened is the orchestrator.** A long lived user coding partner that directs the work, builds each milestone doc and ensures adherence to the kit's policy. This terminal does not code or write (generally). **The orchestrator will lead the initial interview and bootstrap process.**
+At start you open one window - the **bootstrap session**. It leads the calibration interview, plans the project with you, and scaffolds the files - then it retires, and its last act is walking you through opening the two windows that run the build.
 
-After bootstrap the orchestrator will direct the opening of **the 2nd terminal - the builder/verifier terminal** that is short-lived for each stage in the milestone **this is the coder/tester/writer.**
+The first is the **orchestrator** - a long-lived coding partner that directs the work, builds each milestone doc and ensures adherence to the kit's policy. This terminal does not code or write (generally).
+
+The second is **the build terminal**, which hosts the short-lived working sessions: a fresh **builder** session per stage - **the coder/tester/writer** - and, when the stage work is done, a separate fresh **verifier** session that reviews it blind (the two never share a context).
 
 **The user sits between and is the conduit between terminals** for instructions, results, adjudication and general Q&A. The user is also responsible for any required live testing as directed by the orchestrator.
 
