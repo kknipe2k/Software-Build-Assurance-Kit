@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-spec-examples.cjs
 //
 // THE SPEC-EXAMPLE HARVEST GATE — every literal example in the spec must appear in at

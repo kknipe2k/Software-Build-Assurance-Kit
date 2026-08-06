@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -306,6 +306,47 @@ vPair('validate-spec-examples.cjs',
   },
   'a literal spec example that reaches no test fixture');
 
+// The IRL/HITL presence floor: a Full-tier spec must carry the three-part plan
+// (drive moments / verify-by-hand / where each answer gets typed) — each part individually,
+// heading+table structural. Secondary coverage: the PRIMARY RED-first pins live in the
+// kit's own scripts/smoke.cjs; this pair proves the inherited copy still fires post-bake.
+const IRL_SPEC_OK = '# spec\n\n'
+  + '## A. Drive moments\n\n| Boundary | What gets driven | Who drives it | Input / fixture used | Where the result is recorded |\n|---|---|---|---|---|\n| M01 close | the CLI | the owner | a real input | the human-drive block |\n\n'
+  + '## B. What the human verifies **by hand** at each boundary\n\n| Boundary | Checked by hand | Why a test cannot cover it | Pass looks like |\n|---|---|---|---|\n| M01 close | output by eye | domain judgment | looks right |\n\n'
+  + '## C. Where each answer **gets typed**\n\n| The ask | Surfaces at | Where the answer gets typed |\n|---|---|---|\n| Drive result | close | the human-drive block |\n';
+vPair('validate-irl-plan.cjs',
+  () => {
+    const d = fixtureDir('irl-ok');
+    write('irl-ok/project-config.md', '**Tier:** Full\n');
+    write('irl-ok/spec/project-spec.md', IRL_SPEC_OK);
+    return vRun('validate-irl-plan.cjs', ['--root', d]).code;
+  },
+  () => {
+    const d = fixtureDir('irl-bad');
+    write('irl-bad/project-config.md', '**Tier:** Full\n');
+    write('irl-bad/spec/project-spec.md', '# spec\n\n## Scope\n\n- a CLI, no IRL/HITL plan section\n');
+    return vRun('validate-irl-plan.cjs', ['--root', d]).code;
+  },
+  'a Full-tier spec with no three-part IRL/HITL plan (the no-human-ever-ran-the-app archetype)');
+
+// The consumption half of the IRL/HITL floor: an ARMED closeout retro (Full tier + spec section) must
+// carry a typed ```human-drive block before the stamp counts. Same secondary-coverage note.
+if (fs.existsSync(vPath('validate-irl-plan.cjs'))) {
+  const armed = fixtureDir('irl-armed');
+  write('irl-armed/project-config.md', '**Tier:** Full\n');
+  write('irl-armed/spec/project-spec.md', IRL_SPEC_OK);
+  const noDrive = write('irl-armed/retrospectives/M01.E-retrospective.md',
+    `# Retro\n\n${FENCE}user-stamp\nverdict: pass\n${FENCE}\n`);
+  let hd = runNode(vPath('validate-retrospective.cjs'), [noDrive], { cwd: armed });
+  ok('validator validate-retrospective.cjs: armed closeout WITHOUT a human-drive block must block (IRL/HITL consumption)',
+    hd.code === 1, `exit ${hd.code}`);
+  const withDrive = write('irl-armed/retrospectives/M02.E-retrospective.md',
+    `# Retro\n\n${FENCE}human-drive\ndrove: the CLI on a real input\nverified: output correct by eye\nrecorded: this block\n${FENCE}\n\n${FENCE}user-stamp\nverdict: pass\n${FENCE}\n`);
+  hd = runNode(vPath('validate-retrospective.cjs'), [withDrive], { cwd: armed });
+  ok('validator validate-retrospective.cjs: armed closeout WITH a typed human-drive block passes (IRL/HITL consumption)',
+    hd.code === 0, `exit ${hd.code} — ${String(hd.stderr).slice(0, 200)}`);
+} else skip('validate-retrospective.cjs human-drive consumption legs', 'validate-irl-plan.cjs not present in this render/tier');
+
 // Kit-only / mode-conditional validators — visibly skipped BY DESIGN, with the reason.
 const BY_DESIGN_SKIPS = {
   'validate-entry-docs.cjs': 'kit-only (polices the KIT\'s self-claims against framework-manifest.json)',
@@ -318,6 +359,7 @@ let known = new Set([
   'validate-app-map.cjs', 'validate-transition.cjs', 'validate-operating-mode.cjs',
   'validate-risk-escalation.cjs', 'validate-destructive-op.cjs', 'validate-risk-matrix.cjs',
   'validate-calibration.cjs', 'validate-release-readiness.cjs', 'validate-reconciliation.cjs',
+  'validate-irl-plan.cjs',
 ]);
 let present = [];
 try { present = fs.readdirSync(V_DIR).filter((n) => /\.cjs$/.test(n)); } catch (_) { present = []; }

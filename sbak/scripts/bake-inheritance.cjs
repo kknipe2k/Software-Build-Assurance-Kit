@@ -1039,7 +1039,9 @@ try {
         `(exit ${kuS.status}, distinct hook commands ${mergedCmds.size} — need >=4 = a NON-EMPTY derived set, ` +
         `user key survived ${!!(mergedS && mergedS._marker === 'baked-user-settings')}, byte-exact archive ${archivedS}). ` +
         `The generated copy must derive the kit registration set in ITS OWN layout and merge recoverably (KF-56); ` +
-        `an empty derivation that merges nothing is the fail-open class.`
+        `an empty derivation that merges nothing is the fail-open class.\n` +
+        `--- baked adopt stdout ---\n${(kuS.stdout || '(empty)').trim()}\n` +
+        `--- baked adopt stderr ---\n${(kuS.stderr || '(empty)').trim()}`
       );
     }
   }

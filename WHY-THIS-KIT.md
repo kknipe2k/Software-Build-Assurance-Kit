@@ -10,7 +10,7 @@
 ### 1. Bake-tested enforcement - the gates are tested the way code is
 
 Most process frameworks are documents; agents demonstrably ignore documents. Here the floors
-are mechanical - 17 project-floor validators, 4 hooks, committed git hooks - regression-tested:
+are mechanical - 18 project-floor validators, 4 hooks, committed git hooks - regression-tested:
 
 - **A smoke suite** (in the development repository) - a floor the suite enforces on itself.
 - **A bake harness** that renders a real project and proves the inherited gates *fire* there: a planted pre-approval edit is blocked; a broken hook turns the baked project's own mini-smoke red.
@@ -24,8 +24,8 @@ validators at pre-commit and CI, so sessions don't need it preloaded to obey it.
 One interview sets the tier; re-tier any time via a logged override. New process mass is
 budgeted: a new gate requires a named real failure it would have caught (N5).
 
-- **Lite** - 41 scaffold files, brief retros, CHANGELOG-only ledger, advisory validators.
-- **Full** (default) - 97 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
+- **Lite** - 44 scaffold files, brief retros, CHANGELOG-only ledger, advisory validators.
+- **Full** (default) - 100 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
 
 
 ### 3. Calibrated fresh-context verification
@@ -87,8 +87,8 @@ The claims above lean on published evidence about frameworks and scaffolding lik
 
 ---
 
-*Counts on this page - 17 project-floor validators, 4 hooks, 8 shipped project scripts,
-6 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 41/97 scaffold files, and
+*Counts on this page - 18 project-floor validators, 4 hooks, 8 shipped project scripts,
+6 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 44/100 scaffold files, and
 the covered-stack set - are policed by `sbak/validators/validate-entry-docs.cjs` and the smoke
 suite against derived facts; the full smoke suite runs in the development repository (it does
 not ship), and `sbak/scripts/bake-inheritance.cjs` is the effectiveness proof that does. Start

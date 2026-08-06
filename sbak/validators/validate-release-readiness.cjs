@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-release-readiness.cjs
 //
 // The G16 release-readiness gate (clause 2 — the
@@ -112,6 +112,7 @@ const { execSync } = require('child_process');
 // ladder entry and the gate exit-1'd on its own shipped template — a validator that blocks the
 // artifact it ships. A commented-out example is documentation, not a claim.
 const { stripHtmlComments } = require('./lib/fenced-block.cjs');
+const { escapeRegExp } = require('./lib/escape-regexp.cjs'); // M29.C: the shared payload escape
 
 // CRLF (and lone CR) → LF so a Windows checkout doesn't read as a false divergence.
 function normalize(s) {
@@ -180,7 +181,10 @@ function parseEntries(text) {
     if (pm) e.prior = pm[1].trim();
     // per-state n/a exemptions: a line `<ladder-state>: n/a — <reason>`.
     for (const st of LADDER) {
-      const re = new RegExp('^[-*\\s]*' + st.replace(/[-]/g, '\\-') + '\\s*:\\s*(.+)$', 'im');
+      // M29.C: the full shared escape replaces the hyphen-only idiom — same bytes matched
+      // on every LADDER state (hyphen needs no escape outside a class), and the partial
+      // idiom stops being available to copy.
+      const re = new RegExp('^[-*\\s]*' + escapeRegExp(st) + '\\s*:\\s*(.+)$', 'im');
       const mm = body.match(re);
       if (mm && NA_WITH_REASON.test(mm[1].trim())) e.naStates.add(st);
     }
@@ -190,6 +194,9 @@ function parseEntries(text) {
 }
 
 // Read a tagged value line out of an entry body (e.g. "SLSA build level", "Independent review").
+// DELIBERATE-PATTERN API (M29.C sweep disposition: keep): `label` is a regex FRAGMENT by
+// contract — internal call sites pass patterns like 'SLSA[\\w -]*level'. Escaping it here
+// would break every caller; never pass runtime/user strings as `label`.
 function entryField(body, label) {
   const re = new RegExp('^[-*\\s]*' + label + '[^:\\n]*:\\s*(.*)$', 'im');
   const m = body.match(re);

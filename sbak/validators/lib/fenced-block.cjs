@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/lib/fenced-block.cjs
 //
 // The shared LINE-ANCHORED, BLOCK-BOUND fence/field extractor —
@@ -53,10 +53,9 @@ function normalize(s) {
   return t.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-// Escape a string for literal use inside a RegExp.
-function escapeRe(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+// Escape a string for literal use inside a RegExp — the shared payload helper
+// (M29.C: one complete escape idiom, no per-site copies to drift partial).
+const { escapeRegExp: escapeRe } = require('./escape-regexp.cjs');
 
 // LINE-ANCHORED fenced-block extraction. Returns the body (between the fences) of every
 // ```<label> ... ``` block whose opening AND closing fence sit at a line start (leading

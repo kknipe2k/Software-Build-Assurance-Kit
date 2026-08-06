@@ -55,7 +55,7 @@
     "kit_version": {
       "kind": "derived",
       "source": "the release identity, DERIVED from release-manifest.json version — one root for the whole stamp chain; stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "1.0.3"
+      "value": "1.0.4"
     },
     "operating_mode_count": {
       "kind": "bound",
@@ -99,8 +99,8 @@
       "kind": "referenced",
       "source": "golden-manifest.json tiers[tier].counts.rendered (read live)",
       "value": {
-        "full": 97,
-        "lite": 41
+        "full": 100,
+        "lite": 44
       }
     },
     "schema_count": {
@@ -165,7 +165,7 @@
     "validator_count": {
       "kind": "derived",
       "source": "validators/*.cjs glob",
-      "value": 17
+      "value": 18
     }
   },
   "note": "The kit's self-descriptive facts. DERIVED (machine source) / BOUND (re-parsed from a home doc's structure) / REFERENCED (read live from golden-manifest.json) / DECLARED (a decision with no machine source — the manifest is its canonical home; the identity classes police the docs against it) — never hand-stated twice. Regenerate: node validators/validate-entry-docs.cjs --write-manifest. Policed by validators/validate-entry-docs.cjs (the entry-doc set) + selfCheck (derived-vs-stored rot). scaffold_counts is read LIVE from golden-manifest.json, not copied."

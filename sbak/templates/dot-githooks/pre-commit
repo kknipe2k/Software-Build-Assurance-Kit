@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.3
+# @kit-version 1.0.4
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
@@ -282,6 +282,24 @@ if [ -n "$staged_sx" ]; then
     node validators/validate-spec-examples.cjs {{VALIDATOR_SEVERITY_FLAG}}
   else
     gate_not_installed validators/validate-spec-examples.cjs
+  fi
+fi
+
+# IRL/HITL presence floor (M29.A half b): a Full-tier spec must carry the three-part IRL/HITL plan
+# — drive moments / verify-by-hand / where each answer gets typed — EACH PART individually (the
+# field escape: a bootstrap silently skipped the mandatory prose instruction and a milestone shipped
+# with no human ever running the app). The validator's own --staged mode is the trigger AND the M12
+# retro-fail guard: it checks only when a spec file is actually staged, so committed history is
+# never retro-failed. Content-gated inside the validator: Lite tier / spec-less / no project-config
+# each take a VISIBLE n/a, never a silent pass. Severity follows the ratified model (Lite '--warn').
+# The staged filter below mirrors the validator's own trigger (^spec/*.md) and runs FIRST (KF-48
+# filter-first), so absence is disclosed exactly when the gate would have fired — not on every commit.
+staged_irl=$(printf '%s\n' "$staged_all" | grep -E '^spec/[^/]+\.md$' || true)
+if [ -n "$staged_irl" ]; then
+  if [ -f validators/validate-irl-plan.cjs ]; then
+    node validators/validate-irl-plan.cjs --staged {{VALIDATOR_SEVERITY_FLAG}}
+  else
+    gate_not_installed validators/validate-irl-plan.cjs
   fi
 fi
 

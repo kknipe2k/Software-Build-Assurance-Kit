@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-validator-enumeration.cjs
 //
 // The artifact-enumeration coherence gate, EXTENDED to four artifact classes. It diffs the

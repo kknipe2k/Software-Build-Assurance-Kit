@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-carry-forward.cjs
 //
 // THE V-🟡 CARRY-FORWARD LANDING SLOT (M27.D, KF-48 instance 4).

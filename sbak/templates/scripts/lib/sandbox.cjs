@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/lib/sandbox.cjs
 //
 // The PATH-SAFETY primitives (M18.A, spec A-07/A-08). ONE module consumed by every

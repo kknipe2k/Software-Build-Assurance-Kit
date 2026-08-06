@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/stage-active.cjs
 //
 // Atomic writer for .claude/stage-active — the open-stage marker the PROC-001

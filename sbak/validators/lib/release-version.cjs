@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // validators/lib/release-version.cjs
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 //
 // THE ONE DERIVATION SOURCE for the kit's release identity.
 //
@@ -67,7 +67,7 @@ function load(root, manifestPath) {
 // The teeth: an UNescaped version regex also matches dot-wildcard variants, so a hand anchor whose
 // author forgot the backslashes is a wider matcher than they think. Deriving the escape
 // makes that class unwritable.
-function escaped(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+const { escapeRegExp: escaped } = require('./escape-regexp.cjs'); // M29.C: the shared payload escape
 
 // RegExp factory over the derived identity. Callers ask for a KIND, never a literal.
 function re(kind, d) {

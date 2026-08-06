@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.3-green" alt="Status: GA v1.0.3"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.4-green" alt="Status: GA v1.0.4"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -17,9 +17,9 @@ A drop-in kit that wraps a coding agent in controls you can check. AI agents wri
 
 **Deciding if it's worth your evening?** [WHY-THIS-KIT.md](WHY-THIS-KIT.md) - two pages, honest costs.
 
-**Want to try it?** For most users the recommended path is the signed release ZIP - download **`sbak-v1.0.3-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` - SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Want to try it?** For most users the recommended path is the signed release ZIP - download **`sbak-v1.0.4-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` - SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
-**This is the v1.0.3 GA release** - See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the notes for both.
+**This is the v1.0.4 GA release** - See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the notes for both.
 The kit was built with its own process - [its own build receipt](example-receipt.html) is derived from real commits, findings, and rework, not a staged demo.
 
 
@@ -85,12 +85,12 @@ There is no guarantee that a heavyweight process framework beats a concise `CLAU
 
 ## Quickstart
 
-[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the ZIP path for a new project or an existing repo, plus the clone alternate. The short version, **from the recommended `sbak-v1.0.3-starter.zip`** (verify the `.sha256` first). Run it from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`:
+[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the ZIP path for a new project or an existing repo, plus the clone alternate. The short version, **from the recommended `sbak-v1.0.4-starter.zip`** (verify the `.sha256` first). Run it from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.3-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.4-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude
@@ -100,7 +100,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.3-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.4-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -232,7 +232,7 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 ## Install and download
 
-**Recommended:** download `sbak-v1.0.3-starter.zip` and its `.sha256` from the releases page and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.3-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Prerequisites, exactly: **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent (Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim - see the host table above); `gh` only if you want the attestation check. The kit itself is stack-agnostic. Full install detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Recommended:** download `sbak-v1.0.4-starter.zip` and its `.sha256` from the releases page and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.4-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Prerequisites, exactly: **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent (Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim - see the host table above); `gh` only if you want the attestation check. The kit itself is stack-agnostic. Full install detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 Cloning the repository (above) is an alternative.
 

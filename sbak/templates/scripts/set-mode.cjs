@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -31,6 +31,9 @@
 //
 // Usage:
 //   node scripts/set-mode.cjs <work|verifier|orchestrator|refactor>
+//   node scripts/set-mode.cjs --topology   (M29.B: read-only worktree-split assist —
+//                                           reports first-commit state + topology, and
+//                                           prints the split steps when available)
 //
 // Exit 0 = wrote exactly "<token>\n" to ./.claude/role (one atomic write).
 // Exit 2 = invalid/missing token or bad invocation — the existing files are left
@@ -51,7 +54,70 @@ function fail(msg) {
   process.exit(2);
 }
 
+// ── M29.B — `--topology`: the worktree-split assist. READ-ONLY (never touches
+// .claude/role): reports the first-commit state and the current topology, and when the
+// split is available-but-not-taken prints the ORCHESTRATOR.md walkthrough's split block
+// with the real path and branch substituted. The block is EMBEDDED here rather than read
+// from the doc — the doc lives at templates/ORCHESTRATOR.md in the workshop but
+// sbak/templates/ORCHESTRATOR.md in a generated project, so a path-reading assist breaks
+// in one layout or the other; the smoke drift lock byte-compares this copy's live output
+// against the doc's fence, which is the parity mechanism for the deliberate duplication.
+const SPLIT_BLOCK = [
+  'cd <project-path>',
+  'git worktree add ../build-wt <milestone-branch>',
+  'cd ../build-wt',
+  'node scripts/set-mode.cjs work',
+  'claude',
+];
+
+function gitOut(argv) {
+  const r = require('child_process').spawnSync('git', argv, { encoding: 'utf8' });
+  return r.status === 0 ? String(r.stdout).trim() : null;
+}
+
+// Exit 0 in every report state, INCLUDING unknown: the report succeeded at telling the
+// truth about a non-repo directory. Never a confident wrong topology (the banner's
+// omit-don't-guess rule, applied here as an explicit `unknown`).
+function reportTopology() {
+  const gitDir = gitOut(['rev-parse', '--git-dir']);
+  if (gitDir === null) {
+    process.stdout.write('topology: unknown (not a git repository)\n');
+    process.stdout.write('run this from the project root; git init (or the bootstrap) comes first.\n');
+    return;
+  }
+  const commonDir = gitOut(['rev-parse', '--git-common-dir']);
+  const linked = commonDir !== null && path.resolve(gitDir) !== path.resolve(commonDir);
+  const hasFirstCommit = gitOut(['rev-parse', '--verify', 'HEAD']) !== null;
+  if (linked) {
+    process.stdout.write('topology: linked worktree (the split is already taken — this window carries its own .claude/role)\n');
+    process.stdout.write(`first commit: ${hasFirstCommit ? 'yes' : 'no (unborn HEAD)'}\n`);
+    return;
+  }
+  process.stdout.write('topology: main checkout, shared directory (no linked worktree here)\n');
+  if (!hasFirstCommit) {
+    process.stdout.write('first commit: no (unborn HEAD)\n');
+    process.stdout.write('the split is not available yet — a worktree cannot be added on an unborn HEAD.\n');
+    process.stdout.write('stay in Topology C (two terminals, one directory; set-mode before each session\'s\n');
+    process.stdout.write('first prompt) until the first commit lands, then re-run this flag.\n');
+    return;
+  }
+  const branch = gitOut(['rev-parse', '--abbrev-ref', 'HEAD']) || '<milestone-branch>';
+  process.stdout.write('first commit: yes\n');
+  process.stdout.write('the split is available but not taken — the builder gets its own working tree now\n');
+  process.stdout.write('(the recommended steady state). Open the BUILD terminal and paste this whole block:\n');
+  process.stdout.write('\n');
+  for (const line of SPLIT_BLOCK) {
+    process.stdout.write(line
+      .replace('<project-path>', process.cwd())
+      .replace('<milestone-branch>', branch) + '\n');
+  }
+}
+
 const args = process.argv.slice(2);
+if (args.length === 1 && args[0] === '--topology') {
+  reportTopology();
+  process.exit(0);
+}
 if (args.length !== 1) {
   fail(args.length === 0 ? 'no mode given' : `expected exactly one token, got ${args.length}`);
 }
@@ -106,5 +172,13 @@ fs.mkdirSync(claudeDir, { recursive: true });
 writeMarkerAtomic('role');
 
 process.stdout.write(`role = ${token}\n`);
+// M29.B — the launch-order line, killing the shared-role-file race at its source. On
+// STDERR by design (gate-1 rider): stdout stays byte-sacred at the A-15 one-line
+// `role = <token>` contract; the user sees stderr in the terminal identically. The
+// advice retires naturally once the worktree split lands — a linked worktree carries
+// its own .claude/role, which the line says.
+process.stderr.write('now launch `claude` in THIS window before setting any other mode — until the\n');
+process.stderr.write('worktree split, sessions in this directory share this one .claude/role file\n');
+process.stderr.write('(a linked worktree carries its own; see --topology for the split).\n');
 emitReceipt('mode_set', { role: token, marker: 'role' });
 process.exit(0);

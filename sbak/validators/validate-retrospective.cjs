@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
@@ -38,6 +38,21 @@
 //      routing; the validator surfaces it so it isn't missed).
 //   5. GRANDFATHERED FILES ONLY: the legacy 1–5 rules apply unchanged (integer
 //      score, non-placeholder note, the |user_score − axes-mean| ≥ 2 advisory).
+//   6. THE CLOSEOUT CONSUMPTION GATE (M29.A half a). A CLOSEOUT retro (stage
+//      letter E) must carry a typed ```human-drive fenced block — fields drove: /
+//      verified: / recorded:, each non-blank and non-placeholder — WHEN THE GATE
+//      ARMS: tier Full AND the spec carries the three-part IRL/HITL plan section
+//      (detection shared with validators/validate-irl-plan.cjs via lib/irl-plan.cjs,
+//      so the two halves can never disagree). The field finding this consumes
+//      (2026-08-04): the spec's human-drive plan existed as an authored section
+//      with NO consumer, so a milestone closed — green PR, valid stamp — with no
+//      human ever running the app. The stamp only counts once the human's answers
+//      are TYPED. Not armed (Lite / section-less spec / spec-less / no
+//      project-config.md — the kit's own workshop tree) → a VISIBLE n/a NOTE on
+//      each closeout retro, never a silent pass and never a workshop RED-loop.
+//      Work-stage retros (A–D, R, V) are untouched — consumption is a closeout
+//      contract. Detection is fence-structural (G9/G12), composing with the
+//      user-stamp block, never replacing it.
 //
 // Usage:
 //   node validators/validate-retrospective.cjs <retro-file> [<retro-file> ...]
@@ -59,6 +74,9 @@ const { execSync } = require('child_process');
 // old `.+?` captured one space). The stamp block is read line-anchored and the note is read as a
 // block-bound field with the shared blank check, so whitespace/placeholder is BLANK.
 const { extractBlocks, fieldInBlock, isBlankValue } = require('./lib/fenced-block.cjs');
+// M29.A: the shared IRL/HITL-plan detector — the consumption gate's arming check reads the
+// SAME three-part detection the presence floor enforces (extend, don't fork).
+const { detectParts, readProjectContext } = require('./lib/irl-plan.cjs');
 
 const PLACEHOLDER = /\{\{.*\}\}/;
 
@@ -118,6 +136,67 @@ function stagedRetroFiles() {
     process.exit(2);
   }
   return out.split(/\r?\n/).filter(isStageRetroPath);
+}
+
+// ── M29.A: the closeout consumption gate ─────────────────────────────────────────────────
+// A closeout retro is the .E stage letter, directly by basename — work stages (A–D, R, V)
+// never carry the human-drive obligation.
+function isCloseoutRetroPath(f) {
+  return /\.E-retrospective\.md$/i.test(path.basename(f));
+}
+
+// Arming context, resolved ONCE per run against the invocation cwd (where pre-commit runs).
+// Armed = tier Full AND the spec carries all three parts of the IRL/HITL plan. Anything
+// else is a VISIBLE n/a: the reason is surfaced as a NOTE on each closeout retro checked —
+// never a silent pass, and never a RED-loop on the kit's own workshop tree (which has no
+// project-config.md and honestly claims no such surface).
+let m29aArming = null;
+function armingContext() {
+  if (m29aArming) return m29aArming;
+  const ctx = readProjectContext(process.cwd());
+  if (!ctx.armed) {
+    m29aArming = { armed: false, na: ctx.na };
+  } else {
+    const { missing } = detectParts(ctx.specText);
+    m29aArming = missing.length === 0
+      ? { armed: true }
+      : {
+          armed: false,
+          na: `the spec's IRL/HITL plan is incomplete (missing part ${missing.map((p) => p.id).join('/')}) — ` +
+              'that defect belongs to the presence floor (validate-irl-plan.cjs), not a second RED here',
+        };
+  }
+  return m29aArming;
+}
+
+const HUMAN_DRIVE_FIELDS = ['drove', 'verified', 'recorded'];
+
+function validateHumanDrive(file, text, errors, advisories) {
+  if (!isCloseoutRetroPath(file)) return;
+  const arm = armingContext();
+  if (!arm.armed) {
+    advisories.push(`${file}: human-drive consumption gate n/a — ${arm.na}.`);
+    return;
+  }
+  const blocks = extractBlocks(text, 'human-drive');
+  if (blocks.length === 0) {
+    errors.push(
+      `${file}: closeout is missing the \`\`\`human-drive block — the spec's IRL/HITL plan has a consumer now: ` +
+      'the human\'s answers (drove: / verified: / recorded:) are TYPED here before the friction stamp counts (M29.A).'
+    );
+    return;
+  }
+  const body = blocks[0];
+  for (const key of HUMAN_DRIVE_FIELDS) {
+    const v = fieldInBlock(body, key);
+    if (v === null) {
+      errors.push(`${file}: human-drive block has no \`${key}:\` line — all three answers are required (drove / verified / recorded).`);
+    } else if (PLACEHOLDER.test(v)) {
+      errors.push(`${file}: human-drive \`${key}:\` is still a placeholder — an untyped answer is not an answer; type the real one.`);
+    } else if (isBlankValue(v)) {
+      errors.push(`${file}: human-drive \`${key}:\` is empty/whitespace — type the real answer (the DF-012 blank-value class).`);
+    }
+  }
 }
 
 // The shared note check: a present note must be real. Returns an error string or null.
@@ -181,6 +260,10 @@ function validateFile(file, grandfathered) {
   } catch {
     return { ok: false, errors: [`${file}: cannot read file`], advisories };
   }
+
+  // 0. M29.A: the closeout consumption gate runs FIRST so its findings survive the stamp
+  //    gate's early returns — the two compose; neither replaces the other.
+  validateHumanDrive(file, text, errors, advisories);
 
   // 1. Locate the ```user-stamp fenced block (LINE-ANCHORED — M16.A; a mid-prose mention is
   //    not the stamp).
@@ -271,7 +354,7 @@ function main() {
   for (const a of allAdvisories) console.error(`NOTE  ${a}`);
 
   if (failed > 0) {
-    console.error(`\n${failed} retrospective file(s) failed the user-stamp gate. Fill the stamp, then re-stage.`);
+    console.error(`\n${failed} retrospective file(s) failed the retrospective gate (user-stamp / human-drive). Fix the flagged block(s), then re-stage.`);
     process.exit(1);
   }
   process.exit(0);

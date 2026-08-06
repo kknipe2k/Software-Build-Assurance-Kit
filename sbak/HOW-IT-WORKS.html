@@ -175,7 +175,7 @@
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
       <div class="t">Spec, milestones, scaffold</div>
-      <div class="d">Generates 41 files for Lite, 97 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
+      <div class="d">Generates 44 files for Lite, 100 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
     </div>
     <div class="step">
       <div class="n">4 · BUILD LOOP</div>
@@ -404,16 +404,16 @@
 
   <h2>How to use it</h2>
   <h3>Get the kit (recommended: the release ZIP)</h3>
-  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.3-starter.zip</code>.</p>
+  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.4-starter.zip</code>.</p>
   <p>Run the sequence from the folder the ZIP downloaded to (usually <code>Downloads</code>), and replace <code>&lt;projects-path&gt;</code> with wherever you keep code - the point is that the project gets a real home, not <code>Downloads</code>.</p>
   <pre><code># macOS / Linux
-unzip sbak-v1.0.3-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
+unzip sbak-v1.0.4-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude</code></pre>
   <pre><code># Windows (cmd or PowerShell)
 mkdir &lt;projects-path&gt;\my-project
-tar -xf sbak-v1.0.3-starter.zip -C &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.4-starter.zip -C &lt;projects-path&gt;\my-project
 cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -434,7 +434,7 @@ claude</code></pre>
   <table>
     <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill full">Full</span> (default)</th></tr>
     <tr><td>Best for</td><td>Under a week, low audit needs</td><td>A second reader, an audit need, or a multi-week horizon</td></tr>
-    <tr><td>Scaffold files</td><td>41</td><td>97</td></tr>
+    <tr><td>Scaffold files</td><td>44</td><td>100</td></tr>
     <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td></tr>
     <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td></tr>
     <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory; CI-enforced when a risk trigger is declared)</td></tr>

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "product": "Software Build Assurance Kit",
   "slug": "sbak",
   "buildFrom": "tag",
@@ -303,6 +303,18 @@
       "src": "release/example-receipt.html",
       "dest": "example-receipt.html",
       "class": "evidence",
+      "fileClass": "repo-identity"
+    },
+    {
+      "src": "release/docs/assets/sbak-readme-light.png",
+      "dest": "docs/assets/sbak-readme-light.png",
+      "class": "passthrough",
+      "fileClass": "repo-identity"
+    },
+    {
+      "src": "release/.gitattributes",
+      "dest": ".gitattributes",
+      "class": "passthrough",
       "fileClass": "repo-identity"
     }
   ],

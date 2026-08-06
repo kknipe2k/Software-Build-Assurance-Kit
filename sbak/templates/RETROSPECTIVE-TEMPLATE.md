@@ -111,6 +111,16 @@ How well-positioned is the next stage to start cleanly — clear handoff, no dan
 
 **Justification:** {{specific evidence — does the next stage's CLI prompt now make sense given what this stage produced; are there obvious gaps the next stage will hit immediately}}
 
+### Human-drive record (closeout stages only — the spec's IRL/HITL plan, consumed)
+
+> **Closeout (Stage E) only** — delete this section in work-stage retros. When the gate arms (tier Full AND `spec/project-spec.md` carries the three-part IRL/HITL plan), the close-gate consumes that plan HERE: the human runs the drive moments the spec scheduled for this boundary, and their answers are **typed** into the block below **before the friction stamp counts** — `validators/validate-retrospective.cjs` blocks a closeout without them. Derive the checklist from the milestone's App-Map delta + the spec's part-A drive moments. Same pen rule as the stamp: the agent asks, the human answers, the agent transcribes verbatim — the answers' *content* is exclusively the human's. Use the spec's **real input**, not a convenient toy one. If the gate is not armed (Lite tier / section-less spec), the validator prints a visible n/a and this block is not required.
+
+```human-drive
+drove: {{what was driven, by whom, with which REAL input — the spec's part-A row for this boundary}}
+verified: {{what the human confirmed by hand, own eyes — the spec's part-B claims for this boundary}}
+recorded: {{where this result lives per the spec's part C — normally: this block}}
+```
+
 ### User experience stamp (REQUIRED at Full; asked-and-transcribed — the verdict's content is exclusively the owner's)
 
 > The three axes above are agent-authored — the agent grading its own work. This stamp is the independent check: **the verdict is the owner's.** A weak model self-grades generously; this is what catches friction the agent didn't perceive. **Flow (the standing owner rule, M22 ruling 4):** at stage-end approval the agent **asks** for the verdict (pass/fail + optional note), **transcribes the owner's reply verbatim** into the block below, and appends a `transcribed:` line marking when it was asked (e.g. `transcribed: 2026-07-12 — verbatim from the owner's reply at approval`). The owner never hand-edits this file — the agent is only the pen; the verdict's *content* remains exclusively the owner's. Leave the marker line exactly as formatted (the pre-commit validator parses it).

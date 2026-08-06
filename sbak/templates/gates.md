@@ -13,6 +13,8 @@ Every milestone has a "Hard gates" set and a "Soft gates" set:
 
 Hard gates are cumulative across milestones. A gate added at M02 still applies at M07.
 
+**Arming truth.** The per-milestone sections below are documentation order, not an arming schedule: every wired validator runs content-gated from the first commit, whatever milestone heading its row sits under. A row filed under a later milestone can fire on day one when its content trigger appears (field case: a spec-example row documented under M03 fired at M01.A). Deferring a gate is done with a waiver, never by pointing at a heading.
+
 Per-stage CLI prompts reference gates by milestone: `<gates milestone="M[NN]"/>`. The validator (per `sbak/STAGE-PROMPT-PROTOCOL.md` §11) confirms the milestone tag matches an entry in this file.
 
 ---

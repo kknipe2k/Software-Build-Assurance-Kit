@@ -62,7 +62,21 @@ When a gotcha is graduated to this file, add a numbered entry with: the trap, th
 
 ---
 
-### 4. {{GOTCHA_TITLE_1}}
+### 4. Type-level assertions pass vacuously when no type-checker sees the test files
+
+> Framework-shipped (test honesty — the G9 family). Applies to every TS project whose tests assert types (`expectTypeOf`, `assertType`, `// @ts-expect-error`). Do not delete.
+
+**Symptom:** a test file full of `expectTypeOf(...)` assertions runs green under the test runner — and stays green after you break the very types it asserts. In the other direction, the IDE flags type errors in `tests/` that no gate ever fails on.
+
+**Cause:** type-level assertions are erased at runtime; only a **type-checker** can fail them, and the checker only checks files a `tsconfig` includes. A `tests/` tree outside every `tsconfig` is invisible in **both** directions: the runner executes the erased no-ops, and `tsc` never opens the files. Green means "the checker didn't look", not "the types hold".
+
+**Workaround:** give the type assertions a checker that **sees the test files** — either the runner's own type-check mode (`vitest --typecheck`, which routes `*.test-d.ts` through `tsc`) or a dedicated `tests/tsconfig.json` included in the gate's `tsc --noEmit` sweep. Then prove teeth once: break an asserted type and watch the gate go red (the standard mutation-kill).
+
+**Origin:** M29.C (V104 item j — the M01 field build shipped `expectTypeOf` tests no checker ever read).
+
+---
+
+### 5. {{GOTCHA_TITLE_1}}
 
 **Symptom:** {{HOW_THIS_SHOWS_UP_TO_THE_DEVELOPER}}
 

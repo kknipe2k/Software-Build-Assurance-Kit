@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/lib/hook-chmod.cjs
 //
 // The CONFINED .githooks exec-bit repair (M27.A, KF-55; rider §3 + the three-site

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // validators/validate-app-map.cjs
 //
 // The App-Map currency primitive (M04) — sibling to check-append-only.cjs in
@@ -92,6 +92,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { escapeRegExp } = require('./lib/escape-regexp.cjs'); // M29.C: the shared payload escape
 
 const USAGE =
   'usage: validate-app-map.cjs [options] [<map-path>]\n' +
@@ -175,10 +176,12 @@ function globToRegExp(glob) {
       }
     } else if (c === '?') {
       re += '[^/]';
-    } else if ('.+^${}()|[]\\'.includes(c)) {
-      re += '\\' + c;
     } else {
-      re += c;
+      // M29.C: the shared escape replaces the hand-rolled character-set branch — same
+      // bytes for every input (the old set was exactly the escape set minus the two
+      // wildcards handled above), and a scanner can now SEE the sanitizer. Wildcard
+      // semantics are pinned byte-for-byte by the smoke C-p3 control.
+      re += escapeRegExp(c);
     }
   }
   return new RegExp(re + '$');

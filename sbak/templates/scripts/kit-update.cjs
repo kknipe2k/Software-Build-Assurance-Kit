@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -114,8 +114,11 @@ const MANAGED = [
   { file: 'validators/validate-release-readiness.cjs', template: 'validators/validate-release-readiness.cjs', render: 'copy' },
   { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy' },
   { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy' },
+  { file: 'validators/validate-irl-plan.cjs', template: 'validators/validate-irl-plan.cjs', render: 'copy' },
   { file: 'validators/check-append-only.cjs', template: 'validators/check-append-only.cjs', render: 'copy' },
   { file: 'validators/lib/fenced-block.cjs', template: 'validators/lib/fenced-block.cjs', render: 'copy' },
+  { file: 'validators/lib/escape-regexp.cjs', template: 'validators/lib/escape-regexp.cjs', render: 'copy' },
+  { file: 'validators/lib/irl-plan.cjs', template: 'validators/lib/irl-plan.cjs', render: 'copy' },
   { file: 'validators/README.md', template: 'validators/README.md', render: 'copy' },
   { file: '.claude/hooks/session-start-read-first.cjs', template: 'templates/dot-claude/hooks/session-start-read-first.cjs', render: 'copy' },
   { file: '.claude/hooks/user-prompt-submit-mode-check.cjs', template: 'templates/dot-claude/hooks/user-prompt-submit-mode-check.cjs', render: 'copy' },
@@ -541,8 +544,16 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   const gitTopR = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: projRoot, encoding: 'utf8' });
   const gitTop = gitTopR.status === 0 ? String(gitTopR.stdout || '').trim() : '';
   const samePath = (a, b) => {
+    // CROSS-SOURCE identity: `a` is git-emitted (long form), `b` is node-held — which on
+    // Windows can ride an 8.3 short-name alias (CI runners hand out TEMP dirs whose
+    // user segment is an alias of the RUNNERAD~1 form). The JS
+    // fs.realpathSync resolves symlinks but never expands short names, so it called the
+    // same directory two different strings and adopt refused its own repository (the
+    // windows-crlf RED, M29.2.A). realpathSync.native (GetFinalPathNameByHandle) expands
+    // the alias; the JS walk stays as the fallback where native is unavailable.
     try {
-      const n = (s) => { const r = path.resolve(fs.realpathSync(s)); return process.platform === 'win32' ? r.toLowerCase() : r; };
+      const real = (s) => { try { return fs.realpathSync.native(s); } catch (_) { return fs.realpathSync(s); } };
+      const n = (s) => { const r = path.resolve(real(s)); return process.platform === 'win32' ? r.toLowerCase() : r; };
       return n(a) === n(b);
     } catch (_) { return false; }
   };

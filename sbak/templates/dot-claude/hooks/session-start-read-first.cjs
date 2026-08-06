@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.3
+// @kit-version 1.0.4
 // session-start-read-first.js
 //
 // Claude Code SessionStart hook. Auto-loads the read-first orientation files
@@ -190,6 +190,34 @@ const MODE_BANNER = {
   orchestrator: ' (orchestration session — authoring / adjudication / routing; not a build stage)',
   refactor: ' (Stage R health check — stricter bias guard: prior retrospectives AND prior R findings deliberately omitted)',
 };
+
+// M29.B — the plain-language identity banner. Sessions must self-identify without the
+// user memorizing role vocabulary; the banner derives from the SAME resolved `mode` the
+// stamp uses (never a second role-parsing site), and the ERR-002 unresolved branch above
+// exits before it can render — a garbage role file gets the fail-closed notice, never a
+// confident wrong banner.
+const IDENTITY_BY_MODE = {
+  work: 'BUILDER — implements under gates',
+  verifier: 'VERIFIER — fresh-context check; never edits',
+  orchestrator: 'ORCHESTRATOR — adjudicates, never edits',
+  refactor: 'REFACTORER — health check; refactor scope only',
+};
+
+// M29.B — the topology state, where derivable. A linked worktree is the one place
+// `--git-dir` and `--git-common-dir` disagree; outside a git repo the state is honestly
+// UNDERIVABLE and the banner omits it rather than guess.
+function topologyState() {
+  try {
+    const g = (args) => execSync(`git rev-parse ${args}`, {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim();
+    const gitDir = path.resolve(g('--git-dir'));
+    const commonDir = path.resolve(g('--git-common-dir'));
+    return gitDir === commonDir ? 'main checkout' : 'linked worktree';
+  } catch {
+    return null;
+  }
+}
 
 // Fence-aware reading (IPC-003). The read-first list is PR-editable, so a careless
 // or malicious entry could name a secret file; dumping its contents into session
@@ -425,6 +453,11 @@ if (skipped > 0) {
     console.log(`>   - fenced / deny-listed (${fenced.length}, contents NOT loaded): ${fenced.join(', ')}`);
   }
 }
+// M29.B — the identity banner rides the trusted stamp block, appended (existing stamp
+// lines are parsed byte-wise by pins and the mode-check contract — never reshape them).
+const topo = topologyState();
+console.log();
+console.log(`**[session identity]** THIS SESSION IS: ${IDENTITY_BY_MODE[mode]}.${topo ? ` topology: ${topo}` : ''}`);
 console.log();
 console.log('Agent: in your first response, echo the read-first stamp so the user can verify');
 console.log('the orientation actually loaded. If the stamp shows 0 files or unexpected misses,');

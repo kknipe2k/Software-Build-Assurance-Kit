@@ -43,11 +43,11 @@ The kit comes two ways. **Most users: download the release ZIP** - the signed, c
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.3-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.4-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.3-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.3-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.3-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.3-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.4-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.4-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.4-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.4-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -58,7 +58,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.3-starter.zip -d <projects-path>/my-project
+unzip sbak-v1.0.4-starter.zip -d <projects-path>/my-project
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -69,7 +69,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.3-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.4-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -103,6 +103,8 @@ claude
 ```
 
 The cloned directory becomes your project root. The adopt step is not optional on the clone path either: `core.hooksPath` is local Git configuration and does not travel with a clone, so a fresh clone's git hooks stay unarmed until adopt arms and verifies them (the same exit-code contract as the ZIP path).
+
+> **Windows line endings (pre-existing clones only).** A fresh clone is healed by the kit's shipped `.gitattributes` - nothing to do. A clone taken before that file shipped can hold CRLF working copies that fail the kit's byte-exact checks. Easiest fix: take a fresh clone. To repair in place instead - **destructive precondition: a clean tree only (`git status` shows no changes); any uncommitted work is lost** - run `git reset --hard HEAD && git add --renormalize .`. Never run a bare `git add --renormalize .` on a dirty tree.
 
 > **Heads-up on the git remote:**
 >- Because you cloned from the kit, `origin` still points at the kit's repo. Don't `git push` yet - it would target the kit, not your project. The bootstrap resets this at handoff (Phase 5) and asks where your project should live (local-only / your own GitHub repo / create a new one). If you want to set it yourself first: `git remote remove origin`.
@@ -163,7 +165,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 2. A spec.
 3. **Web/UI only:** a design discovery interview and the `docs/design.md` brief.
 4. A milestone plan.
-5. Scaffold files - 41 for Lite, 97 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+5. Scaffold files - 44 for Lite, 100 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle. The default: the spec and the milestone plan surface before they are written; the scaffold and Phase docs are written directly and surfaced for post-write review.
 

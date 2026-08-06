@@ -2,9 +2,22 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.4 - 2026-08-05
+
+**The current release** - a field-test patch on the GA release; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes. This patch closes what the first real end-to-end adoption surfaced: one new enforcement surface, mechanical support at the session-topology transitions, a regex-construction hardening pass, and the documentation fixes a real user hit.
+
+- **Capabilities.** Everything in v1.0.3, plus:
+  - A human-drive floor, both halves: a Full-tier spec must carry the in-real-life / human-in-the-loop plan section (a mandatory prose instruction is now mechanically checked), and the milestone closeout consumes that section - human-typed drive answers are required beside the closeout stamp before the closeout counts. The defect class this closes: a milestone shipping green with no human ever running the app.
+  - Sessions self-identify at the topology transitions: the session-start stamp states in plain words what the session is (orchestrator / builder / verifier) plus the checkout topology where derivable; the mode-setting script prints the launch-order line that kills the shared-role-file race; a topology assist reports when the worktree split is available and prints the exact steps.
+  - Regex construction across the validator layer is hardened: one shared escape routine, every concatenated pattern site enumerated and conformed, with probes proving a metacharacter payload cannot bend a verdict. The public repository's code-scanning findings were adjudicated in the same pass - two fixed at their true sites, one a documented false positive - and the kit's own scanning now runs the same widened query suite an adopter's default setup runs.
+  - Line endings are pinned at the repository root (`.gitattributes`), closing the case where a default Windows clone produced a CRLF working tree and every byte-exact check failed; a Windows CI job now reproduces that exact environment on every push, and that job caught a second Windows-only defect this patch closes: the adopt step now recognizes its own repository when the working path rides an 8.3 short-name alias (the alias and the long form compared as different directories before, and adopt refused to arm the hooks).
+  - The documentation fixes a real adoption surfaced: the releases-page download anchor, the two-terminal handoff walkthrough, the worktree-split delivery, the entry README's flow alignment, and the human-stamp wording stating what the stamp actually attests. The scaffold also authors the formatter's ignore fence when a formatter is in the stack, so a whole-tree format run can never silently rewrite kit-managed trees - the field case was 31 files rewritten with zero failure surface.
+- **Limitations.** Unchanged from v1.0.3: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Every mechanical change is pinned by the kit's regression suite (the suite that gates releases in the kit's development repo), with the failing check recorded before each fix; the findings driving this patch came from a real adoption run end-to-end, not from an internal review. Built from a signed tag and published with SLSA Level 2 build provenance.
+
 ## v1.0.3 - 2026-08-01
 
-**The current release** - a hardening patch on the GA release; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No new features and no interface changes: the documentation brought to consistency in one pass against final behavior, and the release chain plus the enforcement layer hardened.
+A hardening patch on the GA release. No new features and no interface changes: the documentation brought to consistency in one pass against final behavior, and the release chain plus the enforcement layer hardened.
 
 - **Capabilities.** Everything in v1.0.2, plus the hardening:
   - Every release-version literal in checks and shipped pages is derived from one root (the release manifest), and a sweep fails the build on a stale version literal in a live-claim position - the defect class that once let an old version ride through three releases in a shipped page.
