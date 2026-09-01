@@ -1,12 +1,15 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.4
-# .githooks/pre-push  —  the full local matrix (Linux-in-Docker + native).
-# Blocks the push on any failure. This is what replaces the per-push cloud test
-# matrix under verification_locus: local_first | hybrid.
+# @kit-version 1.0.5
+# .githooks/pre-push  —  the fast lane: the tests your push affects, the open milestone's
+# own tests, and the always-tagged guards, on the native leg. The full matrix (Linux-in-
+# Docker + native, every test) is the `release` lane, run by /closeout, /verify and the
+# v* tag workflow — never per push. `node scripts/verify-local.cjs --list` prints the lanes.
+# Blocks the push on any failure. This is what replaces the per-push cloud test matrix
+# under verification_locus: local_first | hybrid.
 #
 # Activated by: git config core.hooksPath .githooks
 #   (run `node scripts/install-hooks.cjs` once after cloning).
 # Emergency override: git push --no-verify  (logged, never routine; it cannot
 # bypass the required PR check — see docs/gates.md).
 set -e
-node scripts/verify-local.cjs
+node scripts/verify-local.cjs --lane fast

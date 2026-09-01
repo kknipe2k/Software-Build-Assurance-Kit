@@ -8,6 +8,10 @@
 
 ---
 
+## IRL/HITL plan — mandatory, every type, both tiers
+
+Not a per-type option: **every** spec also appends the three-part IRL/HITL plan section from `templates/IRL-HITL-PLAN.md` — the drive moments per milestone boundary, what the human verifies **by hand** at each one, and where each answer gets typed. Phase 1 AUTHORS it with the spec (`bootstrap/PHASES.md` §Phase 1); `validators/validate-irl-plan.cjs` is the backstop that REDs a Full-tier spec shipped without it, not the primary. `TBD — set at Phase 2` boundary cells are the honest interim.
+
 ## `cli` — Command surface
 
 The contract a CLI is judged against. Add to the spec as a section.

@@ -7,7 +7,7 @@ This directory ships with the **Software Build Assurance Kit**. After bootstrap,
 | File | Purpose |
 |---|---|
 | `settings.json` | Project-scoped Claude Code settings. Registers the SessionStart hook for `startup`, `clear`, and `compact` matchers. |
-| `hooks/session-start-read-first.cjs` | The hook (Node.js). Reads `role`, picks the matching read-first list, caps to the configured size, prints contents to stdout. Claude Code captures stdout as additional session context. |
+| `hooks/session-start-read-first.cjs` | The hook (Node.js). Reads `role`, picks the matching read-first list, caps to the configured size, and prints the STAMP LAYER: the stamp line, the session identity, an orientation manifest (every entry with its `when:` boundary) and the memory-is-a-hint rule; only entries tagged `when: session-start` are inlined. The rest are read at their boundary with the agent's own tools; the receipts adapter records each read and the boundary's gate (`approve-red` for `stage-open`) checks the ledger. |
 | `read-first-list.txt` | Plain-text list for **work-mode** sessions (build stages A–D). One path per line, relative to repo root. May reference retrospectives. |
 | `read-first-list-verifier.txt` | Plain-text list for **verifier-mode** sessions. DELIBERATELY OMITS prior retrospectives — the fresh-context bias guard for Stage V. |
 | `read-first-list-orchestrator.txt` | Plain-text list for **orchestrator-mode** sessions (Full). Loads `ORCHESTRATOR.md` first, then `CLAUDE.md`, then standing methodology + live milestone state. Includes gap-analysis (the orchestrator needs full state). |
@@ -37,7 +37,7 @@ If you prefer a bash version, the hook logic is ~80 lines and easy to port. The 
 
 The framework's read-first list was originally documented in `CLAUDE.md` and "the agent reads them at session start." That's compliance-by-norm, and norms slip — especially as the list grows past 5–6 files. The hook makes the load deterministic: the files are in context whether the agent thought to read them or not.
 
-The hook also prints a verification stamp (`[read-first stamp] loaded N files, M bytes`) the agent should echo in its first response. The user can spot-check that the stamp matches expectations; if 0 files loaded or files are missing, that's a setup bug to fix before any work happens.
+The hook also prints a verification stamp (`[read-first stamp] role=<role>, op=<mode>, loaded N of M files (M on the manifest, read at their when:), K skipped`) the agent should echo in its first response. `N` counts inlined session-start entries, `M` the manifest; `K skipped` greater than zero names a dead, fenced or escaping entry - a setup bug to fix before any work happens. `node .claude/hooks/session-start-read-first.cjs --check` verifies every list resolves without opening a session.
 
 ## How to change the read-first list
 

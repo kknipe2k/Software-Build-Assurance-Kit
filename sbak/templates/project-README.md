@@ -35,7 +35,8 @@ node scripts/install-hooks.cjs
 | Lint | `{{LINT_CMD}}` |
 | Build | `{{BUILD_CMD}}` |
 | Types | `{{TYPECHECK_CMD}}` |
-| Full local matrix (what pre-push runs) | `node scripts/verify-local.cjs` |
+| Fast lane (what pre-push runs: affected + this milestone's + always-tagged tests) | `node scripts/verify-local.cjs --lane fast` |
+| Full local matrix (closeout, Stage V, tags) | `node scripts/verify-local.cjs --lane release` |
 
 ## Project docs
 

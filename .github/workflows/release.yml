@@ -102,11 +102,17 @@ jobs:
           ASSET="sbak-${TAG}-starter.zip"
           echo "ASSET=$ASSET" >> "$GITHUB_ENV"
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern "$ASSET" --pattern "$ASSET.sha256"
-          # verify the maintainer's published checksum against the downloaded bytes
+            --pattern "$ASSET" --pattern "$ASSET.sha256" \
+            --pattern "sbak-install.cjs" --pattern "sbak-install.cjs.sha256"
+          # verify the maintainer's published checksums against the downloaded bytes -
+          # the ZIP and the installer script (the release asset build-release.cjs bakes
+          # beside the ZIP; it embeds its own instructions and carries its own sidecar)
           sha256sum -c "$ASSET.sha256"
+          sha256sum -c sbak-install.cjs.sha256
 
-      - name: Attest build provenance of the asset (SLSA v1.0 Build L2)
+      - name: Attest build provenance of the assets (SLSA v1.0 Build L2)
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
-          subject-path: ${{ env.ASSET }}
+          subject-path: |
+            ${{ env.ASSET }}
+            sbak-install.cjs

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/lib/stage-structure.cjs
 //
 // The ONE structural reader for the framework's stage-prompt grammar (M27.C, KF-57;
@@ -74,8 +74,10 @@ const STAGE_ROOTS = Object.freeze([
 
 // The stage-id grammar (mirrors validate-stage-prompts' ID_PATTERN_STRICT /
 // ID_PATTERN_TEMPLATE — one dotted-minor segment admitted, e.g. M20.5.A; a sub-sub
-// milestone stays illegal by design).
-const ID_STRICT = /^M\d{2}(?:\.\d+)?\.[A-Z]$/;
+// milestone stays illegal by design). M30.I: one TRAILING iteration segment is
+// also legal — M01.D.1 is the first D.fix round of stage D; kept in lockstep with the
+// validator so a doc the validator accepts is never a prompt the hook refuses.
+const ID_STRICT = /^M\d{2}(?:\.\d+)?\.[A-Z](?:\.\d+)?$/;
 const ID_TEMPLATE = /^M(?:\[NN\]|\d{2})\.[A-Z]$/;
 
 // Strip a leading UTF-8 BOM and normalize CRLF / lone-CR to LF. Byte-identical in

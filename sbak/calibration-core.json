@@ -6,6 +6,24 @@
   "operating_modes": ["greenfield", "bug_fix", "research_publish", "audit"],
   "default_operating_mode": "greenfield",
   "risk_triggers": ["destructive_data_ops", "archive_extraction", "untrusted_fs_writes", "credentials", "untrusted_html", "installers"],
+  "risk_trigger_keywords": {
+    "_doc": "M30.D — the Full-path glance derives risk_triggers from the SPEC via these lists (lowercased substring match; scripts/calibration-derive.cjs --from-spec). DATA, not prose sniffing: extend the lists here, never add ad-hoc heuristics to the deriver. An under-derived trigger is caught at the glance line — the human eyeball this line exists for.",
+    "destructive_data_ops": ["migrate", "migration", "restore", "delete", "truncate", "drop table", "wipe", "purge", "destructive", "irreversible"],
+    "archive_extraction": ["unzip", "untar", "extract", "archive", "backup"],
+    "untrusted_fs_writes": ["upload", "untrusted path", "filename from", "file name from", "user-supplied path"],
+    "credentials": ["secret", "api key", "oauth", "token", "password", "credential", ".env", "provider key"],
+    "untrusted_html": ["render html", "generated html", "untrusted html", "sanitize", "xss", "eval("],
+    "installers": ["installer", "auto-update", "self-update", "signed binar", "release artifact", "packaging"]
+  },
+  "mode_keywords": {
+    "_doc": "M30.D — Full-path operating-mode inference from the first substantive answer / the spec (checked in operating_modes order, default_operating_mode skipped; no hit = the default). A --mode value from the agent's first-answer inference overrides; the glance line is where a wrong inference is corrected.",
+    "bug_fix": ["fix a bug", "bug fix", "bugfix", "known defect", "regression", "reproduce the bug"],
+    "research_publish": ["literature", "research paper", "publish a paper", "synthesize", "systematic review"],
+    "audit": ["audit this", "audit the", "audit of", "codebase audit", "security audit", "compliance audit"]
+  },
+  "glance_smells": [
+    { "mode": "bug_fix", "spec_any": ["milestone", "multi-week", "roadmap"], "note": "a multi-week fix reads like a project - type a mode word if bug_fix is wrong" }
+  ],
   "severity": {
     "_why": "The tier default for the 8 advisory validator sites in the generated pre-commit (test-honesty, reconciliation, risk-escalation, destructive-op, risk-matrix, calibration, transition, release-readiness). Rendered as the VALIDATOR_SEVERITY_FLAG fill: warn -> '--warn', block -> '' (no flag = the validators' blocking default). validate-operating-mode is NOT on this dial — it is HARD at every tier (M26.C fork-3 ruling: enum check, cannot false-block). Per-validator override: the warn|block rows in project-config.md, honored by editing the hook line or re-rendering via kit-update --apply.",
     "Lite": "warn",
@@ -80,6 +98,57 @@
     "docker_leg": {
       "_why": "KF-28's Docker-for-a-browser-game defect: the Linux-in-Docker leg of verify-local runs only when a ship target is linux/server-class — a Windows-only or browser-only deliverable verifies native-only. Target-driven, never tier-driven.",
       "ship_target_match": ["linux", "server", "docker", "container"]
+    },
+    "test_lanes": {
+      "_why": "M30.F (V106 Stage 2): the shipped verify-local's fast/stage lanes narrow by the runner's OWN change scoping, never a kit-authored dependency graph. ONE row per stack fills the token family AFFECTED_TEST_COMMAND (<base> = the merge-base, computed by the script) / ACTIVE_TEST_COMMAND (<files> = the open milestone's test files) / ALWAYS_TEST_COMMAND (tests whose NAME carries the token `always`). `full` = no native selection: the lane widens to the full native suite and says so. Web-verified 2026-08-30 (rule 10); each row cites its source. `--lanes <runner>` on scripts/calibration-derive.cjs prints the row; `runner_keywords` lets --from-spec and the discovery answer pick it.",
+      "always_token": "always",
+      "runners": {
+        "vitest": {
+          "affected": "vitest run --changed <base>",
+          "active": "vitest run <files>",
+          "always": "vitest run -t always",
+          "_cite": "https://vitest.dev/guide/cli.html (v4.1.11): --changed \"Run tests only against changed files\"; accepts a commit hash or branch (\"--changed 09a9920\", \"--changed origin/develop\"); -t / --testNamePattern filters by test name"
+        },
+        "jest": {
+          "affected": "jest --changedSince=<base>",
+          "active": "jest <files>",
+          "always": "jest -t always",
+          "_cite": "https://jestjs.io/docs/cli (Jest 30.5): --changedSince \"Runs tests related to the changes since the provided branch or commit hash\"; requires a static dependency graph (no dynamic requires); -t / --testNamePattern filters by test name"
+        },
+        "pytest": {
+          "affected": "pytest --testmon",
+          "active": "pytest <files>",
+          "always": "pytest -k always",
+          "dev_dependency": "pytest-testmon",
+          "_cite": "https://pypi.org/project/pytest-testmon/ (2.2.0, 2025-12-01): \"selects tests affected by changed files and methods\" - a PLUGIN; verify-local probes `import testmon` once and falls back to full, saying so, when it is not importable; add pytest-testmon to the dev dependencies"
+        },
+        "node": {
+          "affected": "full",
+          "active": "node --test <files>",
+          "always": "node --test --test-name-pattern=always \"tests/**/*.test.cjs\"",
+          "_cite": "Node's built-in runner has no change scoping; F-C ruled 2026-08-30: fallback-to-full first, no kit-authored import walker; logged as the known cost of the kit's default stack"
+        },
+        "go": {
+          "affected": "full",
+          "active": "go test <files>",
+          "always": "go test -run Always ./...",
+          "_cite": "https://pkg.go.dev/cmd/go: \"go test caches successful package test results\" (package list mode), so a full `go test ./...` already skips settled packages; -run filters by test name; `go list -deps` walking was ruled out with F-C"
+        },
+        "unknown": {
+          "affected": "full",
+          "active": "full",
+          "always": "full",
+          "_cite": "no native selection known for this stack; fast/stage run the full native suite and say so - fill the row by hand if the runner has change scoping"
+        }
+      },
+      "runner_keywords": {
+        "_doc": "lowercased substring match over the spec / the stack answer, checked in this order; the first hit names the row; no hit = unknown",
+        "vitest": ["vitest"],
+        "jest": ["jest"],
+        "pytest": ["pytest", "python"],
+        "node": ["node --test", "node:test", "node built-in", "built-in runner", "node.js", "nodejs", "typescript", "javascript"],
+        "go": ["go test", "golang", " go "]
+      }
     }
   }
 }

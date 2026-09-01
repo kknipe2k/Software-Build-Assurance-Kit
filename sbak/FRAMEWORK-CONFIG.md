@@ -34,7 +34,7 @@ Each tier is a **default toggle bundle**. You can override any individual toggle
 ```
                    Lite          Full (default)
 Discovery Qs       2             5
-Scaffold files     ~47           ~111
+Scaffold files     ~52           ~119
 Approvals/stage    1 (per-PR)    1 (per-stage)
 Retro axes         1             2
 Ledger             CHANGELOG     append-only* (+ CI when risk-armed)
@@ -324,7 +324,7 @@ Controls **where** the test suite actually runs — on local hardware vs. GitHub
 
 **The local-first inversion.** Conventionally CI is the source of truth and the backstop against `--no-verify`. Under `local_first` / `hybrid`, **local hooks are the primary verification** and the cloud shrinks to a tripwire (`hybrid`) or release-only (`local_first`). This is sound only if a non-bypassable check still exists somewhere — which is why `hybrid` keeps the PR smoke check: `--no-verify` skips the *local* hook but can never skip a *required status check*. Don't run `local_first` with no self-hosted runner AND no PR check — that leaves no backstop at all (see §8 smell).
 
-**What it generates** (Phase 3 scaffold): `scripts/verify-local.cjs` (the one local entrypoint — Linux-in-Docker + native, sequential, non-zero on any failure), `.githooks/pre-commit` (fast checks) + `.githooks/pre-push` (the full local matrix), `scripts/install-hooks.cjs` (sets `core.hooksPath`), and `.github/workflows/release.yml` (macOS + full matrix on `v*` tags only) — generated under **both** `local_first` and `hybrid` (this is the tag-triggered cloud run the table row promises; Full only — Lite ships no `release.yml`). For `hybrid` **only**, it additionally generates `.github/workflows/pr-smoke.yml` (the non-bypassable PR tripwire `local_first` omits). The macOS release leg is emitted iff the Phase-0 OS-target audit finds a macOS ship target in packaging config. Under `cloud`, none of the local harness/hooks generate — instead `.github/workflows/ci.yml` runs the full matrix on every push/PR (free on public repos).
+**What it generates** (Phase 3 scaffold): `scripts/verify-local.cjs` (the one local entrypoint with three lanes — `fast` per push: the diff's affected tests + the open milestone's own + the `always`-tagged guards; `stage` at stage end; `release` at closeout / Stage V / tags: Linux-in-Docker + native, every test — non-zero on any failure; the lane fills come from one derive-table row per stack, `calibration-derive.cjs --lanes <runner>`), `.githooks/pre-commit` (fast checks) + `.githooks/pre-push` (`verify-local --lane fast`), `scripts/install-hooks.cjs` (sets `core.hooksPath`), and `.github/workflows/release.yml` (macOS + full matrix on `v*` tags only) — generated under **both** `local_first` and `hybrid` (this is the tag-triggered cloud run the table row promises; Full only — Lite ships no `release.yml`). For `hybrid` **only**, it additionally generates `.github/workflows/pr-smoke.yml` (the non-bypassable PR tripwire `local_first` omits). The macOS release leg is emitted iff the Phase-0 OS-target audit finds a macOS ship target in packaging config. Under `cloud`, none of the local harness/hooks generate — instead `.github/workflows/ci.yml` runs the full matrix on every push/PR (free on public repos).
 
 **Backstop sub-choice.** The default backstop is the hosted `ubuntu` PR smoke check (zero maintenance, ~free against the quota). A **self-hosted runner** is a documented opt-in (`pr-smoke.self-hosted.yml.example`) that drops cloud cost to $0 by running the full suite on the dev box — at the cost of keeping that box online to gate PRs, basic runner hardening, and private-repo-only use. (Self-hosted minutes are free/unmetered as of 2026, though GitHub has signalled intent to meter the control plane (~$0.002/min), currently postponed — so treat $0 as current-but-at-risk; worst case ~pennies/PR.)
 
@@ -619,7 +619,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Lite
 
 - One discovery conversation (~15 minutes): what is this, what isn't it, success criteria.
-- Bootstrap generates ~47 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
+- Bootstrap generates ~52 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
 - Per stage: agent codes, surfaces a brief retrospective paragraph, you approve at PR time.
 - No append-only ledger. No formal ADRs (use commit messages). No cumulative closeout review.
 - Web-verify defaults: agent leans on current best practices for library choices, version pins, idiomatic patterns.
@@ -628,7 +628,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~111 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +2 files when a declared risk trigger arms the ledger CI, the manifest row set's 2 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml`.)
+- Bootstrap generates ~119 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +2 files when a declared risk trigger arms the ledger CI, the manifest row set's 2 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml`.)
 - Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
 - Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.

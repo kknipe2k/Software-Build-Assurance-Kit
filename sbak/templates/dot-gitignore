@@ -17,9 +17,20 @@
 .claude/stage-active
 .claude/red-approved
 
+# The last lane summaries verify-local writes per run (fast / stage / release). Read
+# by `--reconcile` at closeout; local run state, never committed.
+.claude/verify-last-*.json
+
 # Build-receipt event ledgers (per-session JSONL written by the receipts
 # machinery; local observability data, never committed).
 .claude/receipts/
+# M30.H the terminal channel: the two logs (.claude/channel/*.jsonl) are TRACKED and committed
+# with the stage - never ignore them. Only the transient per-session state is ignored.
+.claude/channel/cursor.*
+.claude/channel/turn
+.claude/channel/watch.*.json
+.claude/channel/send-token
+.claude/channel/outgoing.md
 
 # Build-receipt reports (rendered JSON/HTML/MD views written by
 # `node scripts/build-receipts.cjs render`; local observability output). This

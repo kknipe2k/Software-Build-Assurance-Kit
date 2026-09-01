@@ -34,7 +34,9 @@ Per-stage CLI prompts reference gates by milestone: `<gates milestone="M[NN]"/>`
 | Dependency audit | `{{DEP_AUDIT_COMMAND}}` (e.g. `npm audit --audit-level=high` / `pip-audit` / `cargo audit`) | no high/critical | Full; Verifier Pass 6 mechanical floor |
 | Secret scan | `{{SECRET_SCAN_COMMAND_OR_NA}}` (e.g. `gitleaks detect`) | no findings | Full; Verifier Pass 6 mechanical floor |
 | Pre-commit hook | `node scripts/install-hooks.cjs` (sets `core.hooksPath`) | hook fires on test commit | Fast checks; verified by hook test |
-| Pre-push hook (local matrix) | `node scripts/verify-local.cjs` | Linux-in-Docker + native both green | verification_locus: local_first / hybrid. Blocks push on failure |
+| Pre-push hook (fast lane) | `node scripts/verify-local.cjs --lane fast` | affected + active + always-tagged tests green (native leg); a widening to full is printed | verification_locus: local_first / hybrid. Blocks push on failure. `--list` prints the lanes |
+| Stage-end gate (stage lane) | `node scripts/verify-local.cjs --lane stage` | the same over the whole milestone diff, green | Run by `/stage` before the stage-end packet |
+| Closeout / Stage V floor (release lane) | `node scripts/verify-local.cjs --lane release`, then `--reconcile M[NN]` at closeout | Linux-in-Docker + native, every test, green; the three union-pin proofs print before `tests/.settled.json` is written | The full floor never leaves: `/closeout`, `/verify`, and `v*` tags. A green `fast` lane is not Stage-V or closeout evidence |
 | PR smoke check (backstop) | hosted `ubuntu` `pr-smoke.yml` | exit 0 | verification_locus: hybrid. Required status check — the layer `--no-verify` can't skip |
 | CI workflow validates | `{{CI_VALIDATE_COMMAND_OR_NA}}` | exit 0 | If platform supports schema validation |
 

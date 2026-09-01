@@ -55,6 +55,8 @@ env:
     docs/consultations.md
     docs/off-track-log.md
     docs/sources/registry.md
+    .claude/channel/orch-to-builder.jsonl
+    .claude/channel/builder-to-orch.jsonl
     docs/audit/findings-ledger.md
     docs/release-state.md
   # ▲▲▲ ────────────────────────────────────────────────────────── ▲▲▲

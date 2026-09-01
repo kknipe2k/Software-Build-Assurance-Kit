@@ -51,16 +51,23 @@ function die(msg) { process.stderr.write('calibration-derive: ' + msg + '\n'); p
 
 // ── strict args (the KF-45 lesson: an unknown flag is an error, never silently ignored) ──
 const argv = process.argv.slice(2);
-const KNOWN_FLAGS = ['--answers', '--json'];
+const KNOWN_FLAGS = ['--answers', '--json', '--from-spec', '--mode', '--lanes'];
 let answersPath = null;
+let fromSpecPath = null;
+let modeArg = null;
+let lanesArg = null;
 let asJson = false;
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === '--answers') { answersPath = argv[++i]; continue; }
+  if (a === '--from-spec') { fromSpecPath = argv[++i]; continue; }
+  if (a === '--mode') { modeArg = argv[++i]; continue; }
+  if (a === '--lanes') { lanesArg = argv[++i] || ''; continue; }
   if (a === '--json') { asJson = true; continue; }
-  die('unknown argument "' + a + '" — usage: node scripts/calibration-derive.cjs --answers <file.json> [--json] (known: ' + KNOWN_FLAGS.join(', ') + ')');
+  die('unknown argument "' + a + '" — usage: node scripts/calibration-derive.cjs --answers <file.json> | --from-spec <spec.md> [--mode <m>] | --lanes <runner> [--json] (known: ' + KNOWN_FLAGS.join(', ') + ')');
 }
-if (!answersPath) die('missing --answers <file.json>');
+if (!answersPath && !fromSpecPath && lanesArg === null) die('missing --answers <file.json> (or --from-spec <spec.md> for the Full-path glance, or --lanes <runner> for the test-lane fills)');
+if (answersPath && fromSpecPath) die('--answers and --from-spec are exclusive: the Custom path derives from answers, the Full path from the spec');
 
 function readJson(p, what) {
   let raw;
@@ -71,6 +78,83 @@ function readJson(p, what) {
 const core = readJson(path.join(KIT_ROOT, 'calibration-core.json'), 'calibration core');
 const rowsDoc = readJson(path.join(KIT_ROOT, 'scripts/fixtures/golden-bootstrap/rows.json'), 'row registry');
 const rows = Array.isArray(rowsDoc) ? rowsDoc : rowsDoc.rows;
+
+// ── the test-lane fills (M30.F, V106 Stage 2): ONE derive-table row per stack, DATA in
+//    calibration-core.json `derivations.test_lanes`. `runnerFor` picks the row from free
+//    text (the stack answer / the spec) via `runner_keywords`; `laneFills` renders the three
+//    tokens the shipped verify-local reads. `full` = no native selection (the lane widens
+//    and says so). Fail closed on a core without the table or an unknown runner name.
+function laneTable() {
+  const t = core.derivations && core.derivations.test_lanes;
+  if (!t || !t.runners || !t.runner_keywords) die('calibration-core.json lacks derivations.test_lanes - the lane fills derive from the core\'s data table only');
+  return t;
+}
+function runnerFor(text) {
+  const t = laneTable();
+  const s = ' ' + String(text || '').toLowerCase() + ' ';
+  for (const [name, keys] of Object.entries(t.runner_keywords)) {
+    if (name.startsWith('_')) continue;
+    if (keys.some((k) => s.includes(k))) return name;
+  }
+  return 'unknown';
+}
+function laneFills(runner) {
+  const t = laneTable();
+  const row = t.runners[runner];
+  if (!row) die('unknown test runner "' + runner + '" (core rows: ' + Object.keys(t.runners).join(', ') + ')');
+  const why = row.affected === 'full'
+    ? runner + ': no native affected selection - fast/stage run the full native suite and say so (' + row._cite + ')'
+    : runner + ': the runner\'s own change scoping fills the fast/stage lanes; <base> and <files> are computed by verify-local at run time (' + row._cite + ')';
+  return {
+    test_runner: runner,
+    AFFECTED_TEST_COMMAND: row.affected, ACTIVE_TEST_COMMAND: row.active, ALWAYS_TEST_COMMAND: row.always,
+    dev_dependency: row.dev_dependency || null, always_token: t.always_token, why,
+  };
+}
+if (lanesArg !== null) {
+  if (answersPath || fromSpecPath) die('--lanes is exclusive with --answers / --from-spec');
+  const f = laneFills(lanesArg.trim() ? (laneTable().runners[lanesArg.trim()] ? lanesArg.trim() : runnerFor(lanesArg)) : 'unknown');
+  if (asJson) process.stdout.write(JSON.stringify(f, null, 2) + '\n');
+  else {
+    process.stdout.write('test lanes - runner ' + f.test_runner + '\n');
+    for (const k of ['AFFECTED_TEST_COMMAND', 'ACTIVE_TEST_COMMAND', 'ALWAYS_TEST_COMMAND']) process.stdout.write('  ' + k + ' = ' + f[k] + '\n');
+    if (f.dev_dependency) process.stdout.write('  dev dependency: ' + f.dev_dependency + ' (verify-local falls back to full, saying so, when it is not importable)\n');
+    process.stdout.write('  why: ' + f.why + '\n');
+  }
+  process.exit(0);
+}
+// ── the Full-path glance (M30.D): mode + risk triggers derived from the SPEC, as DATA ────
+// One stdout line, printed by the agent verbatim — never composed. Keyword tables live in
+// calibration-core.json (risk_trigger_keywords / mode_keywords / glance_smells); this branch
+// adds no heuristic beyond a lowercased substring match against those lists. Fail closed on
+// an unknown --mode or a core missing the tables.
+if (fromSpecPath) {
+  let specRaw;
+  try { specRaw = fs.readFileSync(path.resolve(fromSpecPath), 'utf8'); } catch (e) { die('spec unreadable at ' + fromSpecPath + ': ' + e.message); }
+  const spec = specRaw.toLowerCase();
+  if (!core.risk_trigger_keywords || !core.mode_keywords) die('calibration-core.json lacks risk_trigger_keywords/mode_keywords — the glance derives from the core\'s data tables only');
+  const trig = core.risk_triggers.filter((t) => (core.risk_trigger_keywords[t] || []).some((k) => spec.includes(k)));
+  let gMode = null;
+  if (modeArg !== null) {
+    if (!core.operating_modes.includes(modeArg)) die('unknown --mode "' + modeArg + '" (core: ' + core.operating_modes.join(', ') + ')');
+    gMode = modeArg;
+  } else {
+    for (const m of core.operating_modes) {
+      if (m === core.default_operating_mode) continue;
+      if ((core.mode_keywords[m] || []).some((k) => spec.includes(k))) { gMode = m; break; }
+    }
+    if (!gMode) gMode = core.default_operating_mode;
+  }
+  let note = null;
+  for (const s of core.glance_smells || []) { if (s.mode === gMode && (s.spec_any || []).some((k) => spec.includes(k))) { note = s.note; break; } }
+  const glance = 'Full / ' + gMode + ' / risk triggers: ' + (trig.length ? trig.join(', ') : 'none') + (note ? ' / note: ' + note : '') + ' [enter to accept]';
+  // the lane fills ride the JSON only - the glance LINE is the ruled one line, unchanged.
+  const lanes = core.derivations && core.derivations.test_lanes ? laneFills(runnerFor(spec)) : null;
+  if (asJson) process.stdout.write(JSON.stringify({ tier: 'Full', operating_mode: gMode, risk_triggers: trig, glance, test_lanes: lanes }, null, 2) + '\n');
+  else process.stdout.write(glance + '\n');
+  process.exit(0);
+}
+
 const input = readJson(path.resolve(answersPath), 'answers file');
 
 const answers = input.answers || {};
@@ -111,6 +195,10 @@ const dockerLeg = shipTargets.some((t) => dockerMatch.some((m) => String(t).toLo
 put('docker_leg', dockerLeg, dockerLeg
   ? 'a ship target is linux/server-class (' + shipTargets.join(', ') + '), so verify-local runs the Linux-in-Docker leg before push'
   : 'no linux/server ship target (' + (shipTargets.join(', ') || 'none declared') + '), so verify-local runs native-only — no Docker install for a deliverable that never ships to Linux');
+
+// test lanes (M30.F) — the runner from context.test_runner (or the description), one table row.
+const laneRow = laneFills(context.test_runner && laneTable().runners[context.test_runner] ? context.test_runner : runnerFor((context.test_runner || '') + ' ' + (context.description || '')));
+put('test_runner', laneRow.test_runner, laneRow.why);
 
 // deliverable_type — proposed by the agent from the description; confirmed, not asked.
 put('deliverable_type', deliverable, 'inferred from your description — it selects which gates and templates apply (a web/UI deliverable would add the design brief + browser-load verification); correct it if the inference is wrong');
@@ -198,7 +286,7 @@ if (triggers.length > 0) {
   });
 }
 
-const out = { operating_mode: mode, tier: tierName, risk_triggers: triggers, derived, files, confirmation };
+const out = { operating_mode: mode, tier: tierName, risk_triggers: triggers, derived, files, confirmation, test_lanes: laneRow };
 
 if (asJson) { process.stdout.write(JSON.stringify(out, null, 2) + '\n'); process.exit(0); }
 // human-readable: the confirmation turn as the agent would speak it

@@ -852,7 +852,24 @@ try {
   // Drive the lifecycle inside the rendered tree.
   runRendered('scripts/stage-active.cjs', ['M01.A']); // 1) open, un-approved
   const s1 = redGate();
-  runRendered('scripts/approve-red.cjs', []);         // 2) human approves the RED
+  // Lazy orientation: the rendered approve-red REFUSES a stage whose `stage-open` reads
+  // are not on the receipts ledger. The harness stands in for the agent, so it READS what a
+  // builder reads: every required entry goes through the rendered lifecycle adapter as a
+  // PostToolUse Read payload (recorded exactly as Claude Code's Read tool is). Approving without
+  // reading would be the V104 instruction-skip the check exists to catch.
+  try {
+    const rl = require(path.join(goldenRoot, 'scripts', 'lib', 'read-ledger.cjs'));
+    const required = rl.checkReads(goldenRoot, { boundary: 'stage-open', stage: 'M01.A' }).required;
+    for (const rel of required) {
+      spawnSync('node', [path.join(goldenRoot, '.claude', 'hooks', 'receipts-lifecycle.cjs')], {
+        cwd: goldenRoot, encoding: 'utf8',
+        input: JSON.stringify({ cwd: goldenRoot, session_id: 'bake-golden', hook_event_name: 'PostToolUse', tool_name: 'Read', tool_input: { file_path: path.join(goldenRoot, rel) } }),
+      });
+    }
+  } catch (e) {
+    findings.push(`golden leg — the rendered read-ledger lib is unusable, so the stage-open reads could not be recorded (${e && e.message ? e.message : e}).`);
+  }
+  runRendered('scripts/approve-red.cjs', []);         // 2) human approves the RED (reads recorded above)
   const s2 = redGate();
   runRendered('scripts/stage-active.cjs', ['--clear']); // 3) stage closed → dormant
   const s3 = redGate();

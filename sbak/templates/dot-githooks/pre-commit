@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.4
+# @kit-version 1.0.5
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
@@ -80,6 +80,20 @@ if [ -n "$staged_retro" ]; then
     node validators/validate-retrospective.cjs --staged
   else
     gate_not_installed validators/validate-retrospective.cjs
+  fi
+fi
+
+# CLAUDE.md self-integrity (M30.I): a staged CLAUDE.md may not silently shrink
+# below half its committed size (the field incident: a closeout truncated a project's
+# CLAUDE.md 713 -> 83 lines, deleting every hard rule, and nothing noticed), and
+# .claude/settings.json must keep the four session hooks registered (the dormant-layer
+# class). Override for a deliberate cut: SBAK_ALLOW_CLAUDE_SHRINK="<reason>" (logged).
+staged_cim=$(printf '%s\n' "$staged_all" | grep -E '^CLAUDE\.md$|^\.claude/settings\.json$' || true)
+if [ -n "$staged_cim" ]; then
+  if [ -f validators/validate-claude-integrity.cjs ]; then
+    node validators/validate-claude-integrity.cjs --staged
+  else
+    gate_not_installed validators/validate-claude-integrity.cjs
   fi
 fi
 

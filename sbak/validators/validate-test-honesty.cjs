@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-test-honesty.cjs
 //
 // The G9 test-honesty gate, shipped framework-wide so every
@@ -69,6 +69,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 
 // The protocol version that introduced <test_honesty>. A Phase doc with
@@ -266,9 +267,28 @@ function idOf(xml) {
   return m ? m[1] : '?';
 }
 
+// M30.I (fade 3): the slot requirement is CALIBRATION-PATH conditional. The Custom
+// (interview) path re-arms the structural slot; the Full path (the glance - the default)
+// is lean: the G9 mutation RUN and its one-line naming still happen every stage, recorded
+// in the retrospective handoff note's `mutation:` field (whose content contract is
+// mechanical). Keyed on the `Calibration:` line the lock step writes into
+// project-config.md - a recorded fact, not a new toggle; absent line / absent config =
+// the Full default (lean). Version-gating and grandfathering are untouched: a Custom-path
+// pre-v1.7 doc is still grandfathered. The assertion-honesty half (test files) is
+// path-independent and unchanged.
+let m30iCalPath = null;
+function calibrationPath() {
+  if (m30iCalPath !== null) return m30iCalPath;
+  let t = '';
+  try { t = fs.readFileSync(path.join(process.cwd(), 'project-config.md'), 'utf8'); } catch (_) { t = ''; }
+  m30iCalPath = /\*\*Calibration:\*\*\s*custom-interview/.test(t) ? 'custom-interview' : 'full-glance';
+  return m30iCalPath;
+}
+
 // Findings for one Phase doc: each in-scope work stage must carry a valid slot.
 function checkPhaseDoc(file, text) {
   const findings = [];
+  if (calibrationPath() !== 'custom-interview') return findings; // Full path: lean (fade 3); the handoff note carries the mutation naming
   const version = parseProtocolVersion(text);
   if (!isInScope(version, TEST_HONESTY_VERSION)) return findings; // grandfathered (explicit pre-v1.7 banner only)
   for (const block of extractXmlBlocks(text)) {

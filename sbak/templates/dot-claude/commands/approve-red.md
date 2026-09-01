@@ -10,7 +10,7 @@ This is YOUR action, not the agent's — run it only after you have actually rev
 
 Steps:
 
-1. Run `node scripts/approve-red.cjs`. It reads `.claude/stage-active` and atomically writes `.claude/red-approved = <that stage id>`.
+1. Run `node scripts/approve-red.cjs`. It first checks the read ledger: every read-first entry tagged `when: stage-open` and every path in the open stage prompt's `<read_first>` must have a recorded read (Read tool or Bash) - if one is missing it refuses with one line naming the file, and the agent reads it and you re-run. Then it reads `.claude/stage-active` and atomically writes `.claude/red-approved = <that stage id>`.
 2. The PROC-001 PreToolUse red-gate now allows implementation edits for **this** stage. A later `/stage` clears the approval (a fresh stage starts un-approved); so does closing the stage at commit (`node scripts/stage-active.cjs --clear`).
 
 If it errors with "no .claude/stage-active", there is no open stage — the gate is dormant and nothing needs approving.

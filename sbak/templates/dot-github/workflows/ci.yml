@@ -96,3 +96,10 @@ jobs:
       - name: Sources-registry binding check (research_publish)
         if: ${{ matrix.os == 'ubuntu-latest' && hashFiles('docs/paper/**') != '' }}   # skip when no paper (non-research_publish, or pre-Phase-R)
         run: node validators/validate-sources.cjs
+
+      # Gate-command manifest: the local .githooks/* gate set and this workflow set are
+      # derived at check time and reconciled, so local and CI cannot silently diverge
+      # (the recorded gate-drift class). One OS suffices; the check is OS-agnostic.
+      - name: Gate-command manifest (local vs CI)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: node validators/validate-gate-manifest.cjs

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-calibration.cjs
 //
 // The G14 verifier-proof gate, shipped framework-wide so

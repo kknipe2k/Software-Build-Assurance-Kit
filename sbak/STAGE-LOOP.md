@@ -34,6 +34,8 @@
   - `/closeout M01` - runs milestone closeout (Stage E).
   - `/approve-red` - **your** action at gate 2: releases the red-gate after you have reviewed the failing tests.
   - `/on-track` - on-demand off-track review against the backlog; sets no role and runs in-session.
+  - `/listen <stage>` - orchestrator session only: puts it on the terminal channel for a stage (the builder's packets arrive on their own from then on).
+  - `/send [--approval]` - orchestrator session only: **your** keystroke carries the block just surfaced to the builder over the channel; `--approval` marks the RED verdict, which the builder's pickup surfaces and waits on until `/approve-red`.
 - Hand-pasting a stage's `X.5` XML block into a fresh session still works - the commands are courier relief on top of the same mechanism, not a replacement for it.
 
 ## Per stage (M01.A, then B, ...)

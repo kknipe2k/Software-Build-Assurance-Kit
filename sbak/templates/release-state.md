@@ -25,7 +25,7 @@ Each state is a **separately-gated** transition. A state may not be claimed unti
 | 1 | **stage-complete** | a single stage's acceptance criteria met, committed on the milestone branch | the stage gates (`docs/gates.md`) + the stage retro `[END]` |
 | 2 | **milestone-complete** | the milestone closed out, Verifier passed, count reconciled | Stage V Sound + Stage E closeout (count + rework reconcile) |
 | 3 | **internally-usable** | the assembled product runs end-to-end for the team (dogfood) | assembled-execution (G10) on the drivable surfaces |
-| 4 | **source-release-ready** | the source tree is releasable — license, README, no secrets, clean build | the full local matrix (`scripts/verify-local.cjs`) + secret scan |
+| 4 | **source-release-ready** | the source tree is releasable — license, README, no secrets, clean build | the full local matrix (`scripts/verify-local.cjs --lane release`) + secret scan |
 | 5 | **packaged-release-ready** | distributable artifacts built + **SLSA-attested** | `release.yml` builds + **cites its SLSA build level** (≥ L2) |
 | 6 | **public-distribution-ready** | cleared for public distribution | the capability-triggered independent whole-product review (when triggers declared) + the SLSA cite (G16) |
 

@@ -6,23 +6,13 @@
 
 ## Coverage caveat — read first
 
-> ⚠️ **This milestone was verified at {{TIER}} tier.**
->
-> **Passes run:** {{PASSES_RUN}}
-> **Passes NOT run:** {{PASSES_NOT_RUN}}
-> **Bug classes NOT checked:** {{BUG_CLASSES_NOT_CHECKED}}
->
-> "Verifier passed" means the active passes found no 🔴 findings — not that the milestone is free of all bug classes. Bug classes not checked by the active passes (e.g., concurrency at Lite; runtime/visual without a harness) remain possible. Re-tier to a higher level if you need broader coverage.
-
-This caveat is mandatory and must not be removed. Tier-coverage honesty is the difference between a useful verifier and confidence theater.
+Verified at {{TIER}} tier — passes run: {{PASSES_RUN}}; NOT run: {{PASSES_NOT_RUN}}; bug classes NOT checked: {{BUG_CLASSES_NOT_CHECKED}} — "passed" means the active passes found no 🔴, nothing more. (Mandatory one-liner; do not remove.)
 
 ---
 
 ## Evidence retention — mandatory per assurance claim
 
-> Every assurance verdict in this file **retains reproducible evidence**, and every **stated count** is **recomputed from its source**, not asserted. This is the evidence-retention rule, enforced by `validators/validate-reconciliation.cjs` (pre-commit + CI) and — where a static check can't reach — by Stage V's plan-challenge. It kills the "202 scanned / 0 corrections" assurance theater: a "Sound" verdict with no retained evidence, or a count that never recomputes, is invalid.
-
-**A non-numeric assurance verdict** (a pass marked Sound / passed / clean) carries a fenced `verdict` block and **at least one** fenced `evidence` block — command · pattern/mutation set · result:
+Every verdict retains reproducible evidence; every stated count recomputes from its source (`validators/validate-reconciliation.cjs`; Stage V's plan-challenge backstops what the static check can't reach). A non-numeric verdict (Sound / passed / clean) carries a fenced `verdict` block and at least one fenced `evidence` block:
 
 ```verdict
 finding: Pass N — <name>
@@ -36,7 +26,7 @@ pattern/mutation set: <the grep / mutation set exercised — e.g. revert <enforc
 result: <the observed result log — counts, exit code, RED→GREEN>
 ```
 
-**A numeric count claim** (e.g. "202 commits scanned", "14 mutants killed", "17→14 graduated") carries a fenced `reconcile` block so the number is **recomputed from the ledger**, never trusted:
+A numeric count claim carries a fenced `reconcile` block so the number recomputes from the ledger, never trusted:
 
 ```reconcile
 metric: mutants killed
@@ -47,7 +37,7 @@ pattern: <regex counting the matching lines / commits>
 
 (For `source: git`, add `range: main..HEAD`; the count is `git log --format=%s <range>` subjects matching the pattern.)
 
-These evidence / reconcile blocks are **mandatory and must not be removed** — like the coverage caveat above. **Honest limit (no false confidence):** the validator is **presence-gated** — a count stated in prose, or under a key the validator's non-exhaustive list doesn't recognize, escapes the static check; Stage V's plan-challenge is the adversarial backstop that confirms every stated count carries a reconcile block.
+These blocks are mandatory (do not remove). Honest limit: the validator is presence-gated — a count in prose escapes the static check; the plan-challenge is the adversarial backstop.
 
 ---
 

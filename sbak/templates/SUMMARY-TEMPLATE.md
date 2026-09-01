@@ -25,15 +25,15 @@
 
 ---
 
-## Aggregate three-axis scores
+## Three-axis self-assessment (the ONE scored assessment for the milestone — M30.I fade 1)
 
-Average of per-stage scores. Variance matters as much as the mean — flag any stage that scored ≥2 below the milestone average.
+Scored once here at Stage E, over the whole milestone; per-stage retros are handoff notes and carry no scores. Justify each score from the stage handoff notes and friction logs, citing evidence — the score without its why is noise.
 
-| Axis | Stage A | Stage B | Stage C | Stage D | Stage E | Milestone avg | Variance flag? |
-|---|---|---|---|---|---|---|---|
-| Process adherence | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{avg}} | {{stage IDs that flagged, or "none"}} |
-| Artifact quality | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{avg}} | {{...}} |
-| Forward-readiness | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{1-5}} | {{avg}} | {{...}} |
+| Axis | Score (1-5) | Justification (evidence from the stage notes) |
+|---|---|---|
+| Process adherence | {{1-5}} | {{gates held / deviations, from the notes' friction rows}} |
+| Artifact quality | {{1-5}} | {{coverage, gate cleanliness, drive results}} |
+| Forward-readiness | {{1-5}} | {{are the open: fields owned; does the next milestone start clean}} |
 
 ---
 

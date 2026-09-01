@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /
@@ -206,8 +206,80 @@ function readActiveMode(claudeDir) {
   return readMarkerState(claudeDir, 'role');
 }
 
+// THE STAMPLESS CHECK (M30.G, audit row 2 - ruled: the hook fails loud, not the agent). The
+// SessionStart hook appends `orientation_stamped` to this session's receipts ledger when it
+// runs. If this prompt's session has no such event, the session hooks are not wired (or the
+// stamp hook did not run) - block with ONE line naming the missing stamp. Honest scope: a
+// project without the receipts contract (pre-M20.6 install) cannot be checked - one stderr
+// note, no block; and if this hook itself is unwired nothing fires - the installer (M30.C)
+// and the commit-time self-integrity hook own that gap.
+function stampPresent(cwd, sessionId) {
+  let receipts;
+  try { receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs')); }
+  catch (_) { return 'unchecked'; }
+  if (typeof sessionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sessionId)) return 'unchecked';
+  const dir = path.join(cwd, '.claude', 'receipts');
+  const files = [path.join(dir, `events-${sessionId}.jsonl`), path.join(dir, `events-script-${new Date().toISOString().slice(0, 10)}.jsonl`)];
+  let started = null;
+  for (const f of files) {
+    if (!fs.existsSync(f)) continue;
+    const g = receipts.readLedger(f, { maxBytes: 1 << 20 });
+    if (g.events.some((e) => e.event === 'orientation_stamped')) return 'present';
+    for (const e of g.events) if (e.event === 'session_started' && typeof e.at === 'string' && started === null) started = e.at;
+  }
+  // M30.I (A15, filed live from a wedged terminal): a session that STARTED before this
+  // hook file existed cannot carry the stamp its own SessionStart never knew to write -
+  // blocking it refuses every prompt including the fix, an unrecoverable loop for the
+  // person. The honest discriminator is this file's own mtime: a recorded session_started
+  // older than the hook is a pre-upgrade session - exempt with a note, never block. A
+  // session started AFTER the hook existed with no stamp is the real row-2 case and blocks.
+  if (started !== null) {
+    try {
+      const hookAt = fs.statSync(__filename).mtime.getTime();
+      if (new Date(started).getTime() < hookAt) return 'pre-upgrade';
+    } catch (_) { /* fall through to missing - fail toward the check, not past it */ }
+  }
+  return 'missing';
+}
+
 function main() {
-  const prompt = getPrompt(readStdin());
+  const raw = readStdin();
+  const prompt = getPrompt(raw);
+  let payload = null;
+  try { payload = JSON.parse(raw); } catch (_) { payload = null; }
+  const cwd = (payload && typeof payload.cwd === 'string' && payload.cwd) ? payload.cwd : process.cwd();
+  const stamp = stampPresent(cwd, payload && payload.session_id);
+  if (stamp === 'missing') {
+    process.stderr.write('[read-first stamp] missing - the SessionStart hook did not run here; start a new session (it stamps itself), or run node scripts/kit-update.cjs --adopt first if the hook layer was never installed.\n');
+    process.exit(2);
+  }
+  if (stamp === 'pre-upgrade') {
+    process.stderr.write('[read-first stamp] n/a - this session started before the stamp hook existed (pre-upgrade session); a new session will stamp itself.\n');
+  }
+  if (stamp === 'unchecked') {
+    process.stderr.write('[read-first stamp] not checked - the receipts contract (scripts/lib/receipts.cjs) or a session id is absent here.\n');
+  }
+
+  // THE /send KEYSTROKE (M30.H, the terminal channel). The human typed /send in this terminal:
+  // under role=orchestrator the hook stamps a one-shot token that `node scripts/channel.cjs send`
+  // consumes - the keystroke is the adjudication record and the hook, not the agent, is the writer
+  // of that record. Any other role is blocked in one line: only the orchestrator sends; builder
+  // packets publish automatically. (The fence's ask rule on the send command is the other gate;
+  // this token is the zero-click one when the raw line reaches the hook.)
+  if (/^\s*\/send\b/.test(prompt)) {
+    const sres = readActiveMode(path.join(cwd, '.claude'));
+    const srole = sres.state === 'absent' ? 'work' : (sres.state === 'unresolved' ? 'unresolved' : sres.mode);
+    if (srole !== 'orchestrator') {
+      process.stderr.write(`channel: /send is the orchestrator's keystroke (this session's role is ${srole}) - only the orchestrator sends; builder packets publish automatically at surface time.\n`);
+      process.exit(2);
+    }
+    try {
+      const dir = path.join(cwd, '.claude', 'channel');
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'send-token'), JSON.stringify({ at: new Date().toISOString(), session: payload && payload.session_id ? payload.session_id : null }) + '\n');
+    } catch (_) { /* the fence's ask rule remains the other gate */ }
+    process.exit(0);
+  }
 
   // DEGRADED INSTALL (the classifier module is unreachable or the root set has drifted).
   // Two prongs, deliberately asymmetric: ordinary conversation must never be bricked by a
@@ -221,13 +293,9 @@ function main() {
   if (brokenReason) {
     const stageShaped = Object.keys(ROOT_TO_MODE).some((n) => prompt.indexOf('<' + n) !== -1);
     if (!stageShaped) process.exit(0); // prose is still prose
+    // M30.I (audit row 28): one plain sentence + the fix command when it bites.
     process.stderr.write(
-      `\nStage-prompt classifier unavailable — prompt not run (fail-closed).\n` +
-      `  ${brokenReason}\n` +
-      `  This prompt looks like a stage prompt, and the role guard cannot classify it.\n` +
-      `  Refusing to run it unchecked — that would silently disable the 3-brain bias guard.\n\n` +
-      `  Fix: reinstall the enforcement wiring, then re-paste:\n` +
-      `    node scripts/kit-update.cjs --adopt\n\n`
+      `Stage-prompt classifier unavailable (${brokenReason}) — refusing to run a stage-shaped prompt unchecked; fix: node scripts/kit-update.cjs --adopt, then re-paste.\n`
     );
     process.exit(2);
   }
@@ -246,13 +314,9 @@ function main() {
   // malformed. Fail closed with a diagnostic that cannot be mistaken for a role mismatch.
   if (structure.state === 'ambiguous' || structure.state === 'invalid') {
     const kind = structure.state === 'ambiguous' ? 'Ambiguous stage prompt' : 'Malformed stage prompt';
+    // M30.I (audit row 28): one plain sentence + the fix when it bites.
     process.stderr.write(
-      `\n${kind} — prompt not run.\n` +
-      `  ${structure.reason}\n` +
-      `  This is NOT a role mismatch: the session role was never consulted, because the\n` +
-      `  prompt's own structure could not be resolved to a single stage prompt.\n\n` +
-      `  Fix: re-paste exactly one complete stage prompt (quoted examples belong inside the\n` +
-      `  prompt body, or in a fenced block in the Phase doc — not beside the root).\n\n`
+      `${kind} (${structure.reason}) — not a role mismatch; fix: re-paste exactly one complete stage prompt (quoted examples go inside the prompt body).\n`
     );
     process.exit(2);
   }
@@ -266,14 +330,9 @@ function main() {
   // FAIL CLOSED (ERR-002): a present-but-unresolvable role marker must block,
   // never silently default to 'work'. Absent is the lone legitimate -> 'work'.
   if (res.state === 'unresolved') {
+    // M30.I (audit row 28): one plain sentence + the fix command (fail-closed, never assume work).
     process.stderr.write(
-      `\nMode undeterminable — prompt not run (fail-closed).\n` +
-      `  .claude/role exists but its role could not be resolved: ${res.reason}.\n` +
-      `  Refusing to assume "work" — that would silently disable the 3-brain bias guard\n` +
-      `  (e.g. run a ${declared} prompt with a work read-first list).\n\n` +
-      `  Fix: write a single valid mode (work | verifier | orchestrator | refactor),\n` +
-      `  or delete the file to default to work, then re-paste:\n` +
-      `    node scripts/set-mode.cjs ${declared}\n\n`
+      `Mode undeterminable (.claude/role unresolvable: ${res.reason}) — fix: node scripts/set-mode.cjs ${declared}, then re-paste.\n`
     );
     process.exit(2);
   }
@@ -282,18 +341,9 @@ function main() {
 
   if (declared === active) process.exit(0);
 
-  // Mismatch: block and explain.
-  const fix = declared === 'work'
-    ? 'node scripts/set-mode.cjs work   (or delete the file)'
-    : `node scripts/set-mode.cjs ${declared}`;
-
+  // M30.I (audit row 28): one plain sentence + the fix command when it bites.
   process.stderr.write(
-    `\nMode mismatch — prompt not run.\n` +
-    `  Pasted prompt is a ${declared} stage; this session's .claude/role is "${active}".\n` +
-    `  Running a ${declared} prompt in a ${active} session loads the wrong read-first list\n` +
-    `  (e.g. a verifier must NOT have prior retrospectives in context — the fresh-context bias guard).\n\n` +
-    `  Fix: open a fresh session for the right mode, set the mode, then re-paste:\n` +
-    `    ${fix}\n\n`
+    `Mode mismatch — this is a ${declared} stage prompt but this session's role is "${active}"; fix: open a fresh ${declared} session and run node scripts/set-mode.cjs ${declared}, then re-paste.\n`
   );
   process.exit(2);
 }

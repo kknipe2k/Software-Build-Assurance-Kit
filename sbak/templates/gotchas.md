@@ -56,7 +56,7 @@ When a gotcha is graduated to this file, add a numbered entry with: the trap, th
 
 **Cause:** two live agent/CLI sessions sharing **one working directory**. A checkout (`git switch`/`checkout`) in one session moves the shared working tree under the other; both sessions then see and commit against whatever branch was switched to last. This is a recovered real incident, not hypothetical.
 
-**Workaround:** **one working tree per live session.** Give each concurrent session its own `git worktree` (shared `.git`, isolated checkouts): `git worktree add ../build-wt <milestone-branch>`, run the build session there and the orchestrator in the primary checkout. **Before every commit, run `git branch --show-current`** to confirm the branch. Run the full suite from the primary checkout context (linked-worktree test-harness quirks aside). Never point two live sessions at the same directory.
+**Workaround:** **one working tree per live session.** Give each concurrent session its own `git worktree` (shared `.git`, isolated checkouts): `node scripts/set-mode.cjs --split <milestone-branch>` (creates `../<project>-build-wt`), run the build session there and the orchestrator in the primary checkout. **Before every commit, run `git branch --show-current`** to confirm the branch. Run the full suite from the primary checkout context (linked-worktree test-harness quirks aside). Never point two live sessions at the same directory.
 
 **Origin:** A-06 (a shared-working-tree race during a kit-hardening stage; recovered with zero loss, then adopted as standing discipline).
 

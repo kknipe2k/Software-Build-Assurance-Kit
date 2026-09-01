@@ -39,15 +39,25 @@ If `claude` is missing, install Claude Code per the official instructions (typic
 
 ## 1. Get the kit
 
-The kit comes two ways. **Most users: download the release ZIP** - the signed, checksummed, attested artifact. `git clone` stays available as the **alternate** path (below).
+The kit comes three ways. **Most users: the installer** - one downloaded file, one command, every check done by a script. The release ZIP is the **manual fallback**, and `git clone` stays available as the **alternate** path (below).
 
-### Download the release ZIP - recommended
+### Install with sbak-install - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.4-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Download ONE file from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases): `sbak-install.cjs` (attested with the release; its `.sha256` is beside it). Put it in the directory where the kit should live - a blank folder for a new project, or the root of an existing repo - start `claude` there, and type `sbak-install`:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.4-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.4-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.4-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.4-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+```
+sbak-install
+```
+
+That is the whole job. The script carries its own instructions; Claude reads them and runs it one step at a time. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The script downloads the release ZIP, verifies it, and creates the git repo if there is none. One question at a time: first the download (it names the exact URL and where the ZIP will land, then shows you the checksum and attestation result), then the proceed - `OK to proceed? Type install, list, or no`, where `list` shows every file first; every question ends with the exact word to type, and the person types nothing else. On an existing repo the script hands Claude a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through with you before that proceed. Nothing is written before your word; the ZIP lands in `.sbak-install/` inside the folder (removed after a successful install) and a plain-text install log at `sbak/INSTALL.log`, versioned with the kit. Running the script by hand at a terminal does nothing but tell you to start claude here. **Upgrading** an installed kit is the same command: the report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), one question, nothing written before your `y`, and the previous version stays in git history. The script pins the release it installs, verifies the ZIP's checksum and, where `gh` is available, its attestation - and says plainly when it could not. It then runs the adopt step, so the hooks are live when it prints `Done`.
+
+### Download the release ZIP - the manual fallback
+
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.5-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.5-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.5-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.5-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.5-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -58,7 +68,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.4-starter.zip -d <projects-path>/my-project
+unzip sbak-v1.0.5-starter.zip -d <projects-path>/my-project
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -69,7 +79,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.4-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.5-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -123,14 +133,16 @@ claude
 
 What you should see next:
 
-1. **First response:** Claude echoes the read-first stamp and your working directory with a one-line scope statement. Confirm it is the right folder.
-2. **Second response:** the calibration interview - 3 asks (operating mode, assurance tier, risk triggers), then a confirmation turn that derives and explains everything else.
+1. **First response:** Claude echoes the read-first stamp and asks the one question - **Full or Custom?** Full (the default): no more choices, one acceptance line to press enter on later. Custom: three short questions.
+2. **Then:** "What do you want to build?" - discovery and the spec follow. On the Full path, the acceptance glance (`Full / <mode> / risk triggers: <list> [enter to accept]`) appears after the spec lands, derived from it by script; on Custom, the interview below runs first.
 
 If you do not see this sequence, jump to Troubleshooting.
 
 ---
 
-## 3. Answer the 3 asks
+## 3. The Custom path: the 3 asks
+
+Pick **Custom** and the calibration interview runs - 3 asks + 1 confirmation turn. On **Full** none of this is asked: the mode is inferred from your first answer, tier is Full, and risk triggers are derived from the spec and shown on the one glance line.
 
 | Ask | You're choosing | Safe default if unsure |
 |---|---|---|
@@ -165,7 +177,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 2. A spec.
 3. **Web/UI only:** a design discovery interview and the `docs/design.md` brief.
 4. A milestone plan.
-5. Scaffold files - 44 for Lite, 100 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+5. Scaffold files - 52 for Lite, 119 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle. The default: the spec and the milestone plan surface before they are written; the scaffold and Phase docs are written directly and surfaced for post-write review.
 
@@ -199,7 +211,7 @@ For **Lite tier**: just open a fresh session and say *"let's start M01."* Work f
 For **Full tier** - the **three-gate per-stage loop** (when `red_review: on`, the Full default):
 
 1. Open a fresh Claude session in the project (`claude`, or `/clear` in an existing one - both work; `STAGE-LOOP.md` is the home doctrine for the difference).
-2. **Verify the hook fired:** Claude's first response should include a line like `[read-first stamp] role=work, op=greenfield, loaded N files, M bytes, 0 skipped`. If it doesn't, jump to Troubleshooting - orientation didn't load and the stage is unreliable.
+2. **Verify the hook fired:** Claude's first response should include a line like `[read-first stamp] role=work, op=greenfield, loaded N of M files (M on the manifest, read at their when:), 0 skipped`. If it doesn't, jump to Troubleshooting - orientation didn't load and the stage is unreliable.
 3. **Run the stage.** Easiest: type `/stage M01 A` - the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No copy-paste. (`/verify M01`, `/refactor M01`, and `/closeout M01` work the same way.)
    - *Or* paste by hand: open `docs/build-prompts/M01-<title>.md`, find `### A.5 CLI Prompt`, copy the fenced ` ```xml ` block, paste it in.
 4. **Gate 1 - plan approval.** Claude states its deliverable + test plan and waits. Confirm or correct.
@@ -232,7 +244,7 @@ At Full tier the agent runs as **two distinct session types**, never sharing a s
 
 How to host the two roles (`ORCHESTRATOR.md` §1 has the full table):
 
-- **Recommended - two CLIs + git worktrees, one machine.** From the repo root: `git worktree add ../build-wt <milestone-branch>`. Run the **build** with `claude` inside `../build-wt`; run the **orchestrator** with `claude` in the main checkout. Shared `.git`, isolated working trees, no cross-machine drift.
+- **Recommended - two CLIs + git worktrees, one machine.** From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed and prints the launch block). Run the **build** with `claude` inside `../<project>-build-wt`; run the **orchestrator** with `claude` in the main checkout. Shared `.git`, isolated working trees, no cross-machine drift.
   **`worktree-after-first-commit`:** a freshly bootstrapped project has **zero commits**, so the milestone branch cannot exist yet and `git worktree add` fails on it (`fatal: invalid reference` - executed on git 2.52) - so use "two CLIs, same directory" (below) until M01.A's first commit lands, then create the worktree and move the build session into it.
 - **Web orchestrator + local CLI build** - valid only if the build genuinely runs on a separate machine; then the cross-machine pre-flight in `ORCHESTRATOR.md §3` is mandatory.
 - **Two CLIs, same directory** - simplest; fine because you serialize the two roles.
@@ -257,7 +269,7 @@ At **Lite tier** the two roles collapse into one session - there is no separate 
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| No calibration interview on first run | `CLAUDE.md` didn't auto-load | Confirm you ran `claude` from the project root (where `CLAUDE.md` is). Confirm Claude Code reads `CLAUDE.md` (it does by default). |
+| No `Full or Custom?` question on first run | `CLAUDE.md` didn't auto-load | Confirm you ran `claude` from the project root (where `CLAUDE.md` is). Confirm Claude Code reads `CLAUDE.md` (it does by default). |
 | No `[read-first stamp]` line in a session | SessionStart hook didn't fire | Run `/hooks` in Claude Code - the SessionStart entry should be listed. If not, validate `.claude/settings.json` is valid JSON. Confirm `node` is on PATH (`node --version`). See `templates/dot-claude/README.md` (installs as `.claude/README.md`). |
 | `git clone` says destination not empty | Target dir exists with files | `git clone` creates the directory - don't pre-create it. Pick a new name or clone to a fresh path. |
 | Agent committed without asking | G1 violation - should never happen | Surface it immediately. Check `git log`. The framework's most important guarantee failed; investigate before continuing. |

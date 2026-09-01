@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -32,6 +32,16 @@
 // (there is no permission-grant boundary). `at` is the adapter's wall clock at
 // observation — no payload timestamp exists (J-B4).
 //
+// THE READ LEDGER (M30.G, lazy orientation) - the one addition since Stage A, and a
+// hook-then-fade with the incident named: the V104 field test proved instruction-skipping
+// is real (a builder silently skipped the spec's IRL/HITL section), and the SessionStart
+// hook's eager inline of 176-289 KB per session was the only defence. That inline faded;
+// this adapter now records every Read-tool read and every Bash command that names a repo
+// file (PostToolUse, matcher `.*` - no matcher change) as a `file_read` event carrying a
+// hashed `read_ref` (never the path - the privacy floor holds), and the boundary's gate
+// (approve-red for stage-open; read-ledger --check for verify/closeout) refuses when a
+// required read is unrecorded. Derivation + tokenizer: scripts/lib/read-ledger.cjs.
+//
 // Cross-platform (Node, no shell-isms). The require is __dirname-relative so it
 // resolves identically in the kit tree (templates/dot-claude/hooks →
 // templates/scripts/lib) and a rendered project (.claude/hooks → scripts/lib).
@@ -40,6 +50,9 @@
 
 const fs = require('fs');
 const path = require('path');
+
+let readLedger = null;
+try { readLedger = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'read-ledger.cjs')); } catch (_) { readLedger = null; }
 
 // The ONLY exit. The metrics path never blocks a hook (RCPT-09). Flipping this to a
 // non-zero value is the M20.6.B mut1 the fail-open lock kills.
@@ -213,6 +226,34 @@ function main() {
     try { mres = receipts.appendEvent(receiptsDir, mk); }
     catch (_) { mres = { ok: false }; }
     if (!mres || mres.ok !== true) degrade(receiptsDir, hookName, at);
+  }
+
+  // THE READ LEDGER (M30.G): at PostToolUse, a Read-tool read (tool_input.file_path) or a
+  // Bash command naming an existing repo file (exact token match - read-ledger.cjs owns the
+  // rule) lands one `file_read` per distinct file, carrying the hashed read_ref and the same
+  // session / role / stage stamps. The path itself is read here at observation and never
+  // persisted (the J4 shape). Both readers on purpose: a builder in auto mode reads through
+  // Bash, so a Read-only ledger would be a false floor.
+  if (hookName === 'PostToolUse' && readLedger && payload.tool_input && typeof payload.tool_input === 'object') {
+    let refs = [];
+    try {
+      if (payload.tool_name === 'Read' && typeof payload.tool_input.file_path === 'string') {
+        const r = readLedger.refForPath(cwd, payload.tool_input.file_path);
+        if (r) refs = [r];
+      } else if (payload.tool_name === 'Bash' && typeof payload.tool_input.command === 'string') {
+        refs = readLedger.readRefsFromBash(cwd, payload.tool_input.command);
+      }
+    } catch (_) { refs = []; }
+    for (const ref of refs) {
+      const fr = { schema: receipts.SCHEMA_VERSION, at, event: 'file_read', emitter: hookName, read_ref: ref };
+      if (typeof payload.session_id === 'string') fr.session = payload.session_id;
+      if (role) fr.role = role;
+      if (stageTok && receipts.STAGE_RE.test(stageTok)) fr.stage = stageTok;
+      let fres;
+      try { fres = receipts.appendEvent(receiptsDir, fr); }
+      catch (_) { fres = { ok: false }; }
+      if (!fres || fres.ok !== true) degrade(receiptsDir, hookName, at);
+    }
   }
 }
 

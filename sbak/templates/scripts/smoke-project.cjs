@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -354,12 +354,34 @@ const BY_DESIGN_SKIPS = {
   'validate-sources.cjs': 'research_publish-mode only (source-registry binding)',
   'check-append-only.cjs': 'git-history-dependent (runs in CI over PR diffs, not on synthetic fixtures)',
 };
+// The workflow-invocation check: exercise the CI workflow's EXACT app-map invocation - the local/CI
+// divergence class. pr-smoke.yml's rendered `--tests '<globs>'` value is run verbatim
+// against the project's own map, and its verdict must agree with the same invocation
+// pre-split - a comma-joined fill that renders one dead literal fails HERE, in the
+// mini-smoke, not first on a green-looking CI leg.
+(function workflowInvocation() {
+  const wf = path.join(PROJ, '.github', 'workflows', 'pr-smoke.yml');
+  let text = null;
+  try { text = fs.readFileSync(wf, 'utf8'); } catch (_) { text = null; }
+  const map = path.join(PROJ, 'docs', 'app-map.md');
+  if (text === null || !fs.existsSync(map)) { skip('workflow app-map invocation', 'no pr-smoke.yml or no docs/app-map.md in this project'); return; }
+  const line = (text.split(/\r?\n/).find((l) => /validate-app-map\.cjs/.test(l)) || '');
+  const tm = /--tests\s+'([^']+)'/.exec(line);
+  if (!tm) { skip('workflow app-map invocation', 'pr-smoke.yml has no --tests value to exercise'); return; }
+  if (/\{\{.*\}\}/.test(tm[1])) { skip('workflow app-map invocation', 'the --tests token is unfilled (pre-bootstrap)'); return; }
+  const exact = runNode(vPath('validate-app-map.cjs'), ['--tests', tm[1], path.join('docs', 'app-map.md')], { cwd: PROJ });
+  const split = runNode(vPath('validate-app-map.cjs'), tm[1].split(',').flatMap((g) => ['--tests', g.trim()]).concat([path.join('docs', 'app-map.md')]), { cwd: PROJ });
+  ok('workflow app-map invocation - the EXACT CI --tests value binds like its split form',
+    exact.code === split.code,
+    `exact form exit ${exact.code} vs split form exit ${split.code} - the comma fill is a dead literal in CI`);
+})();
+
 let known = new Set([
   'validate-stage-prompts.cjs', 'validate-retrospective.cjs', 'validate-test-honesty.cjs',
   'validate-app-map.cjs', 'validate-transition.cjs', 'validate-operating-mode.cjs',
   'validate-risk-escalation.cjs', 'validate-destructive-op.cjs', 'validate-risk-matrix.cjs',
   'validate-calibration.cjs', 'validate-release-readiness.cjs', 'validate-reconciliation.cjs',
-  'validate-irl-plan.cjs',
+  'validate-irl-plan.cjs', 'validate-spec-examples.cjs',
 ]);
 let present = [];
 try { present = fs.readdirSync(V_DIR).filter((n) => /\.cjs$/.test(n)); } catch (_) { present = []; }

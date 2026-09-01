@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -115,6 +115,9 @@ const MANAGED = [
   { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy' },
   { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy' },
   { file: 'validators/validate-irl-plan.cjs', template: 'validators/validate-irl-plan.cjs', render: 'copy' },
+  { file: 'validators/validate-claude-integrity.cjs', template: 'validators/validate-claude-integrity.cjs', render: 'copy' },
+  { file: 'validators/validate-closeout-packet.cjs', template: 'validators/validate-closeout-packet.cjs', render: 'copy' },
+  { file: 'validators/validate-gate-manifest.cjs', template: 'validators/validate-gate-manifest.cjs', render: 'copy' },
   { file: 'validators/check-append-only.cjs', template: 'validators/check-append-only.cjs', render: 'copy' },
   { file: 'validators/lib/fenced-block.cjs', template: 'validators/lib/fenced-block.cjs', render: 'copy' },
   { file: 'validators/lib/escape-regexp.cjs', template: 'validators/lib/escape-regexp.cjs', render: 'copy' },
@@ -130,6 +133,8 @@ const MANAGED = [
   { file: '.claude/commands/closeout.md', template: 'templates/dot-claude/commands/closeout.md', render: 'copy' },
   { file: '.claude/commands/on-track.md', template: 'templates/dot-claude/commands/on-track.md', render: 'copy' },
   { file: '.claude/commands/approve-red.md', template: 'templates/dot-claude/commands/approve-red.md', render: 'copy' },
+  { file: '.claude/commands/send.md', template: 'templates/dot-claude/commands/send.md', render: 'copy' },
+  { file: '.claude/commands/listen.md', template: 'templates/dot-claude/commands/listen.md', render: 'copy' },
   { file: 'scripts/set-mode.cjs', template: 'templates/scripts/set-mode.cjs', render: 'copy' },
   { file: 'scripts/stage-active.cjs', template: 'templates/scripts/stage-active.cjs', render: 'copy' },
   { file: 'scripts/approve-red.cjs', template: 'templates/scripts/approve-red.cjs', render: 'copy' },
@@ -142,6 +147,9 @@ const MANAGED = [
   { file: 'scripts/lib/settings-merge.cjs', template: 'templates/scripts/lib/settings-merge.cjs', render: 'copy' },
   { file: 'scripts/lib/stage-structure.cjs', template: 'templates/scripts/lib/stage-structure.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts.cjs', template: 'templates/scripts/lib/receipts.cjs', render: 'copy' },
+  { file: 'scripts/lib/read-ledger.cjs', template: 'templates/scripts/lib/read-ledger.cjs', render: 'copy' },
+  { file: 'scripts/channel.cjs', template: 'templates/scripts/channel.cjs', render: 'copy' },
+  { file: 'scripts/lib/channel.cjs', template: 'templates/scripts/lib/channel.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts-collect.cjs', template: 'templates/scripts/lib/receipts-collect.cjs', render: 'copy' },
   { file: 'scripts/build-receipts.cjs', template: 'templates/scripts/build-receipts.cjs', render: 'copy' },
   { file: '.githooks/pre-commit', template: 'templates/dot-githooks/pre-commit', render: 'wiring' },
@@ -174,6 +182,7 @@ function usage(msg) {
   process.stderr.write(
     'usage: node scripts/kit-update.cjs [--kit <kit-checkout>] [--apply <live-file>]\n' +
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
+    '                                   [--place-project-claude <filled-file>]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
     '  enforcement wiring from templates/ (collisions reported, never overwritten; an existing\n' +
@@ -715,18 +724,53 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   return (hookRefused > 0 || rowRefused > 0 || settingsIncomplete > 0 || missingControls.length > 0) ? 1 : 0;
 }
 
+// ── hard rule 5, the MERGE form (M30.D; gate-1 ruling 2 2026-08-30) ─────────────────────
+// Phase 3's handoff step, mechanical instead of prose: place the FILLED project CLAUDE.md.
+// A COMBINED root (the installer's `@sbak/CLAUDE.md` import line present — same detection as
+// sbak-install) is the person's file and is never replaced: the project rules land in root
+// CLAUDE.sbak.md (project-owned, so the kit's upgrade never touches them — sbak/ is kit-owned
+// and refreshed wholesale) and the import line is rewritten to `@CLAUDE.sbak.md`. A root
+// without the import line gets today's overwrite: the bootstrap file dies, the project rules
+// take over.
+function cmdPlaceProjectClaude(projRoot, filledPath) {
+  let filled;
+  try { filled = fs.readFileSync(path.resolve(filledPath), 'utf8'); } catch (e) {
+    process.stderr.write('kit-update: filled project CLAUDE.md unreadable at ' + filledPath + ': ' + e.message + '\n');
+    return 2;
+  }
+  const rootMd = path.join(projRoot, 'CLAUDE.md');
+  let existing = null;
+  try { existing = fs.readFileSync(rootMd, 'utf8'); } catch (_) { /* no root file — plain placement */ }
+  const hasImport = existing !== null && /(^|[^`])@sbak\/CLAUDE\.md(?![`\w])/.test(existing.replace(/`[^`]*`/g, ''));
+  if (hasImport) {
+    fs.writeFileSync(path.join(projRoot, 'CLAUDE.sbak.md'), filled);
+    fs.writeFileSync(rootMd, existing.replace(/@sbak\/CLAUDE\.md/g, '@CLAUDE.sbak.md'));
+    process.stdout.write('kit-update: combined root kept — project rules placed at CLAUDE.sbak.md; the import line now reads @CLAUDE.sbak.md; sbak/CLAUDE.md stays the kit\'s copy.\n');
+  } else {
+    fs.writeFileSync(rootMd, filled);
+    process.stdout.write('kit-update: CLAUDE.md replaced with the project rules (no import line — the bootstrap file dies so the project rules take over).\n');
+  }
+  return 0;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const kitIdx = argv.indexOf('--kit');
   const applyIdx = argv.indexOf('--apply');
+  const placeIdx = argv.indexOf('--place-project-claude');
   if (kitIdx !== -1 && (!argv[kitIdx + 1] || argv[kitIdx + 1].startsWith('--'))) usage('--kit needs a directory');
   if (applyIdx !== -1 && (!argv[applyIdx + 1] || argv[applyIdx + 1].startsWith('--'))) usage('--apply needs a managed live-file path');
+  if (placeIdx !== -1 && (!argv[placeIdx + 1] || argv[placeIdx + 1].startsWith('--'))) usage('--place-project-claude needs the filled project CLAUDE.md path');
   const detect = argv.includes('--detect');
   const adopt = argv.includes('--adopt');
   const ingest = argv.includes('--ingest');
   const dryRun = argv.includes('--dry-run');
 
   const projRoot = process.cwd();
+
+  // --place-project-claude is Phase-3 placement, not template comparison — dispatched
+  // before template resolution AND before the kit-repo no-op (it acts on the project root).
+  if (placeIdx !== -1) process.exit(cmdPlaceProjectClaude(projRoot, argv[placeIdx + 1]));
 
   // KIT-REPO NO-OP — the workshop-only pair, BOTH required (see the header note:
   // the packed fixture set made rows.json the wrong discriminator, and demanding

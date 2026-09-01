@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-irl-plan.cjs
 //
 // THE IRL/HITL PRESENCE FLOOR (M29.A half b) — a Full-tier project's spec must carry the
@@ -93,7 +93,7 @@ function main() {
 
   const { missing } = detectParts(ctx.specText);
   if (missing.length === 0) {
-    console.log('irl-plan — OK: the three-part IRL/HITL plan is present (drive moments / by hand / gets typed).');
+    // M30.I (audit row 56): silent on green — the OK line was background in the foreground.
     process.exit(0);
   }
 

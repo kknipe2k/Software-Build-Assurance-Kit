@@ -41,11 +41,11 @@ The kit comes two ways. **Most users: download the release ZIP** - the signed, c
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.4-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.5-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.4-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.4-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.4-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.4-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.5-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.5-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.5-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.5-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -58,7 +58,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.4-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.5-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -69,7 +69,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.4-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.5-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -119,7 +119,7 @@ The adopt step is not optional on the clone path either: `core.hooksPath` is loc
 
 What you should see next:
 
-1. **First response - expect a stopped session, and that is correct behavior:** the kit's entry rules check for a `[read-first stamp]` line that only Claude Code's session hooks can produce, so on Copilot the agent reports the session hooks aren't running and waits. That check exists to catch a broken hook layer on Claude Code; on Copilot the layer is absent by design.
+1. **First response:** the agent reads the auto-loaded instructions, then the kit's entry files. A Copilot session runs no hooks, so the stamp check and the read check (both live in the session hooks) do not apply here - the read floor is prose-only on this host: the agent reads the orientation files the instructions name, and you hold it to that.
 2. **You reply with the standard line:** *"This is Copilot - the session-hook layer does not run in this host. Git hooks are armed (adopt exit 0). Proceed with the honor-system steps from sbak/QUICKSTART-COPILOT.md."*
 3. **Then:** the agent echoes your working directory with a one-line scope statement (confirm it is the right folder), and presents the calibration interview - 3 asks, then a confirmation turn.
 
@@ -220,8 +220,8 @@ Open a new chat for the next stage and repeat. After the main build stages come 
 
 At Full tier the framework splits into two session types - **orchestrator** (authors Phase docs, adjudicates the build's surfaces, routes findings) and **build** (executes one stage). In Copilot that maps to two VS Code windows, each with its own chat:
 
-- **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `git worktree add ../build-wt <milestone-branch>`. Orchestrator window: the main checkout. Build window: `../build-wt`. Shared `.git`, isolated working trees, no file-race risk. Open each via **File, then Open Folder** (same `code .` caveat as §1).
-- **Not on day one:** a freshly bootstrapped project has **zero commits**, so the milestone branch cannot exist yet and `git worktree add ../build-wt <milestone-branch>` fails (`fatal: invalid reference` - executed on git 2.52). Until M01.A's first commit lands, run both chats against the single checkout - one role at a time, mode stated in each chat's first message.
+- **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed). Orchestrator window: the main checkout. Build window: `../<project>-build-wt`. Shared `.git`, isolated working trees, no file-race risk. Open each via **File, then Open Folder** (same `code .` caveat as §1).
+- **Not on day one:** a freshly bootstrapped project has **zero commits**, so the milestone branch cannot exist yet and `node scripts/set-mode.cjs --split <milestone-branch>` refuses (`fatal: invalid reference` - executed on git 2.52). Until M01.A's first commit lands, run both chats against the single checkout - one role at a time, mode stated in each chat's first message.
 
 You are the conduit - copy surfaces from the build chat to the orchestrator chat and decisions back, by switching windows. Only one role acts at a time. (Topologies A, B, C in `ORCHESTRATOR.md` §1 are Claude-Code-specific and don't apply in Copilot.)
 
@@ -287,7 +287,7 @@ Either way, the file is replaced by the project version at the end of bootstrap 
 |---|---|---|
 | Claude doesn't appear in the model picker | Org admin hasn't enabled Claude models / model switching for your Copilot plan, or your plan doesn't include them | Ask your admin to enable Claude models in the Copilot policy settings. On a personal plan, check your plan's model list on the Copilot plans page. |
 | No orientation line in the first response | The instructions file wasn't picked up | Confirm `.github/copilot-instructions.md` exists at the workspace root (§1's copy step creates it). Confirm you opened the folder itself, not a wrapping workspace (§1). If still nothing, paste the file's contents into the chat as your first message. |
-| First response says the session hooks aren't running and stops | Expected on this host - the `[read-first stamp]` check is Claude-Code-specific | Reply with §2's standard line and continue. Confirm adopt exited 0 so the Git-hook layer is armed. |
+| First response shows no `[read-first stamp]` line | Expected on this host - the stamp is printed by a session hook Copilot never runs | Nothing to fix; proceed with the honor-system steps |
 | Adopt printed `ADOPTION INCOMPLETE` (exit 1) | A required control is not active - the output names it on a `MISSING:` line | Run the printed `repair:` command exactly as printed (e.g. `repair: git init` when adopt ran before the repo was initialized), then re-run adopt as the output instructs. Re-running is always safe; a clean re-run changes nothing. |
 | Agent edits files without showing a diff | You're not in Agent Mode | Switch the chat-mode dropdown to **Agent**. The default "Ask" mode answers questions without editing. |
 | Agent ran `git commit` without asking | G1 violation | Stop. Check `git log`. In Agent Mode the terminal-command approval should have caught this. The framework's most important rule failed; investigate before continuing. |

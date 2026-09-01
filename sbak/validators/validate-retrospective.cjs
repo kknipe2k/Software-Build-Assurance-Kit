@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
@@ -171,6 +171,56 @@ function armingContext() {
 
 const HUMAN_DRIVE_FIELDS = ['drove', 'verified', 'recorded'];
 
+// ── M30.I (fade 1): the handoff-note content contract ────────────────────────────────────
+// The per-stage retro is the HANDOFF NOTE: required fields that cannot be blank or
+// boilerplate. Marker-gated on the ```handoff fence (the M12 retro-fail guard: a
+// pre-contract retro carries no fence and validates exactly as before). Fields:
+//   landed:      what landed - files, tests, run-of-record
+//   open:        what is open - the named next owner
+//   next-agent:  what the next agent must know (the gotchas home, audit row 41)
+//   drive:       the agent's drive of the real assembled surface (B.3 rider), or
+//                `n/a - <reason>` - the sentinel is a field, not an exemption
+//   mutation:    the one-line test-mutation naming (fade 3 moved it here from the slot)
+//   counts-from: where the note's numbers come from - a command/receipt, never a typed
+//                number (counts derive, never typed)
+//   off-track:   the per-stage priority line (audit row 40 rides here as one field)
+// DETECTION HONESTY (stated, not hidden): this catches blank, placeholder, stock-phrase,
+// and typed-number fields - the shapes a tired session emits. It cannot grade whether the
+// content is TRUE or the synthesis good; the stage-end review and Stage V are that wall.
+const HANDOFF_FIELDS = ['landed', 'open', 'next-agent', 'drive', 'mutation', 'counts-from', 'off-track'];
+const HANDOFF_STOCK = new Set([
+  'as planned', 'none', 'see above', 'done', 'ok', 'all good', 'covered', 'fine',
+  'yes', 'no', 'n/a', 'na', 'tbd', 'good', 'pass', 'passed',
+]);
+
+function validateHandoff(file, text, errors) {
+  const blocks = extractBlocks(text, 'handoff');
+  if (blocks.length === 0) return; // pre-contract retro: the legacy shape, untouched
+  const body = blocks[0];
+  for (const key of HANDOFF_FIELDS) {
+    const v = fieldInBlock(body, key);
+    if (v === null) {
+      errors.push(`${file}: handoff note has no \`${key}:\` line - all seven fields are required (the content contract, M30.I fade 1).`);
+      continue;
+    }
+    const val = String(v).trim();
+    if (PLACEHOLDER.test(val) || isBlankValue(v)) {
+      errors.push(`${file}: handoff \`${key}:\` is blank or a placeholder - type the real content.`);
+      continue;
+    }
+    if (HANDOFF_STOCK.has(val.toLowerCase())) {
+      errors.push(`${file}: handoff \`${key}:\` is boilerplate ("${val}") - the note is the next session's only memory; say what actually happened.`);
+      continue;
+    }
+    if (key === 'counts-from' && /^\d+$/.test(val)) {
+      errors.push(`${file}: handoff \`counts-from:\` is a typed number ("${val}") - name the command or receipt the counts derive from, never the number itself.`);
+    }
+    if (key === 'drive' && /^n\/a\b/i.test(val) && !/^n\/a\s*[-—]\s*\S{3,}/i.test(val)) {
+      errors.push(`${file}: handoff \`drive:\` says n/a with no reason - the sentinel is \`n/a - <reason>\`, a field, not an exemption.`);
+    }
+  }
+}
+
 function validateHumanDrive(file, text, errors, advisories) {
   if (!isCloseoutRetroPath(file)) return;
   const arm = armingContext();
@@ -264,6 +314,10 @@ function validateFile(file, grandfathered) {
   // 0. M29.A: the closeout consumption gate runs FIRST so its findings survive the stamp
   //    gate's early returns — the two compose; neither replaces the other.
   validateHumanDrive(file, text, errors, advisories);
+
+  // 0b. M30.I (fade 1): the handoff-note content contract - marker-gated on the ```handoff
+  //     fence, so history and legacy retros are untouched (the M12 guard).
+  validateHandoff(file, text, errors);
 
   // 1. Locate the ```user-stamp fenced block (LINE-ANCHORED — M16.A; a mid-prose mention is
   //    not the stamp).

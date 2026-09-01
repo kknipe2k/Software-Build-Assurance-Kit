@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-stage-prompts.js
 //
 // Validates stage prompts embedded in Phase docs against the schemas defined
@@ -140,7 +140,10 @@ const SCHEMAS = {
 // milestone segment, so a ratified minor milestone like M20.5 can express its stage
 // ids (M20.5.A). Exactly one segment — a sub-sub milestone (M20.5.1.A) stays illegal
 // by design. A plain milestone id (M01.A) is unchanged. Grammar-only: no slot changes.
-const ID_PATTERN_STRICT = /^M\d{2}(?:\.\d+)?\.[A-Z]$/;
+// M30.I: one trailing iteration segment is legal — `M01.D.1` is the first D.fix
+// round of stage D (two fix rounds no longer share one id; /stage disambiguates by the
+// full id). Exactly one trailing digit segment; a sub-iteration (M01.D.1.2) stays illegal.
+const ID_PATTERN_STRICT = /^M\d{2}(?:\.\d+)?\.[A-Z](?:\.\d+)?$/;
 const ID_PATTERN_TEMPLATE = /^M(?:\[NN\]|\d{2})\.[A-Z]$/;
 
 function extractXmlBlocks(content) {
@@ -305,6 +308,34 @@ function validateBlock(block, filePath, { allowPlaceholders }) {
     }
   }
 
+  // M30.I: the G13 declaration SHAPE is linted AT AUTHORING. A <risk_declaration>
+  // property row must carry either a `covered-by: … — test: …` citation or an explicit
+  // `n/a` — the field escape this closes: an orch-authored declaration passed here and
+  // failed only at commit-time validate-risk-matrix, so the builder patched the orch's
+  // artifact mid-commit, unsurfaced. Shape only — the all-9 completeness and the
+  // is-the-n/a-true judgment stay with G13 (commit) and Stage V respectively. A
+  // placeholder-triggers declaration (the template example) is not a real declaration.
+  if (root.tag === 'work_stage_prompt') {
+    const decl = /<risk_declaration\b([^>]*)>([\s\S]*?)<\/risk_declaration>/.exec(liveXml);
+    if (decl) {
+      const trigM = /\btriggers=["']([^"']*)["']/.exec(decl[1] || '');
+      const trig = trigM ? trigM[1].trim() : '';
+      if (trig !== '' && !/\{\{.*\}\}/.test(trig)) {
+        const propRe = /<property\s+name=["']([^"']+)["']\s*>([\s\S]*?)<\/property>/g;
+        let pm;
+        while ((pm = propRe.exec(decl[2])) !== null) {
+          const body = pm[2].trim();
+          if (!/covered-by:/.test(body) && !/(^|\s)n\/a\b/i.test(body)) {
+            errors.push({
+              file: filePath, line: startLine,
+              message: `<work_stage_prompt${id ? ` id="${id}"` : ''}> <risk_declaration> property "${pm[1]}" carries neither a \`covered-by: … — test: …\` citation nor an explicit \`n/a\` — the shape fails at commit (G13); fix it at authoring.`,
+            });
+          }
+        }
+      }
+    }
+  }
+
   return { errors, warnings };
 }
 
@@ -402,15 +433,18 @@ for (const f of files) {
   totalErrors += errors.length;
 }
 
-console.log();
-console.log('--- summary ---');
-for (const s of fileSummaries) {
-  const status = s.errors === 0
-    ? `OK    (${s.blocks} block${s.blocks === 1 ? '' : 's'})`
-    : `FAIL  (${s.errors} error${s.errors === 1 ? '' : 's'} in ${s.blocks} block${s.blocks === 1 ? '' : 's'})`;
-  console.log(`${status}\t${s.file}`);
+// M30.I (audit row 56): silent on green — the per-file OK summary was background printed
+// into the foreground. A green run says nothing; a failing run keeps the full summary.
+if (totalErrors > 0) {
+  console.log();
+  console.log('--- summary ---');
+  for (const s of fileSummaries) {
+    const status = s.errors === 0
+      ? `OK    (${s.blocks} block${s.blocks === 1 ? '' : 's'})`
+      : `FAIL  (${s.errors} error${s.errors === 1 ? '' : 's'} in ${s.blocks} block${s.blocks === 1 ? '' : 's'})`;
+    console.log(`${status}\t${s.file}`);
+  }
+  console.log();
+  console.log(`${totalBlocks} block${totalBlocks === 1 ? '' : 's'} across ${files.length} file${files.length === 1 ? '' : 's'}; ${totalErrors} error${totalErrors === 1 ? '' : 's'}.`);
 }
-console.log();
-console.log(`${totalBlocks} block${totalBlocks === 1 ? '' : 's'} across ${files.length} file${files.length === 1 ? '' : 's'}; ${totalErrors} error${totalErrors === 1 ? '' : 's'}.`);
-
 process.exit(totalErrors > 0 ? 1 : 0);

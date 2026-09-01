@@ -6,7 +6,7 @@
 
 **Protocol version:** v1.9 (per `sbak/STAGE-PROMPT-PROTOCOL.md` changelog).
 
-> This banner is **load-bearing for two version-gated gates**: **G9** (test-honesty) and **G13** (the risk-matrix). Because it declares **v1.7+**, every work stage below must carry a `<test_honesty>` slot (a named mutation, or the explicit `n/a — no risk surface` sentinel); and because it declares **v1.8+**, a work stage that **touches a risk surface** (a `risk_triggers:` surface, `sbak/FRAMEWORK-CONFIG.md` §4.19) must carry a `<risk_declaration>` covering the 9-property matrix. `validators/validate-test-honesty.cjs` (G9) and `validators/validate-risk-matrix.cjs` (G13) block a non-compliant work stage. **Banner-less docs comply:** a banner-LESS doc is treated as *current* (must comply), not grandfathered — only an *explicit* pre-bump banner (`v1.7`, `v1.6`, …) grandfathers the doc out of the later gates (use only when re-issuing a genuinely older doc).
+> This banner is **load-bearing for two version-gated gates**: **G9** (test-honesty) and **G13** (the risk-matrix). Because it declares **v1.7+**, the Custom path (interview) requires a `<test_honesty>` slot on every work stage below (a named mutation, or the explicit `n/a — no risk surface` sentinel) — on the Full path (the glance, the default) the slot is optional and the mutation naming lives in the handoff note's `mutation:` line (fade 3, M30.I); and because it declares **v1.8+**, a work stage that **touches a risk surface** (a `risk_triggers:` surface, `sbak/FRAMEWORK-CONFIG.md` §4.19) must carry a `<risk_declaration>` covering the 9-property matrix. `validators/validate-test-honesty.cjs` (G9) and `validators/validate-risk-matrix.cjs` (G13) block a non-compliant work stage. **Banner-less docs comply:** a banner-LESS doc is treated as *current* (must comply), not grandfathered — only an *explicit* pre-bump banner (`v1.7`, `v1.6`, …) grandfathers the doc out of the later gates (use only when re-issuing a genuinely older doc).
 
 ---
 
@@ -96,7 +96,7 @@ Per `sbak/BUILD-PLAYBOOK.md` §3.2, every stage follows the same loop:
 5. **REFACTOR** — clean up under green tests.
 6. **Verify gates** — run the milestone's hard gates from `docs/gates.md`. Self-correction budget per the CLI prompt.
 7. **Fill retrospective** — `[END]` section per `prompts/RETROSPECTIVE-TEMPLATE.md`.
-8. **Surface for approval** — cross-machine state (`git log --oneline main..HEAD` + retrospective file listing) + diff stat + gates + retrospective + draft commit message. State: *"Stage X is ready. I will not commit until you approve."*
+8. **Surface for approval** — cross-machine state (`git log --oneline main..HEAD` + retrospective file listing) + diff stat + gates + retrospective + draft commit message. State: *"Stage X is ready."* (the one do-not-commit sentence lives at the PROJECT-CLAUDE §8 approval surface)
 9. **Commit on approval** — commit on the parent-milestone branch (`claude/m{{NN}}-{{slug}}`); do NOT push between stages — push only at end of Closeout (Stage E).
 
 Closeout (Stage E) replaces steps 3–6 with: cumulative read, milestone summary, gap-analysis entry, PR description draft. See Stage E section below.
@@ -182,14 +182,13 @@ Paste this into a fresh Claude Code session for Stage A:
 
   <test_plan_required>true</test_plan_required>
 
-  <!-- v1.7 G9 — REQUIRED on every work stage of this v1.7+ doc. Name the
-       mutation where this stage touches a risk/enforcement/destructive surface, or
-       use the explicit `n/a — no risk surface` sentinel for a pure utility/doc stage.
-       A silent omission is the SEC-004 tell and BLOCKS (validate-test-honesty.cjs). -->
+  <!-- v1.7 G9 — REQUIRED on every work stage on the Custom path (interview), where a silent
+       omission BLOCKS (validate-test-honesty.cjs); OPTIONAL on the Full path (the glance, the
+       default), where the mutation naming lives in the handoff note's `mutation:` line. LEAN
+       FORM when carried: one line per named mutation — `test → mutation → killed`; the
+       mutation RUN stays part of going green on both paths. -->
   <test_honesty>
-    {{Mutation: revert <the enforcement point> → which test must go RED. Effectiveness:
-    asserts behavior not "no error"; cross-boundary uses an independent fixture.
-    OR, for a stage with no risk surface, replace this whole body with: n/a — no risk surface}}
+    {{test → mutation → killed, one line per named mutation. OR: n/a — no risk surface}}
   </test_honesty>
 
   <!-- v1.8 G13 — REQUIRED when this stage TOUCHES a risk surface (a
@@ -286,7 +285,7 @@ Paste this into a fresh Claude Code session for Stage A:
     <item>gate results (each gate, pass/fail, key numbers)</item>
     <item>retrospective (filled-in [END] section with three-axis scoring + verdict + decisions for Stage B)</item>
     <item>draft commit message from M[NN]-{{slug}}.md A.6 Commit Message section (filled with session URL)</item>
-    <item>explicit statement: "Stage M[NN].A is ready. I will not commit until you approve."</item>
+    <item>explicit statement: "Stage M[NN].A is ready."</item>
   </approval_surface>
 </work_stage_prompt>
 ```
@@ -352,8 +351,8 @@ Gates passing: {{list from docs/gates.md, all that ran}}
 
   <deliverable ref="docs/build-prompts/M[NN]-{{slug}}.md" section="B.3 Detailed Changes"/>
   <test_plan_required>true</test_plan_required>
-  <!-- v1.7 G9: name the mutation, or `n/a — no risk surface`. Required. -->
-  <test_honesty>{{Mutation: revert <enforcement point> → which test goes RED. Effectiveness assertion. OR: n/a — no risk surface}}</test_honesty>
+  <!-- v1.7 G9: the lean form — `test → mutation → killed`, or `n/a — no risk surface`. Required on the Custom path (interview); optional on the Full path, where the handoff note's `mutation:` line carries it. -->
+  <test_honesty>{{test → mutation → killed. OR: n/a — no risk surface}}</test_honesty>
   <execution_steps>
     <step name="write_failing_tests" budget="1"/>
     <step name="implement" budget="1"/>
@@ -378,7 +377,7 @@ Gates passing: {{list from docs/gates.md, all that ran}}
     <item>gate results</item>
     <item>retrospective ([END] with scoring + decisions for Stage C)</item>
     <item>draft commit message</item>
-    <item>explicit statement: "Stage M[NN].B is ready. I will not commit until you approve."</item>
+    <item>explicit statement: "Stage M[NN].B is ready."</item>
   </approval_surface>
 </work_stage_prompt>
 ```
@@ -525,7 +524,7 @@ Output: `retrospectives/M[NN].V-findings.md` using `sbak/templates/VERIFIER-FIND
     <item>findings list sorted by severity (🔴 → 🟡 → 🟢)</item>
     <item>retrospective [END] section (brief — just "did the verification surface what it should")</item>
     <item>recommendation: proceed to E / open D.fix / file waiver / re-tier</item>
-    <item>explicit: "I will not commit until you approve."</item>
+    <item>explicit statement: the stage is ready</item>
   </approval_surface>
 </verifier_stage_prompt>
 ```
@@ -647,7 +646,7 @@ Output: `retrospectives/M[NN].R-findings.md` using `sbak/templates/REFACTOR-FIND
     <item>findings list sorted by severity (🔴 → 🟡 → 🟢)</item>
     <item>retrospective [END] section (brief — "did the health check surface what it should")</item>
     <item>recommendation: proceed / open D.refactor / file waiver / re-tier</item>
-    <item>explicit: "I will not commit until you approve."</item>
+    <item>explicit statement: the stage is ready</item>
   </approval_surface>
 </refactor_stage_prompt>
 ```
@@ -795,7 +794,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
   <three_artifact_review>
     <artifact>code diff (cumulative M[NN].A through M[NN].E)</artifact>
     <artifact>per-stage retrospectives + M[NN] milestone summary</artifact>
-    <artifact>new docs/gap-analysis.md entry — flagged "IMMUTABLE once committed"</artifact>
+    <artifact>new docs/gap-analysis.md entry</artifact>
     <pushback_blocks_pr>true</pushback_blocks_pr>
   </three_artifact_review>
 
@@ -826,8 +825,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
     <item>M[NN]-summary.md (full)</item>
     <item>draft PR description (per .github/PULL_REQUEST_TEMPLATE.md if present)</item>
     <item>draft commit message from M[NN]-{{slug}}.md E.6 Commit Message section</item>
-    <item>explicit flag: "This gap-analysis entry is IMMUTABLE once committed. Please review carefully."</item>
-    <item>explicit statement: "M[NN] closeout is ready. I will not commit until you approve."</item>
+    <item>explicit statement: "M[NN] closeout is ready."</item>
   </approval_surface>
 </closeout_stage_prompt>
 ```
@@ -842,7 +840,7 @@ M[NN].E: closeout — gap-analysis entry, milestone summary
 Stage: M[NN].E — Closeout
 Phase doc: docs/build-prompts/M[NN]-{{slug}}.md
 Summary: retrospectives/M[NN]-summary.md
-Gap analysis: docs/gap-analysis.md (M[NN] entry — IMMUTABLE)
+Gap analysis: docs/gap-analysis.md (M[NN] entry)
 Session: {{filled in at commit time}}
 
 Verdict: {{Strong / Sound / Rough but shipped / Recovery needed}}

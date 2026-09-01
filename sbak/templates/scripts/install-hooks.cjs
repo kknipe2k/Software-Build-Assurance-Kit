@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/install-hooks.cjs
 //
 // One-time git-hook install for verification_locus: local_first | hybrid.

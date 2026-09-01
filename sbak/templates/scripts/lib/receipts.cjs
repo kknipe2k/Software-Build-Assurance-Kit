@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -58,6 +58,10 @@ const EVENTS = Object.freeze([
   'stage_opened',             // scripts/stage-active.cjs
   'red_approved',             // scripts/approve-red.cjs
   'stage_cleared',            // scripts/stage-active.cjs --clear
+  'orientation_stamped',      // SessionStart hook (session-start-read-first.cjs) — the stamp layer ran (M30.G)
+  'file_read',                // PostToolUse hook — a Read-tool or Bash read of a repo file, as a hashed read_ref (M30.G)
+  'channel_published',        // scripts/channel.cjs — a message appended to the terminal channel (M30.H)
+  'channel_picked_up',        // scripts/channel.cjs (or approve-red.cjs: the human consuming an approval-request) — a message surfaced (M30.H)
   'instrumentation_degraded', // any allowlisted emitter reporting its own failure
 ]);
 
@@ -97,7 +101,7 @@ const RELEASES = Object.freeze(['approve-red', 'stage-clear']);
 const EMITTERS = Object.freeze([
   'SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse',
   'PostToolUseFailure', 'PermissionRequest', 'Stop', 'SessionEnd',
-  'set-mode', 'stage-active', 'approve-red',
+  'set-mode', 'stage-active', 'approve-red', 'channel',
 ]);
 
 // Per-event emitter binding (red ruling J3): an event may only be constructed
@@ -117,6 +121,10 @@ const EVENT_EMITTERS = Object.freeze({
   stage_opened: ['stage-active'],
   stage_cleared: ['stage-active'],
   red_approved: ['approve-red'],
+  orientation_stamped: ['SessionStart'],
+  file_read: ['PostToolUse'],
+  channel_published: ['channel'],
+  channel_picked_up: ['channel', 'approve-red'],
   instrumentation_degraded: EMITTERS,
 });
 
@@ -154,10 +162,18 @@ const UNKNOWN_MS = null;
 
 // The allowlist IS the privacy mechanism: any field not named here is dropped
 // at append with a coverage note naming it.
+// `read_ref` (M30.G) is 16 hex of sha256 over a canonical repo-relative path — a HASH, never
+// the path: the "no paths, ever" floor holds while the read-ledger gate can re-hash its
+// required entries (scripts/lib/read-ledger.cjs owns the derivation).
 const ALLOWED_FIELDS = Object.freeze([
   'schema', 'at', 'event', 'session', 'role', 'stage', 'source',
-  'emitter', 'tool_category', 'tool_use_id', 'marker', 'release',
+  'emitter', 'tool_category', 'tool_use_id', 'marker', 'release', 'read_ref',
+  'seq', 'channel_class', // M30.H: the channel events carry the message seq + its bounded class - never a body, hash or path
 ]);
+// The channel's class vocabulary (M30.H) - closed, mirrors scripts/lib/channel.cjs CLASSES.
+const CHANNEL_CLASSES = Object.freeze(['stage-open', 'stage-packet', 'clarification', 'courier', 'approval-request']);
+const CHANNEL_EVENTS = Object.freeze(['channel_published', 'channel_picked_up']);
+const READ_REF_RE = /^[0-9a-f]{16}$/;
 
 // ---------------------------------------------------------------------------
 // Envelope validation — allowlist projection + format/enum teeth.
@@ -228,6 +244,21 @@ function validateEvent(raw) {
   if ('release' in event && (event.event !== 'tool_started' || RELEASES.indexOf(event.release) === -1)) {
     delete event.release;
     notes.push('field dropped (out of enum, or release on a non-tool_started event): release');
+  }
+  if ('read_ref' in event && (event.event !== 'file_read' || typeof event.read_ref !== 'string' || !READ_REF_RE.test(event.read_ref))) {
+    delete event.read_ref;
+    notes.push('field dropped (format check failed, or read_ref on a non-file_read event): read_ref');
+  }
+  if ('seq' in event && (CHANNEL_EVENTS.indexOf(event.event) === -1 || !Number.isInteger(event.seq) || event.seq < 1)) {
+    delete event.seq;
+    notes.push('field dropped (not a positive integer, or seq on a non-channel event): seq');
+  }
+  if ('channel_class' in event && (CHANNEL_EVENTS.indexOf(event.event) === -1 || CHANNEL_CLASSES.indexOf(event.channel_class) === -1)) {
+    delete event.channel_class;
+    notes.push('field dropped (out of enum, or channel_class on a non-channel event): channel_class');
+  }
+  if (event.event === 'file_read' && !('read_ref' in event)) {
+    return { ok: false, reason: 'event refused: file_read without a read_ref is not a read', notes };
   }
   return { ok: true, event, notes };
 }
@@ -714,6 +745,7 @@ function canonicalJson(value) {
 module.exports = {
   SCHEMA_VERSION,
   EVENTS,
+  CHANNEL_CLASSES,
   SESSION_ROLES,
   DERIVED_ROLES,
   SOURCES,

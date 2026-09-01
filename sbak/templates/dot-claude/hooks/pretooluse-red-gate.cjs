@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit). The HARD form of
@@ -230,13 +230,9 @@ function main() {
   const CONTROL_FILES = ['.claude/red-approved', '.claude/red-gate-allow.txt', '.claude/settings.json'];
   const denyRel = normRel(path.normalize(relPath)).toLowerCase();
   if (CONTROL_FILES.indexOf(denyRel) !== -1) {
+    // M30.I (audit row 27): one plain sentence + the command when it bites.
     process.stderr.write(
-      `\n[red-gate] REFUSED — '${normRel(relPath)}' is a red-gate control file (self-approval carve).\n` +
-      `  The gate's approval marker, allow-list, and hook wiring are not agent-writable while\n` +
-      `  a stage is open and un-approved. RED approval is the HUMAN's action: after they review\n` +
-      `  the failing tests, they run\n` +
-      `      /approve-red     (or: node scripts/approve-red.cjs)\n` +
-      `  Allow-list or settings changes during a gated stage are likewise theirs to make.\n\n`
+      `[red-gate] REFUSED — '${normRel(relPath)}' is a red-gate control file, not agent-writable during an open un-approved stage; the human runs /approve-red (or: node scripts/approve-red.cjs).\n`
     );
     process.exit(BLOCK);
   }
@@ -245,14 +241,10 @@ function main() {
 
   // All four confirmed -> BLOCK (the implementation-path block; the control-file carve
   // above is the hook's only other exit-2).
+  // M30.I (audit row 27): one plain sentence + the command when it bites (the process-gate
+  // honest-scope caveat lives in the /approve-red command doc, not in every refusal).
   process.stderr.write(
-    `\n[red-gate] Implementation edit blocked — RED tests not yet approved for stage ${stageActive}.\n` +
-    `  '${normRel(relPath)}' is an implementation path, the stage is open, and there is no\n` +
-    `  matching /approve-red. Write the failing tests first, have the human review them, then:\n` +
-    `      /approve-red     (or: node scripts/approve-red.cjs)\n` +
-    `  and re-try the edit. To leave the stage entirely: node scripts/stage-active.cjs --clear\n` +
-    `  (Process gate, not a wall: a Bash write bypasses it and it does NOT catch test-deletion —\n` +
-    `   it is effective only paired with the human red-review + mutation-kill.)\n\n`
+    `[red-gate] Implementation edit blocked — '${normRel(relPath)}' is an implementation path and stage ${stageActive}'s RED tests are not approved yet; after the human reviews them they run /approve-red (or: node scripts/approve-red.cjs).\n`
   );
   process.exit(BLOCK);
 }

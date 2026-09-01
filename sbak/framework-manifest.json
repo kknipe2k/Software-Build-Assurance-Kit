@@ -3,7 +3,7 @@
     "command_count": {
       "kind": "derived",
       "source": "templates/dot-claude/commands/*.md glob",
-      "value": 6
+      "value": 8
     },
     "entry_docs": {
       "kind": "derived",
@@ -55,7 +55,7 @@
     "kit_version": {
       "kind": "derived",
       "source": "the release identity, DERIVED from release-manifest.json version — one root for the whole stamp chain; stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "1.0.4"
+      "value": "1.0.5"
     },
     "operating_mode_count": {
       "kind": "bound",
@@ -99,8 +99,8 @@
       "kind": "referenced",
       "source": "golden-manifest.json tiers[tier].counts.rendered (read live)",
       "value": {
-        "full": 100,
-        "lite": 44
+        "full": 119,
+        "lite": 52
       }
     },
     "schema_count": {
@@ -122,7 +122,7 @@
     "script_count": {
       "kind": "derived",
       "source": "templates/scripts/*.cjs glob",
-      "value": 8
+      "value": 9
     },
     "soft_gates": {
       "kind": "bound",

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/lib/receipts-collect.cjs
 //
 // The collectors (M20.6.C) — committed artifacts become receipts. This is the

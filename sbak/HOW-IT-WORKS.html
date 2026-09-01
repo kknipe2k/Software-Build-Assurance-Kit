@@ -169,13 +169,13 @@
     </div>
     <div class="step">
       <div class="n">2 · CALIBRATE</div>
-      <div class="t">Answer 3 asks</div>
-      <div class="d">What kind of work, how much assurance, any risky surfaces. Everything else is derived and confirmed back to you. Sets how much ceremony and which gates apply.</div>
+      <div class="t">Answer one question</div>
+      <div class="d">Full or Custom. Full (the default) infers the kind of work from what you say you are building and derives the risk posture from the spec, shown as one acceptance line; Custom asks three short questions. Sets how much ceremony and which gates apply.</div>
     </div>
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
       <div class="t">Spec, milestones, scaffold</div>
-      <div class="d">Generates 44 files for Lite, 100 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
+      <div class="d">Generates 52 files for Lite, 119 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
     </div>
     <div class="step">
       <div class="n">4 · BUILD LOOP</div>
@@ -190,8 +190,8 @@
   </div>
   <p class="note">The core promise: <b>human reviews, agent implements, hooks and CI enforce.</b> The agent never commits without your explicit approval. That rule holds in every tier and every mode.</p>
 
-  <h2>Step 2 - Calibration (3 asks + a confirmation turn)</h2>
-  <p>The first thing the framework asks. Each answer maps to settings stored in <code>project-config.md</code>; everything not asked is derived and confirmed back to you in plain English. You can change them later via an append-only override log.</p>
+  <h2>Step 2 - Calibration (one question: Full or Custom)</h2>
+  <p>The first thing the framework asks. On <b>Full</b> (the default) nothing in the table below is asked: the operating mode is inferred from what you say you are building, the tier is Full, and the risk triggers derive from the spec - all shown back as one acceptance line you press enter on. On <b>Custom</b> the three questions below are asked, plus a confirmation turn. Either way each value maps to settings stored in <code>project-config.md</code>; everything not asked is derived and confirmed back to you in plain English. You can change them later via an append-only override log.</p>
   <table>
     <tr><th>Question</th><th>Options</th><th>What it controls</th></tr>
     <tr>
@@ -404,16 +404,16 @@
 
   <h2>How to use it</h2>
   <h3>Get the kit (recommended: the release ZIP)</h3>
-  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.4-starter.zip</code>.</p>
+  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.5-starter.zip</code>.</p>
   <p>Run the sequence from the folder the ZIP downloaded to (usually <code>Downloads</code>), and replace <code>&lt;projects-path&gt;</code> with wherever you keep code - the point is that the project gets a real home, not <code>Downloads</code>.</p>
   <pre><code># macOS / Linux
-unzip sbak-v1.0.4-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
+unzip sbak-v1.0.5-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude</code></pre>
   <pre><code># Windows (cmd or PowerShell)
 mkdir &lt;projects-path&gt;\my-project
-tar -xf sbak-v1.0.4-starter.zip -C &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.5-starter.zip -C &lt;projects-path&gt;\my-project
 cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -424,7 +424,7 @@ claude</code></pre>
   <pre><code>claude
 # The kit's CLAUDE.md auto-loads.
 # It echoes your folder first - confirm it's the right one.
-# Then it presents the 3-ask calibration interview.
+# Then it asks the one question: Full or Custom.
 # Then tell it what you want to build - a paragraph is enough.</code></pre>
   <h3>Then</h3>
   <p>The agent runs bootstrap (spec, milestones, scaffold), replaces the kit's CLAUDE.md with your project's own, and hands off. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
@@ -434,7 +434,7 @@ claude</code></pre>
   <table>
     <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill full">Full</span> (default)</th></tr>
     <tr><td>Best for</td><td>Under a week, low audit needs</td><td>A second reader, an audit need, or a multi-week horizon</td></tr>
-    <tr><td>Scaffold files</td><td>44</td><td>100</td></tr>
+    <tr><td>Scaffold files</td><td>52</td><td>119</td></tr>
     <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td></tr>
     <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td></tr>
     <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory; CI-enforced when a risk trigger is declared)</td></tr>

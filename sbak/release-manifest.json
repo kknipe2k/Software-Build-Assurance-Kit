@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "product": "Software Build Assurance Kit",
   "slug": "sbak",
   "buildFrom": "tag",
@@ -317,6 +317,10 @@
       "class": "passthrough",
       "fileClass": "repo-identity"
     }
+  ],
+  "_assetsNote": "M30.C: the release ASSET (the installer, which embeds its own instructions) is published beside the ZIP (attached + attested by release.yml), never packed into it and never a working-tree row. build-release.cjs bakes __SBAK_PINNED_TAG__ / __SBAK_PINNED_ZIP_SHA256__ from this manifest's version and the built ZIP's sha256; each asset gets its own .sha256 sidecar. fileClass release-asset only, fail-closed.",
+  "assets": [
+    { "src": "scripts/sbak-install.cjs", "name": "sbak-install.cjs", "fileClass": "release-asset" }
   ],
   "exclude": [
     "proposals/",

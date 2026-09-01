@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -34,6 +34,11 @@
 //   node scripts/set-mode.cjs --topology   (M29.B: read-only worktree-split assist —
 //                                           reports first-commit state + topology, and
 //                                           prints the split steps when available)
+//   node scripts/set-mode.cjs --split <branch>   (M30.H: performs the split FAIL-CLOSED —
+//                                           creates ../<project>-build-wt, refuses a pre-existing
+//                                           directory, writes role=work there, prints the launch block)
+//   node scripts/set-mode.cjs work --expect <path>   (M30.H: the identity guard — writes the
+//                                           role only when this shell's git toplevel IS <path>)
 //
 // Exit 0 = wrote exactly "<token>\n" to ./.claude/role (one atomic write).
 // Exit 2 = invalid/missing token or bad invocation — the existing files are left
@@ -62,12 +67,11 @@ function fail(msg) {
 // sbak/templates/ORCHESTRATOR.md in a generated project, so a path-reading assist breaks
 // in one layout or the other; the smoke drift lock byte-compares this copy's live output
 // against the doc's fence, which is the parity mechanism for the deliberate duplication.
+// M30.H: the block is two lines - `--split` does the worktree add fail-closed with the
+// project-derived name `../<project>-build-wt` and prints the launch block itself. No hardcoded name.
 const SPLIT_BLOCK = [
   'cd <project-path>',
-  'git worktree add ../build-wt <milestone-branch>',
-  'cd ../build-wt',
-  'node scripts/set-mode.cjs work',
-  'claude',
+  'node scripts/set-mode.cjs --split <milestone-branch>',
 ];
 
 function gitOut(argv) {
@@ -113,10 +117,57 @@ function reportTopology() {
   }
 }
 
+// ── M30.H (the three worktree-collision cures) — `--split <branch>`: the fail-closed split. The name is derived from
+// the project (the main checkout's basename), never typed; a pre-existing target is refused before
+// anything is created (`cd` can never land in someone else's tree); the launch block prints ONLY on
+// success, so a paste-in-two-steps walkthrough is structurally fail-closed.
+function doSplit(branch) {
+  const top = gitOut(['rev-parse', '--show-toplevel']);
+  if (top === null) fail('--split: not inside a git repository');
+  const gitDir = gitOut(['rev-parse', '--git-dir']);
+  const commonDir = gitOut(['rev-parse', '--git-common-dir']);
+  if (gitDir !== null && commonDir !== null && path.resolve(gitDir) !== path.resolve(commonDir)) fail('--split: run this from the MAIN checkout, not from inside a linked worktree');
+  if (gitOut(['rev-parse', '--verify', 'HEAD']) === null) fail('--split: unborn HEAD - a worktree cannot be added before the first commit (stay in the shared directory until it lands)');
+  const project = path.basename(top);
+  const target = path.resolve(top, '..', `${project}-build-wt`);
+  if (fs.existsSync(target)) fail(`--split: ${target} already exists - refusing to touch it (a pre-existing directory is someone else's tree; remove it or pick another name)`);
+  const branchExists = gitOut(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]) !== null;
+  const r = require('child_process').spawnSync('git', branchExists ? ['worktree', 'add', target, branch] : ['worktree', 'add', '-b', branch, target], { encoding: 'utf8' });
+  if (r.status !== 0) fail(`--split: git worktree add failed - ${String(r.stderr || r.stdout).trim()}`);
+  try {
+    fs.mkdirSync(path.join(target, '.claude'), { recursive: true });
+    const tmp = path.join(target, '.claude', 'role.tmp');
+    fs.writeFileSync(tmp, 'work\n', 'utf8');
+    fs.renameSync(tmp, path.join(target, '.claude', 'role'));
+  } catch (e) { fail(`--split: the worktree exists at ${target} but its role could not be written: ${e && e.message ? e.message : 'error'}`); }
+  process.stdout.write(`worktree created: ${target} (branch ${branch}) - role = work written there.\n`);
+  process.stdout.write('Open the BUILD terminal and paste this whole block (the guard refuses a wrong tree before the launch):\n\n');
+  process.stdout.write(`cd ${target}\n`);
+  process.stdout.write(`node scripts/set-mode.cjs work --expect ${target} && claude\n`);
+}
+
+// The identity guard: the role is written only when this shell's toplevel IS the expected tree.
+function expectGuard(expected) {
+  const top = gitOut(['rev-parse', '--show-toplevel']);
+  const norm = (p) => { let s = path.resolve(p); try { s = fs.realpathSync(s); } catch (_) { /* lexical */ } s = s.replace(/\\/g, '/'); return process.platform === 'win32' ? s.toLowerCase() : s; };
+  if (top === null || norm(top) !== norm(expected)) {
+    fail(`identity guard - this shell's repo root is ${top === null ? '(not a git repository)' : top} but the block expected ${expected} (git rev-parse --show-toplevel disagrees); refusing to write the role - cd to the right tree first`);
+  }
+}
+
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === '--topology') {
   reportTopology();
   process.exit(0);
+}
+if (args[0] === '--split') {
+  if (args.length !== 2 || !args[1]) fail('--split needs exactly one branch name');
+  doSplit(args[1]);
+  process.exit(0);
+}
+if (args.length === 3 && args[1] === '--expect') {
+  expectGuard(args[2]);
+  args.length = 1;
 }
 if (args.length !== 1) {
   fail(args.length === 0 ? 'no mode given' : `expected exactly one token, got ${args.length}`);

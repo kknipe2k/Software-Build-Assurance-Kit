@@ -2,9 +2,23 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.5 - 2026-08-31
+
+**The current release** - the cold-start patch on the GA release; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop. This patch closes what the first fresh bootstrap on the previous release and a real multi-milestone build surfaced: the install story, the opening ceremony, the cost of starting a session, and the handoff between the two terminals.
+
+- **Capabilities.** Everything in v1.0.4, plus:
+  - One-file install and upgrade: `sbak-install.cjs`, attested beside the ZIP, drives the whole install from inside `claude` - checksum and attestation verified, blast radius disclosed, one question at a time answered by the word that names the action, nothing written before your word, a real `CLAUDE.md` combined through one import line rather than replaced; the same command upgrades an installed kit and keeps what you modified; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - migrate them by hand until `kit-update --migrate` lands. The signed ZIP stays the manual path.
+  - One question opens the bootstrap: Full or Custom. Full infers the operating mode from your description and derives the risk posture from the spec, shown as one acceptance line; Custom runs the short interview. The boot-time ceremony that a read-only audit of every ritual could not tie to a named failure is gone.
+  - Lazy orientation: the session-start stamp stays eager and a stampless session fails loud, while the reading list loads at its own moment with each read recorded; the red-approval refuses a stage whose required reads were never recorded.
+  - A file-based channel between the orchestrator and builder terminals: stage packets and verdicts travel over an append-only log with automatic pickup in both directions; approvals stay the human's keystrokes.
+  - Verification lanes in the generated project's floor: `fast` / `stage` / `release` over one registry, an always class, settled marking for closed milestones with an affected-files override, and a union pin; the test estate is reviewed at closeout.
+  - The accumulated field findings: the settings deny list names the real `.env` variants and no catch-all (the mandated `.env.example` passes); the retrospective ends in a machine-checked handoff note; the closeout packet leads with deltas-from-plan and the open findings and is validated before it surfaces; the release-state row is required at closeout; the gate manifest is validated.
+- **Limitations.** Unchanged from v1.0.4: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Every mechanical change is pinned by the kit's regression suite (the suite that gates releases in the kit's development repo - run on Windows during development and on Linux CI), with the failing check recorded before each fix; the installer was driven by the owner on a real Windows machine before it shipped, and the cut's clean-environment verify drives it again on the published assets, including the POSIX hook-execution leg. Built from a signed tag and published with SLSA Level 2 build provenance covering both the ZIP and the installer.
+
 ## v1.0.4 - 2026-08-05
 
-**The current release** - a field-test patch on the GA release; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes. This patch closes what the first real end-to-end adoption surfaced: one new enforcement surface, mechanical support at the session-topology transitions, a regex-construction hardening pass, and the documentation fixes a real user hit.
+A field-test patch on the GA release. No interface changes. This patch closes what the first real end-to-end adoption surfaced: one new enforcement surface, mechanical support at the session-topology transitions, a regex-construction hardening pass, and the documentation fixes a real user hit.
 
 - **Capabilities.** Everything in v1.0.3, plus:
   - A human-drive floor, both halves: a Full-tier spec must carry the in-real-life / human-in-the-loop plan section (a mandatory prose instruction is now mechanically checked), and the milestone closeout consumes that section - human-typed drive answers are required beside the closeout stamp before the closeout counts. The defect class this closes: a milestone shipping green with no human ever running the app.

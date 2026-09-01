@@ -22,11 +22,14 @@
 # on-demand by the stage prompt, not preloaded (they were already past the cap-8
 # cut, silently — this makes the drop honest).
 
-CLAUDE.md
-project-config.md
-docs/build-prompts/M01-foundation.md
-docs/identity.md
-docs/backlog.md
-docs/gates.md
-docs/app-map.md
-docs/gotchas.md
+# Entry grammar (M30.G lazy orientation): <path>  when: <boundary>  [- why]. Boundaries:
+# session-start (inlined by the hook) | host (loaded by Claude Code itself) | stage-open (checked by
+# approve-red) | verify (/verify step 1) | closeout (/closeout step 1) | phase-0/1/3 (bootstrap) | on-demand.
+CLAUDE.md  when: host - Claude Code loads it itself; listed for the record
+project-config.md  when: session-start - tier, toggles, operating_mode: small and always needed
+docs/build-prompts/M01-foundation.md  when: stage-open - the open Phase doc: read your stage section before the red-stop
+docs/identity.md  when: session-start - what this is / is not
+docs/backlog.md  when: stage-open - the ranked backlog the stage must not drift from
+docs/gates.md  when: stage-open - the gate matrix your stage-end packet reports against
+docs/app-map.md  when: stage-open - the drive/test map you extend for every shipped surface
+docs/gotchas.md  when: session-start - the accumulated traps; short and always live

@@ -30,9 +30,12 @@
 # omissions (no prior retrospectives, no prior R findings, no app-map) are
 # preserved.
 
-CLAUDE.md
-project-config.md
-docs/build-prompts/M01-foundation.md
-spec/project-spec.md
-docs/gates.md
-docs/gotchas.md
+# Entry grammar (M30.G lazy orientation): <path>  when: <boundary>  [- why]. Boundaries:
+# session-start (inlined by the hook) | host (loaded by Claude Code itself) | stage-open (checked by
+# approve-red) | verify (/verify step 1) | closeout (/closeout step 1) | phase-0/1/3 (bootstrap) | on-demand.
+CLAUDE.md  when: host - Claude Code loads it itself
+project-config.md  when: session-start - tier + refactor_mode
+docs/build-prompts/M01-foundation.md  when: on-demand - the Phase doc, for the cumulative scope Stage R reviews
+spec/project-spec.md  when: on-demand - the spec, when a duplication or drift finding needs its intent
+docs/gates.md  when: on-demand - the gate matrix (a linter integration named here arms the Complexity pass)
+docs/gotchas.md  when: session-start - the accumulated traps

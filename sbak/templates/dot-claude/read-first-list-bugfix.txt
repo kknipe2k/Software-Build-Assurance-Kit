@@ -24,8 +24,11 @@
 # The bootstrap rewrites `docs/bugfix/<bug-id>.md` below to the actual bug id.
 # Cap still applies (read_first_cap in project-config.md); list in priority order.
 
-CLAUDE.md
-project-config.md
-sbak/BUILD-PLAYBOOK.md
-docs/gotchas.md
-docs/bugfix/<bug-id>.md
+# Entry grammar (M30.G lazy orientation): <path>  when: <boundary>  [- why]. Boundaries:
+# session-start (inlined by the hook) | host (loaded by Claude Code itself) | stage-open (checked by
+# approve-red) | verify (/verify step 1) | closeout (/closeout step 1) | phase-0/1/3 (bootstrap) | on-demand.
+CLAUDE.md  when: host - Claude Code loads it itself
+project-config.md  when: session-start - operating_mode: bug_fix + tier
+sbak/BUILD-PLAYBOOK.md  when: on-demand - the per-stage loop, when a phase prompt cites a section
+docs/gotchas.md  when: session-start - the accumulated traps
+docs/bugfix/<bug-id>.md  when: stage-open - the bug contract: reproducer, blast radius, waiver

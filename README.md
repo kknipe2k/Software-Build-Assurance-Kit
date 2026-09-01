@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.4-green" alt="Status: GA v1.0.4"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.5-green" alt="Status: GA v1.0.5"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -17,15 +17,15 @@ A drop-in kit that wraps a coding agent in controls you can check. AI agents wri
 
 **Deciding if it's worth your evening?** [WHY-THIS-KIT.md](WHY-THIS-KIT.md) - two pages, honest costs.
 
-**Want to try it?** For most users the recommended path is the signed release ZIP - download **`sbak-v1.0.4-starter.zip`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), verify it (the `.sha256` checksum and, stronger, `gh attestation verify` - SLSA build attestation), unzip, then run the adopt step. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Want to try it?** Download **`sbak-install.cjs`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in, start `claude` there, and type `sbak-install`. That is the whole job: the script carries its own instructions, pins the release, verifies the ZIP's checksum and attestation, discloses what it will write, asks, and installs - nothing lands before your go. Upgrading an installed kit is the same command. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The signed release ZIP stays available as the manual path. Full steps: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
-**This is the v1.0.4 GA release** - See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the notes for both.
+**This is the v1.0.5 GA release** - See [RELEASE-NOTES.md](RELEASE-NOTES.md) for exactly what is claimed, what is not, and the notes for both.
 The kit was built with its own process - [its own build receipt](example-receipt.html) is derived from real commits, findings, and rework, not a staged demo.
 
 
 ## Read First
 
-The only file you should read before starting is this Readme - the kit's interview does the rest. And you don't need to study the rest to proceed: **ask instead of reading**. The session you open has full visibility of the kit's docs and your repo - once your project is running, that session is the orchestrator - so any "what now / how do I / where is" question gets answered in-session, with the right doc quoted when it matters. The order below is for when you *want* the background:
+The only file you should read before starting is this Readme - the kit's one opening question does the rest. And you don't need to study the rest to proceed: **ask instead of reading**. The session you open has full visibility of the kit's docs and your repo - once your project is running, that session is the orchestrator - so any "what now / how do I / where is" question gets answered in-session, with the right doc quoted when it matters. The order below is for when you *want* the background:
 
 1. **This README** - what the kit is, what it isn't, when not to use it.
 2. **[example-receipt.html](example-receipt.html)** - what the output looks like on real work.
@@ -60,7 +60,7 @@ Three things hold that shape in place, and none of them is a document the agent 
 
 - **The gates are mechanical, and they are tested like code.** Most process frameworks are prose, and agents demonstrably ignore prose. Here the floors are 17 validators, 4 hooks, and committed git hooks that run before a commit lands. The enforcement layer has its own regression suite in the development repository, and `scripts/bake-inheritance.cjs` ships as the proof a reader can run: it renders a real project and a planted defect must fail a baked gate. Presence is never taken for effectiveness.
 - **The reviewer starts blind, and has to prove it can see.** Every milestone ends with a verifier session whose read-first list structurally omits the builder's notes - a bias guard the hooks enforce rather than a convention. Before its findings count for anything, it must find every defect in a set of deliberately seeded ones. A verifier that rubber-stamps is caught by construction, not by trust.
-- **The ceremony is priced, chosen, and revisable.** A short interview sets a tier. You can move up or down later by telling the orchestrator who edits one file and logs why. Nothing about the tier is baked into the code.
+- **The ceremony is priced, chosen, and revisable.** One question sets the tier (Full by default; Custom runs the short interview). You can move up or down later by telling the orchestrator who edits one file and logs why. Nothing about the tier is baked into the code.
 
 The result is a build that can tell its own story: what was decided, what broke, what was fixed, and what remains unknown - with unknowns shown as unknown rather than rounded to zero.
 ## What this isn't
@@ -85,12 +85,12 @@ There is no guarantee that a heavyweight process framework beats a concise `CLAU
 
 ## Quickstart
 
-[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the ZIP path for a new project or an existing repo, plus the clone alternate. The short version, **from the recommended `sbak-v1.0.4-starter.zip`** (verify the `.sha256` first). Run it from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`:
+[QUICKSTART.md](sbak/QUICKSTART.md) covers the install in full - the installer (recommended), the ZIP path for a new project or an existing repo, plus the clone alternate. The installer in one line: put `sbak-install.cjs` in the target directory, start `claude`, type `sbak-install`. The manual version, **from `sbak-v1.0.5-starter.zip`** (verify the `.sha256` first). Run it from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.4-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.5-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude
@@ -100,7 +100,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.4-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.5-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -116,15 +116,13 @@ claude
 **Prefer to clone?** The clone alternate (same rule - give it a real home): `git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git <projects-path>/my-project && cd <projects-path>/my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude`. One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 Once the kit is in your repo start `claude` from the repo.
-The CLI waits for you to speak first. Your opening message can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`. The kit takes it from there: it echoes your folder (confirm it), then guides with a short interview - three asks: 
+The CLI waits for you to speak first. Your opening message can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`. The kit takes it from there with one question - **Full or Custom?**
 
-**1.) what kind of work this is**
+**Full** (the default): no further choices. You say what you want to build; the kit infers the kind of work, derives the risk posture from the spec, and shows the whole calibration as one acceptance line - `Full / <mode> / risk triggers: <list> [enter to accept]` - press enter, or type a correction.
 
-**2.) the tier**
+**Custom**: a short interview - three asks (what kind of work, the tier, any declared risk triggers) plus one confirmation turn that surfaces every derived value (review cadence, ship target, where tests run, the file count) in plain English with its why, and invites correction.
 
-**3.) any declared risk triggers** 
-
-plus one confirmation turn that surfaces every derived value (review cadence, ship target, where tests run, the file count) in plain English with its why, and invites correction. Answer, then describe what you want to build, and the kit writes your project's scaffold. From then on every session inherits the same rules automatically. 
+Either way the kit then writes your project's scaffold. From then on every session inherits the same rules automatically. 
 
 Already have a project? Unzip the ZIP into that repo - the only collision is `CLAUDE.md` - then run the adopt step. Again: the directory you run in is the directory that gets written to.
 
@@ -138,7 +136,7 @@ The unit of work is a **stage**. A milestone is a few stages; a project is a few
 
 At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows** that never talk directly - **you are the conduit between these terminals.**
 
-At start you open one window - the **bootstrap session**. It leads the calibration interview, plans the project with you, and scaffolds the files - then it retires, and its last act is walking you through opening the two windows that run the build.
+At start you open one window - the **bootstrap session**. It asks the one question (Full or Custom), plans the project with you, and scaffolds the files - then it retires, and its last act is walking you through opening the two windows that run the build.
 
 The first is the **orchestrator** - a long-lived coding partner that directs the work, builds each milestone doc and ensures adherence to the kit's policy. This terminal does not code or write (generally).
 
@@ -232,7 +230,7 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 ## Install and download
 
-**Recommended:** download `sbak-v1.0.4-starter.zip` and its `.sha256` from the releases page and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.4-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Prerequisites, exactly: **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent (Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim - see the host table above); `gh` only if you want the attestation check. The kit itself is stack-agnostic. Full install detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
+**Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing. **Manual:** download `sbak-v1.0.5-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.5-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Prerequisites, exactly: **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent (Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim - see the host table above); `gh` only if you want the attestation check. The kit itself is stack-agnostic. Full install detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 
 Cloning the repository (above) is an alternative.
 

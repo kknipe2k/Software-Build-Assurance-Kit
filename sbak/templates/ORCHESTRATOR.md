@@ -70,9 +70,9 @@ The role split is the same regardless of hosting. Only cross-machine state handl
 | **A — Two CLIs + git worktrees, one machine** *(recommended for Claude Code)* | Orchestrator in the main checkout; build in `claude --worktree`. Shared `.git`, isolated working trees. | None — same filesystem; the orchestrator reads git and the build's working tree directly. | Default for Claude Code. The cleanest setup. |
 | **B — Web orchestrator + local CLI build** | Orchestrator on claude.ai/code; build on a local CLI. | **Real** — the web orchestrator sees only `origin`; the build has commits not yet pushed. The §3 cross-machine pre-flight is mandatory every edit. | Only when the build genuinely runs on a separate machine. |
 | **C — Two CLIs, same directory, no worktree** | Two sessions, one working directory. | None, but file-race risk if the two are run truly concurrently. | Quick work; safe because the user serializes. |
-| **D — Two VS Code windows + git worktrees** *(canonical for Copilot at Full)* | Orchestrator chat in the main VS Code window (`code .`); build chat in a second window opened on `git worktree add ../build-wt <branch>` (`code ../build-wt`). Each window has its own Copilot Chat with Claude selected. Shared `.git`, isolated working trees. The kit's `.github/copilot-instructions.md` shim auto-loads in both. | None — same filesystem. Mode-aware reading becomes honor-system (no SessionStart hook in Copilot); state the mode in each chat's first message and verify the orientation stamp. | The Copilot equivalent of Topology A. The walkthrough demonstrates this setup. |
+| **D — Two VS Code windows + git worktrees** *(canonical for Copilot at Full)* | Orchestrator chat in the main VS Code window (`code .`); build chat in a second window opened on the worktree `node scripts/set-mode.cjs --split <branch>` creates (`code ../<project>-build-wt`). Each window has its own Copilot Chat with Claude selected. Shared `.git`, isolated working trees. The kit's `.github/copilot-instructions.md` shim auto-loads in both. | None — same filesystem. Mode-aware reading becomes honor-system (no SessionStart hook in Copilot); state the mode in each chat's first message and verify the orientation stamp. | The Copilot equivalent of Topology A. The walkthrough demonstrates this setup. |
 
-**Topology A setup:** from the repo root, `git worktree add ../build-wt <milestone-branch>` then run the build with `claude` inside `../build-wt`; run the orchestrator with `claude` in the main checkout. Both share `.git`, so the orchestrator sees the build's commits the instant they land and can read the build worktree's uncommitted files by path.
+**Topology A setup:** from the repo root, `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed and prints the launch block) then run the build with `claude` inside `../<project>-build-wt`; run the orchestrator with `claude` in the main checkout. Both share `.git`, so the orchestrator sees the build's commits the instant they land and can read the build worktree's uncommitted files by path.
 
 **`worktree-after-first-commit` — Topology A may not exist yet on day one.** G1 holds through bootstrap, so the project's first commit is M01.A's. A project that arrived as a ZIP into a fresh `git init` therefore has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD** (a kit clone inherits history and is unaffected). Check with `git rev-parse --verify HEAD`; if it exits non-zero, run **Topology C** (two terminals, one directory, `set-mode` before each session's first prompt) until M01.A's first commit lands, then create the worktree and move the build session into it.
 
@@ -82,15 +82,14 @@ The role split is the same regardless of hosting. Only cross-machine state handl
 
    ```
    cd <project-path>
-   git worktree add ../build-wt <milestone-branch>
-   cd ../build-wt
-   node scripts/set-mode.cjs work
-   claude
+   node scripts/set-mode.cjs --split <milestone-branch>
    ```
+
+   The script creates `../<project>-build-wt` (refusing a directory that already exists), writes `role = work` there, and prints the second block to paste - `cd` into the new tree, then `node scripts/set-mode.cjs work --expect <that path> && claude`. The `--expect` guard refuses to write the role from the wrong tree, so `claude` never launches in someone else's checkout.
 
    **Confirm before continuing:** the new session's stamp says `role=work`. The worktree carries its own `.claude/role`, so the two windows stop sharing the role file from this moment — the set-mode ordering rule retires here.
 
-2. The orchestrator stays in the main checkout; every later builder/verifier session opens in `../build-wt` (shared `.git` — the orchestrator sees commits the instant they land). Then courier the next step as usual, naming where it goes: *"in the builder session, type `/stage M01 B`."*
+2. The orchestrator stays in the main checkout; every later builder/verifier session opens in `../<project>-build-wt` (shared `.git` — the orchestrator sees commits the instant they land). Then courier the next step as usual, naming where it goes: *"in the builder session, type `/stage M01 B`."*
 
 **Cross-machine pre-flight applies in Topology B only.** In A and C the orchestrator verifies state by reading git directly — no need to ask the user to paste `git log`.
 
@@ -161,6 +160,10 @@ Per milestone M[NN]:
 - The user picks a CLI option OR types one response — there is no "alongside."
 - **Never dump options without a recommendation.**
 
+### The channel (standing - replaces the courier handoff format)
+
+Every block for the builder travels on the terminal channel, never by copy-paste: adjudicate with the user in plain prose, surface the ONE block the builder needs (the build prompt, an answer, the verdict packet) verbatim, and stop. The user types `/send` (or `/send --approval` for the RED verdict) - that keystroke is the adjudication record; the script stamps this session's role, sequence-numbers and hashes the block, and the builder's pickup surfaces the same bytes with the same hash. Builder packets (stage-open, gate-1, red-stop, stage-end, clarification questions) arrive on their own: this session ends every turn while a stage is open by arming the watcher (`node scripts/channel.cjs watch`, in the background) and wakes when the inbox grows. Shell commands for the user still go in one fenced block in the user's shell form. Before the worktree split the channel does not exist and the user carries blocks by hand - say so once, then move on.
+
 ### To the build CLI
 
 - **Brief and exact.** Include only what it does not already know — filter every line through "does it know this?"
@@ -170,7 +173,7 @@ Per milestone M[NN]:
 
 ### The RED verdict packet — the RED-RELEASE line (ruling 5, UAT #15)
 
-A red-review adjudication goes back to the builder as a **verdict packet**. When the verdict is
+A red-review adjudication goes back to the builder as a **verdict packet**, sent with `/send --approval` (the `approval-request` class: the builder's pickup surfaces it and waits; only the human's `/approve-red` consumes it). When the verdict is
 "release the red-gate," the packet **ends with this exact line**:
 
 ```
@@ -211,6 +214,7 @@ A consultation that turns into a real decision (changes scope, tier, or a contra
 
 - **Web-research before any medium/significant decision or authoring** — pricing, API shapes, library / security / UX best practice, third-party schemas. Research → decide → document the rationale (`CLAUDE.md §12`).
 - **Never commit or push without explicit user approval; never push to `main`; never open a PR unless explicitly asked.**
+- **The lane-edge record.** When the builder drafts owner-domain content mid-stage (a floor fired on a MISSING spec section or ratified value; the builder assembled a draft from ratified sources, held the commit, and routed it for ratification — the standing rule in `sbak/BUILD-PLAYBOOK.md` §4.1), the orchestrator records the lane-edge event: one line in its state section naming the artifact, the sources, and the ratification verdict.
 - **Pushback authority.** The orchestrator is the brain that catches the user *under*-checking. When the user says "this is basic, skip X," check the artifacts before agreeing — and disagree, with evidence, when they say otherwise. *"The build hasn't produced a screenshot in 3 stages and `design.md` is empty — I'd keep the design pass despite 'basic.'"* "Basic" is a claim about the problem; the artifacts are evidence about the work. Surface the gap and let the user decide with it in hand. (This requires the orchestrator to be reasoning at sufficient capability — on a weak model it's intermittent; the model-class stamp backs it up by making capability visible.)
 - `CLAUDE.md §4` hard rules apply in full.
 

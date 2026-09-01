@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-release-readiness.cjs
 //
 // The G16 release-readiness gate (clause 2 — the

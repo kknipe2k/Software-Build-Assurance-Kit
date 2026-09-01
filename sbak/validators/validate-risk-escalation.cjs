@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-risk-escalation.cjs
 //
 // The G11 risk-escalation gate, shipped framework-wide

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.4
+// @kit-version 1.0.5
 // validators/validate-app-map.cjs
 //
 // The App-Map currency primitive (M04) — sibling to check-append-only.cjs in
@@ -330,9 +330,12 @@ function main() {
       base = argv[++i];
       if (base === undefined) die2('--base requires a <ref> argument.');
     } else if (a === '--tests') {
+      // M30.I: a comma-joined value is the shape the workflow token fill renders
+      // ('a/**,b/**' in ONE flag) — split it, so the rendered invocation binds every glob
+      // instead of one dead literal that matches nothing.
       const g = argv[++i];
       if (g === undefined) die2('--tests requires a <glob> argument.');
-      testGlobs.push(g);
+      for (const part of g.split(',')) if (part.trim() !== '') testGlobs.push(part.trim());
     } else if (a === '--surface') {
       const g = argv[++i];
       if (g === undefined) die2('--surface requires a <glob> argument.');
@@ -556,7 +559,7 @@ function main() {
     );
     process.exit(1);
   }
-  process.stdout.write(`ok    ${mapPath}  (${verified.length} verified entr${verified.length === 1 ? 'y' : 'ies'} bound)\n`);
+  // M30.I (audit row 56): silent on green — the ok line was background in the foreground.
   process.exit(0);
 }
 
