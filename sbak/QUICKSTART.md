@@ -8,18 +8,20 @@
 
 ## Just get going
 
-In a hurry? One decision, one command, then the kit drives **(you need Git, Node 22+, and Claude Code - §0)**:
+In a hurry? One file, one word, then the kit drives **(you need Git, Node 22+, and Claude Code - §0)**:
 
-1. **New project** - unzip the release ZIP into a fresh directory (§1's **New repo** sequence). **Existing repo** - unzip into the repo and adopt (§1's "Existing repo" line).
-2. Run `claude` in your project with the kit. **The CLI waits for you to speak first** - your opening message can simply be what you want (*"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*) or just `go`. The kit takes it from there: it echoes your directory (confirm it), then asks what kind of work this is; everything else arrives one question at a time, at the moment the run needs it.
+1. Download `sbak-install.cjs` from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. The directory you run in is the directory that gets written to.
+2. Start `claude` there and type `sbak-install`. The script verifies what it downloads, asks before it writes anything, arms the hooks, and prints `Done` (§1 has the full walk-through, including the manual ZIP path).
+3. Leave that session - type `/exit`, or press Ctrl+C twice - and start `claude` again in the same folder. The hooks the install just armed only take effect in a fresh session.
+4. Say what you want: *"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*, or just `go`. The kit works out the kind of work from your answer, derives the risk posture from the spec it writes with you, and shows the whole calibration as a single line to accept.
 
 **Nothing leaves your machine until you explicitly say "push" or "open the PR"** - those are single, separate approvals near the end of a run (no pushes between stages; `git commit`/`git push` sit at "ask" on every permission-fence level). Until then, everything is local.
 
 **Don't study the docs - ask.** The session you just opened has full visibility of the kit's docs and your repo (once your project is running, that session is the orchestrator): any *"what now / how do I / where is"* question gets answered in-session, with the right doc quoted when it matters.
 
-**Repo already running the kit? Just coming back from a fully closed session?** Skip the interview entirely: `node scripts/set-mode.cjs orchestrator`, then `claude`, and tell the orchestrator what you want: *"Author the next milestone - \<your feature\>."* That one paste is the steady state of the whole framework.
+**Repo already running the kit? Just coming back from a fully closed session?** Skip the bootstrap entirely: `node scripts/set-mode.cjs orchestrator`, then `claude`, and tell the orchestrator what you want: *"Author the next milestone - \<your feature\>."* That one paste is the steady state of the whole framework.
 
-The sections below unpack the same path in full - prerequisites, the clone gotchas, the interview, the loop.
+The sections below unpack the same path in full - prerequisites, the install paths, what the kit works out for you, the loop.
 
 ---
 
@@ -49,15 +51,15 @@ Download ONE file from the [releases page](https://github.com/kknipe2k/Software-
 sbak-install
 ```
 
-That is the whole job. The script carries its own instructions; Claude reads them and runs it one step at a time. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The script downloads the release ZIP, verifies it, and creates the git repo if there is none. One question at a time: first the download (it names the exact URL and where the ZIP will land, then shows you the checksum and attestation result), then the proceed - `OK to proceed? Type install, list, or no`, where `list` shows every file first; every question ends with the exact word to type, and the person types nothing else. On an existing repo the script hands Claude a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through with you before that proceed. Nothing is written before your word; the ZIP lands in `.sbak-install/` inside the folder (removed after a successful install) and a plain-text install log at `sbak/INSTALL.log`, versioned with the kit. Running the script by hand at a terminal does nothing but tell you to start claude here. **Upgrading** an installed kit is the same command: the report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), one question, nothing written before your `y`, and the previous version stays in git history. The script pins the release it installs, verifies the ZIP's checksum and, where `gh` is available, its attestation - and says plainly when it could not. It then runs the adopt step, so the hooks are live when it prints `Done`.
+That is the whole job. The script carries its own instructions; Claude reads them and runs it one step at a time. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The script downloads the release ZIP, verifies it, and creates the git repo if there is none. It asks one thing at a time: first the download (it names the exact URL and where the ZIP will land, then shows you the checksum and attestation result), then the proceed - `OK to proceed? Type install, list, or no`, where `list` shows every file first; every question ends with the exact word to type, and the person types nothing else. On an existing repo the script hands Claude a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through with you before that proceed. Nothing is written before your word; the ZIP lands in `.sbak-install/` inside the folder (removed after a successful install) and a plain-text install log at `sbak/INSTALL.log`, versioned with the kit. Running the script by hand at a terminal does nothing but tell you to start claude here. **Upgrading** an installed kit is the same command: the report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), then a single proceed question - `OK to upgrade? Type upgrade, list, or no` - and nothing is written before you type `upgrade`. `sbak/` and the live kit files refresh; files you changed are kept and named; the bootstrap-filled files (your pre-commit hook and `verify-local`) stay at the version they were installed at and are named for you, so migrate those by hand until `kit-update --migrate` lands. The previous version stays in git history. The script pins the release it installs, verifies the ZIP's checksum and, where `gh` is available, its attestation - and says plainly when it could not. It then runs the adopt step, so the hooks are live when it prints `Done`. Then leave that session (type `/exit`, or press Ctrl+C twice) and start `claude` again in the same folder - the hooks it just installed only arm in a fresh session, and the install session itself will refuse further prompts.
 
 ### Download the release ZIP - the manual fallback
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.5-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.6-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.5-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.5-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.5-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.5-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.6-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.6-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.6-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.6-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -68,7 +70,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.5-starter.zip -d <projects-path>/my-project
+unzip sbak-v1.0.6-starter.zip -d <projects-path>/my-project
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -79,7 +81,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.5-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.6-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -133,30 +135,24 @@ claude
 
 What you should see next:
 
-1. **First response:** Claude echoes the read-first stamp and asks the one question - **Full or Custom?** Full (the default): no more choices, one acceptance line to press enter on later. Custom: three short questions.
-2. **Then:** "What do you want to build?" - discovery and the spec follow. On the Full path, the acceptance glance (`Full / <mode> / risk triggers: <list> [enter to accept]`) appears after the spec lands, derived from it by script; on Custom, the interview below runs first.
+1. **First response:** Claude echoes the read-first stamp - one line naming the session's role and its reading list - and asks what you want to build.
+2. **Then:** discovery and the spec follow. The acceptance line (`Full / <mode> / risk triggers: <list> [enter to accept]`) appears once the spec lands, derived from it by script. Press enter to accept it, or type a correction.
 
 If you do not see this sequence, jump to Troubleshooting.
 
 ---
 
-## 3. The Custom path: the 3 asks
+## 3. What the kit works out for you
 
-Pick **Custom** and the calibration interview runs - 3 asks + 1 confirmation turn. On **Full** none of this is asked: the mode is inferred from your first answer, tier is Full, and risk triggers are derived from the spec and shown on the one glance line.
+You calibrate nothing by hand. From your answer and the spec it writes with you, the kit derives the three values that shape the run and shows them on the acceptance line:
 
-| Ask | You're choosing | Safe default if unsure |
+| Derived | From | On the line as |
 |---|---|---|
-| What kind of work is this? | greenfield / bug_fix / research_publish / audit | **greenfield** |
-| How much assurance? | Full / Lite (how much process) | **Full** (the default) |
-| Any risky surfaces? | the six risk triggers (destructive data ops, archives, untrusted writes, credentials, untrusted HTML, installers) | **none** - declaring one raises verification on that surface |
+| The kind of work | your first answer - greenfield, bug_fix, research_publish or audit | the mode; say a mode word to correct it |
+| The assurance level | Full, the default | the tier |
+| Risky surfaces | the spec, read against the six risk triggers (destructive data ops, archives, untrusted writes, credentials, untrusted HTML, installers) | the trigger list; each one raises verification on that surface |
 
-**Everything else is derived and confirmed back to you in plain English.** Deliverable type, where tests run, review cadence, validator severity - each derived value arrives in the confirmation turn with a one-line why and an invitation to correct it.
-
-Three ways to answer:
-
-- **Directly:** "greenfield, Full, no risk surfaces."
-- **Describe your project** and let Claude propose the calibration.
-- **Delegate:** say "pick something reasonable."
+**Everything else is derived and confirmed back to you in plain English.** Deliverable type, where tests run, review cadence, validator severity - each derived value arrives with a one-line why and an invitation to correct it.
 
 You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 
@@ -189,10 +185,13 @@ At the end of bootstrap:
 - The `origin` remote is reset - it pointed at the kit; you choose local-only, your own repo, or `gh repo create`.
 - Bootstrap is done. The build loop begins.
 
-### Important: The Two-Brain Flow
-Before build begins - Claude will lead the user through opening a **2nd Terminal** - this will house the build/verify agents.
+### Important: the two terminals, and the channel between them
 
-**Note** - within the terminal 2, the build or verifier session is closed at the end of each stage. Then reopened in the same terminal 2 with a fresh session for the next stage. **The Orchestrator terminal 1 remains open through the entire build process**.
+Before the build begins, Claude leads you through opening a **2nd Terminal** - this will house the build/verify agents. **The Orchestrator terminal 1 remains open through the entire build process**; in terminal 2 the build or verifier session is closed at the end of each stage, then reopened with a fresh session for the next.
+
+The two terminals talk over **the channel** - an append-only log inside your repository. Stage packets (the stage opening, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions, so you are not carrying blocks between windows. The verifier and refactor sessions use it too. **Approvals are never automated:** the red release and the commit approval are your keystrokes, and nothing reaches the build terminal until you type `/send`. Every turn in either terminal ends by saying what it moved to the channel and whether that session is still listening, so silence never has to be guessed at.
+
+The channel starts at this split. Until then - the bootstrap session, and the first handoff into terminal 2 - anything that has to move between windows moves by hand.
 
 ## 5. Run the build loop
 
@@ -200,7 +199,7 @@ This is the operational part the visual overview doesn't spell out.
 
 Each stage runs as its own agent: a fresh session in an enforced role.
 
-**Each stage is a fresh Claude session.** Context is cleared between stages on purpose. The SessionStart hook re-loads orientation automatically every time.
+**Each stage is a fresh Claude session.** Context is cleared between stages on purpose. At session start a hook prints a short stamp naming the session's role and its reading list; the files themselves are read at the moment a step needs them, and each read is recorded - so a stage cannot open its red gate on reads that never happened.
 
 ---
 
@@ -212,20 +211,19 @@ For **Full tier** - the **three-gate per-stage loop** (when `red_review: on`, th
 
 1. Open a fresh Claude session in the project (`claude`, or `/clear` in an existing one - both work; `STAGE-LOOP.md` is the home doctrine for the difference).
 2. **Verify the hook fired:** Claude's first response should include a line like `[read-first stamp] role=work, op=greenfield, loaded N of M files (M on the manifest, read at their when:), 0 skipped`. If it doesn't, jump to Troubleshooting - orientation didn't load and the stage is unreliable.
-3. **Run the stage.** Easiest: type `/stage M01 A` - the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No copy-paste. (`/verify M01`, `/refactor M01`, and `/closeout M01` work the same way.)
+3. **Run the stage.** Easiest: type `/stage M01 A` in the build terminal - the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No paste. (`/verify M01`, `/refactor M01` and `/closeout M01` work the same way, and `/on-track` checks the work against the backlog whenever you want it.) In the orchestrator's terminal, `/listen` puts that session on the stage and `/send` carries an adjudicated block across.
    - *Or* paste by hand: open `docs/build-prompts/M01-<title>.md`, find `### A.5 CLI Prompt`, copy the fenced ` ```xml ` block, paste it in.
-4. **Gate 1 - plan approval.** Claude states its deliverable + test plan and waits. Confirm or correct.
-   - *Or* **Best Practice: copy/paste to Orchestrator Terminal 1** for adjudication. Orch will create a prompt to paste back to the build terminal. **At each step the user has the option to paste to the Orch for advice. This is Best Practice.**
-5. **Gate 2 - red-stop.** Claude writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. Approve the test design, or send it back. **Best Practice is to copy/paste to Orch Terminal 1 for adjudication.**
+4. **Gate 1 - plan approval.** Claude states its deliverable + test plan, and the packet travels the channel to the orchestrator. You adjudicate what the orchestrator surfaces; its approval prompt reaches the build terminal on your `/send`.
+5. **Gate 2 - red-stop.** Claude writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. The red-stop packet reaches the orchestrator over the channel; you adjudicate the test design there, then release the gate or send it back.
    - This catches shallow or wrong-contract tests at the cheapest moment - especially valuable on weaker models. Skip this gate per project by setting `red_review: off`.
-   - **In the two-brain flow the release rides the orchestrator's verdict packet.** It ends with this explicit line: `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs`
+   - **The release rides the orchestrator's verdict packet.** It ends with this explicit line: `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs`
    - Claude acts only on that line. Approval language without it **is not a release** - Claude stops and tells you `/approve-red` is required. Enter `/approve-red` slash command in the terminal to invoke.
-6. **Gate 3 - stage-end.** Claude implements to green, runs gates, fills a retrospective, and surfaces the whole stage for your review - **Best Practice is to copy/paste to Orch Terminal 1 for adjudication.**:
+6. **Gate 3 - stage-end.** Claude implements to green, runs gates, fills a retrospective, and the stage-end packet travels the channel to the orchestrator for adjudication with you:
    - The surface: diff, gate results, retrospective, draft commit message. It says *"I will not commit until you approve."*
    - The retrospective includes a required **user friction stamp** you fill yourself: `verdict:` pass or fail, plus an optional sentence - the independent check on the agent's self-grade. Default is pass; an explicit fail forces the Friction-heavy outcome.
    - The stamp slot is enforced by a pre-commit validator - an empty stamp fails the commit.
 7. **Review.** Approve, and it commits. Do **not** expect it to commit before you approve - gate G1, the framework's single most important rule. If it ever commits without approval, that's a bug; surface it.
-8. **Open a fresh session for the next stage.** Repeat through the stages, the last stages after the main build stages (A, B, C, ...) follow - **each will execute in a fresh build session in terminal 2 - and will be guided by the orchestrator in terminal 1**:
+8. **Open a fresh session for the next stage.** Repeat through the stages, the last stages after the main build stages (A, B, C, ...) follow - **each will execute in a fresh build session in terminal 2, on the same channel, and will be guided by the orchestrator in terminal 1**:
    - The **Verifier**: `/verify M01` in a verifier session - set `node scripts/set-mode.cjs verifier` first; the UserPromptSubmit hook blocks mode mismatches.
    - The **Refactor** check when its trigger fires - at milestone boundaries, when the tech-debt count crosses its threshold or the milestone interval elapses, whichever comes first, always after the Verifier; Lite skips it (`/refactor M01` in a refactor session - `node scripts/set-mode.cjs refactor`).
    - **Closeout**: `/closeout M01` - surfaces the explicit *continue / ship v1 here / pause to re-tier* choice. This closes the milestone.
@@ -240,7 +238,7 @@ At Full tier the agent runs as **two distinct session types**, never sharing a s
 - **Orchestrator** - authors Phase docs / ADRs, adjudicates the build's surfaces, routes Verifier findings, runs PR/merge. Governed by `ORCHESTRATOR.md`.
 - **Build** - executes one stage from a pasted §X.5 prompt. Governed by `CLAUDE.md` + the stage prompt; never reads `ORCHESTRATOR.md`.
 
-**You are the conduit** - you carry the build's surfaces to the orchestrator and the orchestrator's prompts to the build. Only one role acts at a time.
+**You are the decision-maker, not the courier** - the channel carries the packets both ways. You adjudicate what the orchestrator surfaces, release each gate with your own keystroke, and run any live testing it directs. Only one role acts at a time.
 
 How to host the two roles (`ORCHESTRATOR.md` §1 has the full table):
 
@@ -269,8 +267,9 @@ At **Lite tier** the two roles collapse into one session - there is no separate 
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| No `Full or Custom?` question on first run | `CLAUDE.md` didn't auto-load | Confirm you ran `claude` from the project root (where `CLAUDE.md` is). Confirm Claude Code reads `CLAUDE.md` (it does by default). |
-| No `[read-first stamp]` line in a session | SessionStart hook didn't fire | Run `/hooks` in Claude Code - the SessionStart entry should be listed. If not, validate `.claude/settings.json` is valid JSON. Confirm `node` is on PATH (`node --version`). See `templates/dot-claude/README.md` (installs as `.claude/README.md`). |
+| Claude's first response ignores the kit - no stamp, no ask about what you want to build | `CLAUDE.md` didn't auto-load | Confirm you ran `claude` from the project root (where `CLAUDE.md` is). Confirm Claude Code reads `CLAUDE.md` (it does by default). |
+| The session you installed from refuses every prompt after `Done` | That session started before the kit's hooks existed, so it carries no orientation stamp and the prompt check fails closed | Leave it - `/exit`, or Ctrl+C twice - and start `claude` again in the same folder. The install itself is complete; only that one session is unusable. |
+| No `[read-first stamp]` line in a session | SessionStart hook didn't fire | Run `/hooks` in Claude Code - the SessionStart entry should be listed. If not, validate `.claude/settings.json` is valid JSON. Confirm `node` is on PATH (`node --version`). |
 | `git clone` says destination not empty | Target dir exists with files | `git clone` creates the directory - don't pre-create it. Pick a new name or clone to a fresh path. |
 | Agent committed without asking | G1 violation - should never happen | Surface it immediately. Check `git log`. The framework's most important guarantee failed; investigate before continuing. |
 | Adopt printed `ADOPTION INCOMPLETE` (exit 1) | A required control is not active - the output names it on a `MISSING:` line | Run the printed `repair:` command exactly as printed (e.g. `repair: git init` when adopt ran before the repo was initialized), then re-run adopt as the output instructs: `node scripts/kit-update.cjs --adopt` (adopt has already installed that copy). Re-running is always safe; a clean re-run changes nothing. |
@@ -284,7 +283,7 @@ At **Lite tier** the two roles collapse into one session - there is no separate 
 
 Read these when you need them. You do **not** need to read them all up front; the SessionStart hook loads the right subset per session.
 
-> **Where you are:** in an unzipped install the files in this map live inside `sbak/`, with two exceptions: `CLAUDE.md` sits at the repo root, one level up from this file; `README.md` is the public repo's front page, not packed into the ZIP. Paths below are relative to `sbak/`.
+> **Where you are:** in an unzipped install the files in this map live inside `sbak/`, with two exceptions: `CLAUDE.md` sits at the repo root, one level up from this file; `README.md` is the public repo's front page, not packed into the ZIP. Paths below are relative to `sbak/` inside the ZIP; rows under `templates/` are copied or rendered into your project by the bootstrap.
 
 ### Start here
 
@@ -309,7 +308,6 @@ Read these when you need them. You do **not** need to read them all up front; th
 | File | Read it for |
 |---|---|
 | `CLAUDE.md` | The bootstrap orchestration. Auto-loaded on first session; replaced by your project's own at end of bootstrap. You normally don't edit this. |
-| `templates/CALIBRATION-INTERVIEW.md` | The exact text of the 3-ask interview (mode / tier / risk triggers) + the confirmation turn + smell-flagging + toggle mapping |
 | `templates/PROJECT-CLAUDE.md` | What `CLAUDE.md` becomes after bootstrap - your project's standing execution rules (read by both session types) |
 | `templates/ORCHESTRATOR.md` | The orchestration operating manual - installed as `ORCHESTRATOR.md` at Full. Decision index for authoring / adjudication / routing + topology table + consultation protocol + pushback authority. Build sessions ignore it. |
 | `templates/SPEC-TYPE-SECTIONS.md` | Per-deliverable-type contract section appended to the spec (cli command surface / library API surface / service endpoint contracts / web design.md pointer + visual acceptance) |
@@ -323,14 +321,14 @@ Read these when you need them. You do **not** need to read them all up front; th
 | `validators/validate-stage-prompts.cjs` | XML schema validator for Phase docs. Runs at pre-commit + CI. Warns when a Phase doc exceeds 600 lines. |
 | `validators/validate-retrospective.cjs` | User friction-stamp gate (Full). Pre-commit fails on an empty/placeholder stamp in a staged retrospective (`verdict:` pass or fail); an explicit fail is accepted with an advisory NOTE that the outcome is forced to Friction-heavy. |
 | `validators/README.md` | Validator usage + combined pre-commit recipe |
-| `scripts/verify-local.cjs` | The kit's one local verification entrypoint (pre-push + CI). On the kit's own tree a full run takes roughly nine minutes - measured 550.9 s single-invocation on the reference machine (2026-07-27), with the smoke harness alone at ~478 s - and prints per-phase elapsed seconds. Size any wrapping tool's command budget *above* that (a 120 s default timeout kills it mid-run; fixture work is sandbox-confined, so re-run the push). A generated project runs its own, far smaller floor. |
+| `templates/scripts/verify-local.cjs` | The one local verification entrypoint (pre-push + CI), rendered into your project by the bootstrap. It runs in three lanes over one registry: `fast` on every push, `stage` at a stage boundary, `release` the complete floor and the only release evidence. On the kit's own tree the `fast` lane measured 117.5 s and the `release` lane 1277.6 s (win32, at the M30 closeout), and it prints per-phase elapsed seconds. Size any wrapping tool's command budget *above* the release lane (a 120 s default timeout kills it mid-run; fixture work is sandbox-confined, so re-run the push). A generated project runs its own, far smaller floor. |
 | `scripts/lib/sandbox.cjs` | The fixture-confinement primitive: sandbox roots, fail-closed path guard, pinned fixture git env - why an interrupted or worktree-orchestrated suite run cannot mutate the repo it lives in. |
-| `scripts/build-receipts.cjs` | Build receipts: normal sessions leave local event ledgers under `.claude/receipts/`; `render` turns them + committed history into a deterministic JSON/HTML/MD report under `reports/` - gitignored as a default, not a wall (negate the entry to track a report deliberately); `--check` is the release preflight. |
+| `templates/scripts/build-receipts.cjs` | Build receipts, rendered into your project by the bootstrap: normal sessions leave local event ledgers under `.claude/receipts/`; `render` turns them + committed history into a deterministic JSON/HTML/MD report under `reports/` - gitignored as a default, not a wall (negate the entry to track a report deliberately); `--check` is the release preflight. |
 | `templates/dot-github/workflows/validate-stage-prompts.yml` | CI workflow installed into the project |
 | `templates/dot-claude/hooks/session-start-read-first.cjs` | The SessionStart hook - auto-loads the mode-aware read-first list + emits the `[read-first stamp]` |
 | `templates/dot-claude/hooks/user-prompt-submit-mode-check.cjs` | The 3-brain enforcement hook - blocks a stage prompt pasted into a session whose `.claude/role` doesn't match the prompt's declared mode |
-| `templates/dot-claude/commands/{stage,verify,refactor,closeout,on-track,approve-red}.md` | Slash commands (`/stage M01 A`, `/verify M01`, `/refactor M01`, `/closeout M01`, `/on-track`, `/approve-red`) that read the Phase doc and run the matching block - courier relief, no XML paste |
-| `templates/dot-claude/README.md` | Hook installation + troubleshooting (installs as `.claude/README.md`) |
+| `templates/dot-claude/commands/{stage,verify,refactor,closeout,on-track,approve-red,listen,send}.md` | The slash commands installed at Full: `/stage M01 A`, `/verify M01`, `/refactor M01` and `/closeout M01` read the Phase doc and run the matching block (no XML paste); `/on-track` checks the work against the backlog; `/approve-red` is your release of the red gate; `/listen` and `/send` are the orchestrator's two ends of the channel |
+| `templates/dot-claude/README.md` | What's in `.claude/` and mode-aware loading (installs as `.claude/README.md`) |
 
 ## 8. The one rule that never changes
 

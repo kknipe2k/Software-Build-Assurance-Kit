@@ -106,7 +106,7 @@
   .layer.immut { background: #fdf3f3; border-color: #f0caca; }
   .layer.immut .ln { color: var(--red); }
 
-  /* human-conduit centerpiece */
+  /* human-centre centerpiece: the two session columns, the channel band, the human between them */
   .hub { display: grid; grid-template-columns: 1fr auto 1.2fr auto 1fr; gap: 0; align-items: center; margin: 22px 0 8px; }
   .hubcol { display: flex; flex-direction: column; gap: 10px; }
   .hubcard { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
@@ -164,13 +164,13 @@
   <div class="flow">
     <div class="step">
       <div class="n">1 · DROP IN</div>
-      <div class="t">Unzip the release ZIP, run adopt</div>
-      <div class="d">The adopt step arms the Git hooks and verifies itself: exit 0 means every enforcement layer is active. Then open the folder in your agent.</div>
+      <div class="t">Run the installer, then restart</div>
+      <div class="d">Download <code>sbak-install.cjs</code> into the folder the kit should live in, start <code>claude</code>, and type <code>sbak-install</code>. It asks before it writes anything, arms the Git hooks, and prints <code>Done</code>. Then leave that session and start <code>claude</code> again: the hooks it just installed only arm in a fresh one. The signed ZIP is the manual path.</div>
     </div>
     <div class="step">
       <div class="n">2 · CALIBRATE</div>
-      <div class="t">Answer one question</div>
-      <div class="d">Full or Custom. Full (the default) infers the kind of work from what you say you are building and derives the risk posture from the spec, shown as one acceptance line; Custom asks three short questions. Sets how much ceremony and which gates apply.</div>
+      <div class="t">Say what you want to build</div>
+      <div class="d">The kit infers the kind of work from your answer, derives the risk posture from the spec, and shows the whole calibration back as a single acceptance line you press enter on. That sets how much ceremony and which gates apply.</div>
     </div>
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
@@ -190,24 +190,24 @@
   </div>
   <p class="note">The core promise: <b>human reviews, agent implements, hooks and CI enforce.</b> The agent never commits without your explicit approval. That rule holds in every tier and every mode.</p>
 
-  <h2>Step 2 - Calibration (one question: Full or Custom)</h2>
-  <p>The first thing the framework asks. On <b>Full</b> (the default) nothing in the table below is asked: the operating mode is inferred from what you say you are building, the tier is Full, and the risk triggers derive from the spec - all shown back as one acceptance line you press enter on. On <b>Custom</b> the three questions below are asked, plus a confirmation turn. Either way each value maps to settings stored in <code>project-config.md</code>; everything not asked is derived and confirmed back to you in plain English. You can change them later via an append-only override log.</p>
+  <h2>Step 2 - Calibration (the acceptance line)</h2>
+  <p>You say what you want to build, and the kit derives every setting below from that answer and the spec it writes with you, then shows the whole calibration back as a <b>single acceptance line</b> - <code>Full / &lt;mode&gt; / risk triggers: &lt;list&gt; [enter to accept]</code>. Press enter to accept it, or type a correction. Each value maps to settings stored in <code>project-config.md</code>, and you can change them later via an append-only override log.</p>
   <table>
-    <tr><th>Question</th><th>Options</th><th>What it controls</th></tr>
+    <tr><th>What it decides</th><th>Options</th><th>What it controls</th></tr>
     <tr>
-      <td>What kind of work is this? <em>(asked)</em></td>
+      <td>What kind of work this is <em>(inferred from your answer)</em></td>
       <td>greenfield · bug_fix · research_publish · audit</td>
-      <td>The <b>operating mode</b>: which discovery questions follow and the top-level shape of the work.</td>
+      <td>The <b>operating mode</b>: which discovery questions follow and the top-level shape of the work. Naming a mode word in your answer corrects it.</td>
     </tr>
     <tr>
-      <td>How much assurance? <em>(asked)</em></td>
+      <td>How much assurance <em>(Full)</em></td>
       <td><span class="pill full">Full</span> (default) <span class="pill lite">Lite</span></td>
       <td>The <b>tier</b>: how much ceremony. Scaffold size, retrospective depth, validator severity (Full blocks, Lite warns).</td>
     </tr>
     <tr>
-      <td>Any risky surfaces? <em>(asked)</em></td>
+      <td>Any risky surfaces <em>(derived from the spec)</em></td>
       <td>destructive data ops · archives · untrusted writes · credentials · untrusted HTML · installers</td>
-      <td>The <b>risk triggers</b>. Risk overrides tier: each declared surface gets deeper verification, and at Full it arms CI enforcement of the append-only ledgers. This is the risk escalation path.</td>
+      <td>The <b>risk triggers</b>, read out of the spec and listed on the acceptance line. Risk overrides tier: each declared surface gets deeper verification, and at Full it arms CI enforcement of the append-only ledgers. This is the risk escalation path.</td>
     </tr>
     <tr>
       <td>Deliverable type <em>(derived + confirmed)</em></td>
@@ -220,7 +220,7 @@
       <td>The <b>verification_locus</b>: where the test suite runs and what GitHub Actions costs. Public repo: cloud is free and unlimited. Private repo: local-first (hybrid) keeps hosted minutes near zero. Orthogonal to tier; usually proposed from repo visibility and whether the project ships to macOS.</td>
     </tr>
   </table>
-  <p class="note">Don't know? The default is <b>greenfield + Full, no declared risk</b> (everything else derived and confirmed). Re-tiering later is cheap and tracked.</p>
+  <p class="note">Nothing to decide up front: the default is <b>greenfield + Full, no declared risk</b>, and everything else is derived and shown back to you on that one line. Re-tiering later is cheap and tracked.</p>
 
   <h2>Step 4 - The per-milestone build loop</h2>
   <p>Every milestone runs through the same pipeline. Each box is a <b>fresh agent session</b>: context is cleared between stages on purpose, so each stage reads only what it needs and nothing stale carries over.</p>
@@ -241,7 +241,7 @@
     <span class="arrow">→</span>
     <div class="node"><div class="lbl">PR</div><div class="sub">review · merge</div></div>
   </div>
-  <div class="loop">↺ If Stage V finds a critical issue, a scoped <b>D.fix</b> stage runs, then V re-runs. Capped at 2 D.fix rounds per milestone; a third escalates to you instead of iterating on.</div>
+  <div class="loop">If Stage V finds a critical issue, a scoped <b>D.fix</b> stage runs, then V re-runs. Capped at 2 D.fix rounds per milestone; a third escalates to you instead of iterating on.</div>
 
   <h3>Three human approval gates, every work stage</h3>
   <div class="gates">
@@ -299,7 +299,7 @@
       <ul>
         <li>Cumulative review of everything shipped this milestone vs. the spec</li>
         <li>Writes one entry in the <b>append-only gap-analysis ledger</b> (Full): never edited, only appended; CI enforcement arms when a risk trigger is declared</li>
-        <li>You review three artifacts together: the code diff, the retrospectives, and the ledger entry</li>
+        <li>You do not need to read the code: you review the agent's own review and the orchestrator's comments alongside the retrospectives and the ledger entry, and you run any live testing yourself</li>
       </ul>
     </div>
   </div>
@@ -308,7 +308,7 @@
     <ul>
       <li>Every session leaves an event ledger under <code>.claude/receipts/</code>: a session hook records stage lifecycle events as they happen</li>
       <li><code>node scripts/build-receipts.cjs render</code> folds those ledgers and the committed history into a deterministic build receipt (JSON, HTML, and Markdown) under <code>reports/</code></li>
-      <li>What it looks like on real work: <code>example-receipt.html</code>, generated from this kit's own build, never hand-edited</li>
+      <li>What it looks like on real work: <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/blob/main/example-receipt.html">example-receipt.html</a> on the kit's repository, generated from this kit's own build, never hand-edited</li>
     </ul>
   </div>
 
@@ -319,13 +319,16 @@
       <div class="hubcard"><div class="ht">Orchestrator</div><div class="hd">long-lived planning session</div></div>
     </div>
     <div class="hublink">⇄</div>
-    <div class="hubcard human"><div class="ht">Human</div><div class="hd">you - gatekeeper · conduit</div></div>
+    <div class="hubcard human"><div class="ht">Human</div><div class="hd">you - you adjudicate and approve</div></div>
     <div class="hublink">⇄</div>
     <div class="hubcol">
       <div class="hubcard"><div class="ht">Builder</div><div class="hd">fresh session per stage</div></div>
       <div class="hubcard"><div class="ht">Verifier</div><div class="hd">fresh context, narrowed reads</div></div>
       <div class="hubcard"><div class="ht">Refactorer</div><div class="hd">fresh context, strictest bias guard</div></div>
     </div>
+  </div>
+  <div class="hubdocs">THE CHANNEL - HOW THE TERMINALS TALK&nbsp;
+    <span class="chip">stage open</span><span class="chip">the plan</span><span class="chip">the red-stop</span><span class="chip">the stage-end</span><span class="chip">the verdicts</span><span class="chip">/listen</span><span class="chip">/send</span>
   </div>
   <div class="hubdocs">DOCUMENTS - THE SHARED MEMORY&nbsp;
     <span class="chip">CLAUDE.md</span><span class="chip">Phase doc</span><span class="chip">retrospectives</span><span class="chip">V findings</span><span class="chip">gap-analysis ledger</span><span class="chip">spec</span>
@@ -334,7 +337,7 @@
     <div class="ht">Git hooks + CI</div>
     <div class="hd">machine - enforcement on every push: the validators, the append-only ledger check, the full gate suite. The session layer sits above them (orientation stamp, role guard, red gate) and runs in Claude Code; the machine layers run everywhere.</div>
   </div>
-  <p class="note">The two truths this picture carries: the session types <b>never share a context</b>, and <b>you carry the surfaces between them</b> (the conduit pattern). On this host the mode split is structural, not honor-system: the role guard is a hook. Each role's card follows below.</p>
+  <p class="note">The two truths this picture carries: the session types <b>never share a context</b>, and <b>the channel carries the packets between them</b> - an append-only log in your repository that stage packets travel over automatically in both directions, so you are no longer copying surfaces between windows by hand. What stays yours is the judgement: you adjudicate what the sessions produce, and <b>approvals are never automated</b> - the RED release and the commit approval are your keystrokes, and nothing reaches the builder until you type <code>/send</code>. You put the orchestrator on listen for a stage with <code>/listen</code>. The channel starts when the two windows split; the bootstrap session and the first handoff still move by hand. On this host the mode split is structural, not honor-system: the role guard is a hook. Each role's card follows below.</p>
   <div class="cols">
     <div class="panel">
       <h3>Orchestrator</h3>
@@ -347,7 +350,7 @@
     <div class="panel">
       <h3>Builder</h3>
       <ul>
-        <li>Executes one stage per fresh session from a pasted prompt</li>
+        <li>Executes one stage per fresh session, from a stage prompt your <code>/send</code> carries to it over the channel</li>
         <li>Writes the failing tests first; the red gate holds until a human approves them</li>
         <li>Does not sequence, route, or author Phase docs</li>
       </ul>
@@ -376,12 +379,12 @@
     <tr><th>Layer</th><th>What it does</th><th>Where it runs</th></tr>
     <tr>
       <td>Session layer</td>
-      <td>Four session hooks: orientation auto-load with a verifiable stamp at session start, the role guard on every prompt, the red gate on implementation edits, and the receipts event recorder.</td>
+      <td>Four session hooks: the orientation stamp at session start with each later read recorded, the role guard on every prompt, the red gate on implementation edits, and the receipts event recorder.</td>
       <td><b>Claude Code only.</b> Other hosts (for example GitHub Copilot) never run these hooks; there the same steps are honor-system procedure that host's QUICKSTART teaches, and picking a Claude model inside another host does not change that.</td>
     </tr>
     <tr>
       <td>Git hooks</td>
-      <td>Pre-commit runs the validators over what is staged; pre-push runs the verification floor before anything leaves your machine.</td>
+      <td>Pre-commit runs the validators over what is staged; pre-push runs the verification floor before anything leaves your machine. That floor runs in three lanes over one registry: <code>fast</code> on every push, <code>stage</code> at a stage boundary, and <code>release</code> - the complete floor, and the only lane a release claim may cite.</td>
       <td><b>Any host, mechanically</b>, once <code>--adopt</code> has armed them via <code>core.hooksPath</code>. They run no matter what wrote the commit.</td>
     </tr>
     <tr>
@@ -393,27 +396,32 @@
   <p class="note"><b>Commit and push boundaries, every host:</b> the agent never commits and never pushes without your explicit approval. The session layer enforces the discipline around that promise where it runs; the Git hooks and CI verify the content regardless of who wrote it.</p>
 
   <h2>How memory works (why it stays coherent across many sessions)</h2>
-  <p>The framework is built on five layers. Lower layers read from higher layers. The top two auto-load on every single session, so the agent always re-orients before doing anything.</p>
+  <p>The framework is built on five layers. Lower layers read from higher layers. A session-start hook opens every session with a short stamp naming the session's role and its reading list; the files themselves are read at the moment a step needs them, and <b>every read is recorded</b> - a stage cannot open its red gate on reads that never happened.</p>
   <div class="layers">
     <div class="layer"><div class="ln">Layer 1</div><div class="lc"><b>Static contract</b><span>The spec. Changes only via a formal decision record (ADR).</span></div></div>
-    <div class="layer"><div class="ln">Layer 2</div><div class="lc"><b>Slow protocol - auto-loaded every session</b><span>CLAUDE.md, project-config.md, the playbook, identity, gates. A SessionStart hook injects these so the agent can't "forget" to read them.</span></div></div>
+    <div class="layer"><div class="ln">Layer 2</div><div class="lc"><b>Slow protocol - stamped at session start, read on demand</b><span>CLAUDE.md, project-config.md, the playbook, identity, gates. A SessionStart hook names them in the stamp and the ledger records each one as it is read, so the agent cannot skip one and claim otherwise.</span></div></div>
     <div class="layer"><div class="ln">Layer 3</div><div class="lc"><b>Per-milestone Phase doc</b><span>The plan for the current milestone: stages, scope, the XML prompts pasted into each fresh session.</span></div></div>
     <div class="layer"><div class="ln">Layer 4</div><div class="lc"><b>Per-session working memory</b><span>Ephemeral. One stage's context. Cleared when the stage ends, on purpose.</span></div></div>
     <div class="layer immut"><div class="ln">Layer 5</div><div class="lc"><b>Stage outputs - committed; some append-only forever</b><span>Code commits, retrospectives, the gap-analysis ledger, the build receipts. The audit trail. Append-only items are never rewritten.</span></div></div>
   </div>
 
   <h2>How to use it</h2>
-  <h3>Get the kit (recommended: the release ZIP)</h3>
-  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.5-starter.zip</code>.</p>
+  <h3>Get the kit (recommended: the installer)</h3>
+  <p>Download <code>sbak-install.cjs</code> from the releases page into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. It is a release asset beside the ZIP, attested with the release, with its <code>.sha256</code> next to it. Then start <code>claude</code> in that directory and type <code>sbak-install</code>.</p>
+  <p>The script carries its own instructions. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks <code>OK to proceed? Type install, list, or no</code> - <code>list</code> shows you every file first. Every question ends with the exact word to type, and <b>nothing is written before your word</b>. On an existing repo you get a blast-radius report first: collisions, what the kit's files would sit next to, the detected stack. It creates the git repo if there is none, runs the adopt step, and prints <code>Done</code>.</p>
+  <p><b>Then leave that session and start <code>claude</code> again in the same folder.</b> The hooks the installer just wrote only arm in a fresh session, and the install session itself will refuse further prompts.</p>
+  <p><b>Upgrading is the same command.</b> The report becomes an upgrade report, <code>sbak/</code> and the live kit files refresh, files you modified are kept and named, and the previous version stays in git history.</p>
+  <h3>The manual path: the release ZIP</h3>
+  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.6-starter.zip</code>.</p>
   <p>Run the sequence from the folder the ZIP downloaded to (usually <code>Downloads</code>), and replace <code>&lt;projects-path&gt;</code> with wherever you keep code - the point is that the project gets a real home, not <code>Downloads</code>.</p>
   <pre><code># macOS / Linux
-unzip sbak-v1.0.5-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
+unzip sbak-v1.0.6-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 claude</code></pre>
   <pre><code># Windows (cmd or PowerShell)
 mkdir &lt;projects-path&gt;\my-project
-tar -xf sbak-v1.0.5-starter.zip -C &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.6-starter.zip -C &lt;projects-path&gt;\my-project
 cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -423,11 +431,11 @@ claude</code></pre>
   <h3>Start</h3>
   <pre><code>claude
 # The kit's CLAUDE.md auto-loads.
-# It echoes your folder first - confirm it's the right one.
-# Then it asks the one question: Full or Custom.
-# Then tell it what you want to build - a paragraph is enough.</code></pre>
+# The first response is the read-first stamp.
+# Tell it what you want to build - a paragraph is enough.
+# It shows the calibration back as one acceptance line; press enter.</code></pre>
   <h3>Then</h3>
-  <p>The agent runs bootstrap (spec, milestones, scaffold), replaces the kit's CLAUDE.md with your project's own, and hands off. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
+  <p>The agent runs bootstrap (spec, milestones, scaffold) and replaces the kit's CLAUDE.md with your project's own. Its last act is walking you through opening the two windows that run the build - that split is where the channel starts. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
   <p class="note">The full session layer runs in Claude Code. Other agents work with the enforcement split above: the Git hooks and CI stay mechanical everywhere (the README's host table and the Copilot QUICKSTART cover that path). Cross-platform: the hooks are Node, which the kit already requires; no bash or WSL needed on Windows.</p>
 
   <h2>Pick a tier</h2>

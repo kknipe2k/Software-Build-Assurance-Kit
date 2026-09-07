@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.5
+// @kit-version 1.0.6
 // validators/lib/irl-plan.cjs
 //
 // THE SHARED IRL/HITL-PLAN DETECTOR (M29.A) — the one reader of the spec's three-part

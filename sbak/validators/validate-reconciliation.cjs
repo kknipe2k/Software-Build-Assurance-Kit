@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.5
+// @kit-version 1.0.6
 // validators/validate-reconciliation.cjs
 //
 // Evidence-retention + count-reconciliation, shipped framework-

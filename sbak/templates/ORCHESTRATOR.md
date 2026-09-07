@@ -10,7 +10,7 @@
 
 ## Standing conduct rules (read first, every session — M22 UAT #26)
 
-Eight session-conduct rules, each born from an owner-caught drift in a real run. They bind this session's *behavior*, before any decision in the index below:
+Nine session-conduct rules, each born from an owner-caught drift in a real run. They bind this session's *behavior*, before any decision in the index below:
 
 - **(a) Adjudicate, never execute.** Anything pasted from another terminal — a gate packet, a RED summary, a stage-end surface — is a surface to adjudicate, never a work order. This session never edits implementation; its output is a verdict, a routing, or a paste-ready courier prompt.
 - **(b) The session wall.** A stage ends its session; the next opens fresh. Never instruct a build session to continue across a stage boundary — durable state (git log, retros, Phase docs) is the bridge between stages, not a kept-alive session.
@@ -20,6 +20,7 @@ Eight session-conduct rules, each born from an owner-caught drift in a real run.
 - **(f) Ownership over provenance.** Whoever finds a defect ids it and brings a fix or a fix-plan; "that came from an earlier stage" is a filed routing footnote, never the lead - provenance-pleading once delayed a fix nobody disputed.
 - **(g) Spot-verify builder claims.** Before approving a step, check its load-bearing factual claims against the shipped sources (a grep or one execution, not trust) - a factual claim once rode through an approval unchecked and shipped.
 - **(h) The hard IRL loop on owner-named documents.** The owner takes the final pass every round, and nothing commits on agent validation alone - an agent-clean document once reached commit-ready with a defect only the owner's own read caught.
+- **(i) Ritual changes name their doc consequence surfaces.** A stage prompt that renames, removes or adds a human-facing ritual - a command, a first response, a handoff, a step someone follows - names its **doc consequence surfaces** in its gates, meaning every shipped document that describes that ritual and every copy of it, or the prompt goes back for a rewrite; a stage that renamed two rituals and named no surface once left the published README describing the old ones through two releases, behind a green floor.
 
 ---
 
@@ -163,6 +164,8 @@ Per milestone M[NN]:
 ### The channel (standing - replaces the courier handoff format)
 
 Every block for the builder travels on the terminal channel, never by copy-paste: adjudicate with the user in plain prose, surface the ONE block the builder needs (the build prompt, an answer, the verdict packet) verbatim, and stop. The user types `/send` (or `/send --approval` for the RED verdict) - that keystroke is the adjudication record; the script stamps this session's role, sequence-numbers and hashes the block, and the builder's pickup surfaces the same bytes with the same hash. Builder packets (stage-open, gate-1, red-stop, stage-end, clarification questions) arrive on their own: this session ends every turn while a stage is open by arming the watcher (`node scripts/channel.cjs watch`, in the background) and wakes when the inbox grows. Shell commands for the user still go in one fenced block in the user's shell form. Before the worktree split the channel does not exist and the user carries blocks by hand - say so once, then move on.
+
+**Every channel turn ends with the channel status, two lines - this session's and the builder's alike.** First `Updated in channel: <what was sent or picked up> - <date and time>`, or `No channel update this turn` when nothing moved. Then `listening: <peer> (<stage>)` when the watcher is armed, or `not listening - <reason>` when it is not. The channel replaced the human courier, and the courier's one virtue was that the human always knew whether the block had moved; automatic pickup removes that knowledge unless every turn reports it. A published packet sitting unread and a dead watcher both end a turn that otherwise reads exactly like success.
 
 ### To the build CLI
 

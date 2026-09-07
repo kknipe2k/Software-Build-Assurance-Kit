@@ -1,9 +1,7 @@
 # Stage loop - operating cheat sheet
 
 > The kit's per-stage operating pattern, in brief. Hand this to anyone about to
-> run a build (or read it before your own first stage). This is the loop only;
-> the comprehensive worked walkthrough lives in the kit's source repository, not
-> in this distribution.
+> run a build (or read it before your own first stage).
 
 ## Setup (once)
 
@@ -12,22 +10,23 @@
 - **One working tree per live session.** When Builder and Orch (or two builds) run at once, give each its **own** `git worktree` (shared `.git`, isolated checkouts) - never two live sessions in one working directory. Two sessions sharing one directory can have one switch the checkout mid-work under the other; that is a real incident, not a hypothetical (A-06).
   - **Before every commit, run `git branch --show-current`** to confirm you are on the branch you think you are - the one-line guard against a cross-session checkout swap landing your commit on the wrong branch.
   - Run the suite from the primary checkout context.
+- **The channel starts at that split.** Once Builder and Orch sit in their own trees, stage packets travel between them on their own over an append-only log inside the repository, and neither of you carries blocks between windows. Before the split - the bootstrap session, and the first handoff into the two windows - anything that has to move moves by hand.
 - Phase docs live at `docs/build-prompts/M[NN]-<title>.md`.
-- **The standard: every human step in the loop is one paste or one line, in the session you're already in - this is the one home for it (A-15).** Anything that needs a second window or a second terminal is a kit defect, not a user failure.
+- **The standard: every human step in the loop is one paste or one line, in the session you're already in - this is the one home for it (A-15).**
   - The control scripts (`set-mode` / `stage-active` / `approve-red`) are contract-locked to this: no stdin waits, one confirmation line, non-zero + stderr on invalid state.
   - Honest limit: the lock covers the kit's side; a host-level hang (e.g. a shell/CLI stdin-pipe defect) is a host bug to report, not a kit regression - but the kit's scripts can never be the blocking side.
 - **`/clear` and exit + restart both re-fire orientation - this is the one home for the `/clear` doctrine.**
-  Empirically verified on Claude Code CLI **2.1.201** (2026-07-05, via a SessionStart probe hook that
-  logged each firing): `/clear` fires SessionStart with `source=clear`, so the read-first hook re-loads
-  and re-prints its stamp - `/clear` does **not** skip orientation on this CLI. Either path gives a clean,
-  oriented session. **Exit + restart is the always-works default** (it fires `source=startup`, which every
-  CLI version has honored) - prefer it if you are unsure what your CLI's `/clear` does, since the `/clear`
-  behavior has varied across versions.
+  The kit registers its SessionStart hooks for `startup`, `resume`, `clear` and `compact`, so on a CLI that
+  fires SessionStart when you clear, the read-first hook re-loads and re-prints its stamp. **Exit + restart
+  is the always-works default** (it fires `source=startup`, which every CLI version has honored) - prefer it
+  if you are unsure what your CLI's `/clear` does, since the `/clear` behavior has varied across versions.
+  Either path should leave you in a clean, oriented session, and the stamp in the first response is how you
+  confirm it did.
 
 ## Roles and commands - the two layers
 
 - **Layer 1 - the role.** `.claude/role` is the canonical session-role state. Set it only with `node scripts/set-mode.cjs <work|verifier|orchestrator|refactor>` (it writes a temp file and atomically renames it, so a hook reading concurrently never sees a half-written file - never use a shell redirect). An absent file means `work`. On session start, the hook reads the role, loads that role's read-first list, and prints the stamp.
-- **Layer 2 - the slash commands.** Six ship in `.claude/commands/` and sit on top of the role mechanism: they invoke stages and check you are in the right role, but `set-mode` remains how the role is actually set.
+- **Layer 2 - the slash commands.** They ship in `.claude/commands/` and sit on top of the role mechanism: they invoke stages and check you are in the right role, but `set-mode` remains how the role is actually set.
   - `/stage M01 A` - runs a build stage from its Phase doc (requires role `work`; extracts the stage's `X.5 CLI Prompt` and marks the stage open itself).
   - `/verify M01` - runs the Verifier stage (requires role `verifier`, set before the session opens).
   - `/refactor M01` - runs the refactor health check, Stage R (requires role `refactor`, set before the session opens).
@@ -40,14 +39,16 @@
 
 ## Per stage (M01.A, then B, ...)
 
-1. Open a **fresh** Builder session and run `/stage M01 A`. It opens the Phase doc, extracts the stage's `X.5 CLI Prompt`, and marks the stage open (`.claude/stage-active`), which arms the PROC-001 red-gate un-approved. Hand-pasting the `X.5` block is the equivalent manual path.
-2. **First response should echo the stamp: `[read-first stamp] role=work, op=..., loaded N files, M bytes, N skipped`.** If it doesn't, the agent skipped orientation - exit and restart.
-3. **Gate 1 - plan.** Builder surfaces deliverable + test plan. Approve, OR paste it to Orch, then paste Orch's reply back to Builder.
-4. **Gate 2 - red.** Builder writes failing tests, surfaces them, and stops. The red-gate hook blocks implementation edits until `/approve-red` writes the approval marker - the marker is the unlock, never approval wording alone. **The release rides the packet (M22 ruling 5):** in the two-brain flow, the Orch verdict packet ends with the explicit line `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs`, and the Builder acts **only on that line** (the command's ask prompt is your release click). Approval language without the line **is not a release** - the Builder stops and tells you `/approve-red` is required.
-5. **Gate 3 - stage-end.** Builder implements until tests and validators are green, then surfaces gates + retro + draft commit. Approve or Orch round-trip; the Builder commits only after your approval. **The stamp is asked-and-transcribed (M22 ruling 4):** at approval the builder asks for your verdict (pass/fail + optional note) and transcribes your reply verbatim into the retro's user-stamp block, marked `transcribed:` - you never hand-edit the retro; the verdict's content stays yours alone.
+1. Open a **fresh** Builder session and run `/stage M01 A`. It opens the Phase doc, extracts the stage's `X.5 CLI Prompt`, and marks the stage open (`.claude/stage-active`), which arms the PROC-001 red-gate un-approved. Hand-pasting the `X.5` block is the equivalent manual path. In the Orch terminal, `/listen` puts that session on the stage; from then on the Builder's packets reach it on their own.
+2. **First response should echo the stamp: `[read-first stamp] role=work, op=greenfield, loaded N of M files (M on the manifest, read at their when:), 0 skipped.`** If it doesn't, the agent skipped orientation - exit and restart.
+3. **Gate 1 - plan.** Builder surfaces deliverable + test plan and publishes it as the gate-1 packet, which travels the channel to Orch by itself. You adjudicate what Orch surfaces; its reply reaches the Builder when you type `/send`.
+4. **Gate 2 - red.** Builder writes failing tests, surfaces them as the red-stop packet, and stops. The red-gate hook blocks implementation edits until `/approve-red` writes the approval marker - the marker is the unlock, never approval wording alone. **The release rides the packet (M22 ruling 5):** in the two-brain flow, the Orch verdict packet ends with the explicit line `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs`, and the Builder acts **only on that line** (the command's ask prompt is your release click). Approval language without the line **is not a release** - the Builder stops and tells you `/approve-red` is required. Carried by `/send --approval`, that verdict arrives as an approval request the Builder surfaces but cannot consume: your `/approve-red` is the only thing that releases it.
+5. **Gate 3 - stage-end.** Builder implements until tests and validators are green, then surfaces gates + retro + draft commit as the stage-end packet, which travels the channel to Orch for adjudication with you; the Builder commits only after your approval. **The stamp is asked-and-transcribed (M22 ruling 4):** at approval the builder asks for your verdict (pass/fail + optional note) and transcribes your reply verbatim into the retro's user-stamp block, marked `transcribed:` - you never hand-edit the retro; the verdict's content stays yours alone.
 6. **Commit only - no push between stages.** Push happens at the milestone PR after closeout. Committing closes the stage markers (`node scripts/stage-active.cjs --clear`).
 7. **Exit Claude** in the Builder terminal (keep the terminal open).
 8. Open a fresh Claude for the next stage and go back to step 1.
+
+**Every turn in either terminal ends with the channel status, two lines.** First `Updated in channel: <what was sent or picked up> - <date and time>`, or `No channel update this turn` when nothing moved; then `listening: <peer> (<stage>)` when the watcher is armed, or `not listening - <reason>` when it is not. The channel replaced the human courier, and the courier's one virtue was that you always knew whether the block had moved. Automatic pickup takes that knowledge away unless every turn reports it: a published packet sitting unread and a dead watcher both end a turn that otherwise reads exactly like success.
 
 ## Verifier stage (M01.V) - fresh-context bias guard, load-bearing
 

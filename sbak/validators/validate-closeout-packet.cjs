@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.5
+// @kit-version 1.0.6
 // validators/validate-closeout-packet.cjs
 //
 // The closeout floor (M30.I, audit fades 2 + 4, rows 48/49 - all RULED at M30.B):

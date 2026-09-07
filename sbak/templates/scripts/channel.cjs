@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.5
+// @kit-version 1.0.6
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //

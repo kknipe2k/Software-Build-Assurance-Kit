@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.5
+// @kit-version 1.0.6
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit). The HARD form of

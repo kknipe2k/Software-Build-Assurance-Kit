@@ -11,7 +11,7 @@
 In a hurry? One decision, one chat, then the kit drives **(you need Git, Node 22+, and VS Code with Copilot - §0)**:
 
 1. **New project** - unzip the release ZIP into a fresh directory and adopt (§1's **New repo** sequence). **Existing repo** - unzip into the repo and adopt (§1's "Existing repo" line).
-2. Open the folder in VS Code (**File, then Open Folder**), open Copilot Chat, pick a **Claude model**, switch to **Agent Mode** (§2), and type one line - what you want (*"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*) or just `go`. The kit takes it from there: everything else arrives one question at a time, at the moment the run needs it.
+2. Open the folder in VS Code (**File, then Open Folder**), open Copilot Chat, pick a **Claude model**, switch to **Agent Mode** (§2), and type one line - what you want (*"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*) or just `go`. The kit takes it from there: everything else arrives one thing at a time, at the moment the run needs it.
 
 **Nothing leaves your machine until you explicitly approve it** - Agent Mode shows every file write for Apply/Discard, and the kit's own rule keeps `git commit`/`git push` waiting on your explicit go-ahead. Push and PR are single, separate approvals near the end of a run. Until then, everything is local.
 
@@ -37,15 +37,17 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ## 1. Get the kit
 
-The kit comes two ways. **Most users: download the release ZIP** - the signed, checksummed, attested artifact. `git clone` stays available as the **alternate** path (below).
+**The kit has an installer, and it is not your path.** `sbak-install.cjs` is the recommended install on Claude Code: it runs from inside `claude` and refuses anywhere else, saying so plainly - *"run this from inside claude - start claude in this folder and it takes it from there"*. A Copilot session is not a `claude` session, so the installer has nothing to run in.
+
+**On this host the release ZIP is the install** - the signed, checksummed, attested artifact, and everything below is written for it. `git clone` stays available as the **alternate** path (below).
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.5-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.6-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.5-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.5-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.5-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.5-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.6-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.6-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.6-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.6-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -58,7 +60,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.5-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.6-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -69,7 +71,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.5-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.6-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -91,6 +93,8 @@ Then open the folder in VS Code: **File, then Open Folder, pick `my-project`.** 
 - An incomplete install cannot silently look complete: run the printed repair, then re-run `--adopt` - re-running is always safe; a clean re-run changes nothing.
 
 On this host that contract is worth restating: the session-layer hooks never run in Copilot, so **the Git hooks adopt arms are the only mechanical wall between an agent mistake and your history**. Don't skip adopt here.
+
+**Upgrading is the ZIP again:** download the new release, extract it over your project, and re-run the same adopt command - your own project files are untouched and adopt re-arms the hooks. **One warning that the installer's path does not carry:** extracting over an install **overwrites kit files you edited**, rather than keeping and naming them the way `sbak-install` does on Claude Code, so save any changes you made under `sbak/` first. Refresh your `.github/copilot-instructions.md` copy afterwards (§6) - `CLAUDE.md` may have changed in the new release.
 
 ### Clone the repo - the alternate path
 
@@ -121,27 +125,23 @@ What you should see next:
 
 1. **First response:** the agent reads the auto-loaded instructions, then the kit's entry files. A Copilot session runs no hooks, so the stamp check and the read check (both live in the session hooks) do not apply here - the read floor is prose-only on this host: the agent reads the orientation files the instructions name, and you hold it to that.
 2. **You reply with the standard line:** *"This is Copilot - the session-hook layer does not run in this host. Git hooks are armed (adopt exit 0). Proceed with the honor-system steps from sbak/QUICKSTART-COPILOT.md."*
-3. **Then:** the agent echoes your working directory with a one-line scope statement (confirm it is the right folder), and presents the calibration interview - 3 asks, then a confirmation turn.
+3. **Then:** the agent asks what you want to build. Answer in a line, and the kit derives the rest - it works out the kind of work from your answer, reads the risk posture off the spec it writes with you, and shows the whole calibration back as a single line to accept.
 
 If you do not see this sequence, jump to Troubleshooting.
 
 ---
 
-## 3. Answer the 3 asks
+## 3. What the kit works out for you
 
-| Ask | You're choosing | Safe default if unsure |
+You calibrate nothing by hand. From your answer and the spec it writes with you, the kit derives the three values that shape the run and shows them on the acceptance line:
+
+| Derived | From | On the line as |
 |---|---|---|
-| What kind of work is this? | greenfield / bug_fix / research_publish / audit | **greenfield** |
-| How much assurance? | Full / Lite (how much process) | **Full** (the default) |
-| Any risky surfaces? | the six risk triggers (destructive data ops, archives, untrusted writes, credentials, untrusted HTML, installers) | **none** - declaring one raises verification on that surface |
+| The kind of work | your first answer - greenfield, bug_fix, research_publish or audit | the mode; say a mode word to correct it |
+| The assurance level | Full, the default | the tier |
+| Risky surfaces | the spec, read against the six risk triggers (destructive data ops, archives, untrusted writes, credentials, untrusted HTML, installers) | the trigger list; each one raises verification on that surface |
 
-**Everything else is derived and confirmed back to you in plain English.** Deliverable type, where tests run, review cadence, validator severity - each derived value arrives in the confirmation turn with a one-line why and an invitation to correct it.
-
-Three ways to answer:
-
-- **Directly:** "greenfield, Full, no risk surfaces."
-- **Describe your project** and let Claude propose the calibration.
-- **Delegate:** say "pick something reasonable."
+**Everything else is derived and confirmed back to you in plain English.** Deliverable type, where tests run, review cadence, validator severity - each derived value arrives with a one-line why and an invitation to correct it.
 
 **The deliverable type is the branch point that decides which gates apply** - it changes *what* the framework verifies, not how much ceremony. Web/UI triggers a design brief (`docs/design.md`) authored before any UI code, plus browser-load and design-conformance verification passes; library, service, and CLI each add their own contract checks.
 
@@ -151,7 +151,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 
 ## 4. Describe what you want to build
 
-**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 41 files for Lite, 97 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 52 files for Lite, 119 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle, and **before any disk write the agent states the blast radius** ("I'll create about N files across `.claude/`, `.githooks/`, `scripts/`, `docs/`, `.github/`, plus root files") so you consent to the footprint up front. In Agent Mode, VS Code additionally shows the diff for every file write - **Apply** or **Discard**, per edit.
 
@@ -180,7 +180,8 @@ Claude Code enforces the session layer with hooks in `.claude/`; Copilot never r
 | **SessionStart hook** (auto-loads the read-first list) | Fires automatically at every session start; prints the `[read-first stamp]` | No hook - the instructions file directs the read; **you verify the orientation stamp yourself** and re-ask if it is missing (§5.6) |
 | **Mode guard** (the role check) | A hook structurally **blocks** a stage prompt whose mode disagrees with `.claude/role` | Honor-system - **state the mode at the start of each chat** and check the stamp (§5.6) |
 | **Red-gate** (blocks implementation edits until the RED tests are approved) | A hook hard-blocks edit tools until `/approve-red` records the release | Honor-system - the agent must **stop at the red-stop and wait for your explicit approval**; nothing mechanical holds it if it doesn't (§5.4) |
-| **Stage invocation** (`/stage M01 A` and the other slash commands) | Run the matching `.claude/commands/*.md` | Typed conventions the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** (§5.7) |
+| **Stage invocation** - the eight slash commands: `/stage`, `/verify`, `/refactor`, `/closeout`, `/on-track`, `/approve-red`, `/listen`, `/send` | All eight run from the matching `.claude/commands/*.md` | **None of them run** - Copilot has no slash commands. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** (§5.7). `/on-track` and `/approve-red` have none - you ask for the backlog check in words, and your approval of the red-stop is the release. `/listen` and `/send` have nothing to drive (the channel row below) |
+| **The channel** - the append-only log the two sessions pass packets over | Stage packets travel it automatically in both directions; `/listen` and `/send` are its two ends, and every turn reports what it moved | **Does not run here.** You carry every packet between the two windows by hand - that is what §5.5 means when it calls you the conduit |
 | **Build receipts** (session-event ledgers under `.claude/receipts/`) | A session hook records events; `render` folds them into the receipt | No session events - receipts render from committed history only, so the receipt is thinner on this host |
 
 What does **not** degrade: the Git hooks (pre-commit validation, pre-push verification) and CI run mechanically in every host once adopt has armed them, and VS Code's Agent Mode adds its own per-edit Apply/Discard and per-command approval UI. The commit and push boundaries are identical to Claude Code: **no commit and no push without your explicit approval.**
@@ -223,23 +224,30 @@ At Full tier the framework splits into two session types - **orchestrator** (aut
 - **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed). Orchestrator window: the main checkout. Build window: `../<project>-build-wt`. Shared `.git`, isolated working trees, no file-race risk. Open each via **File, then Open Folder** (same `code .` caveat as §1).
 - **Not on day one:** a freshly bootstrapped project has **zero commits**, so the milestone branch cannot exist yet and `node scripts/set-mode.cjs --split <milestone-branch>` refuses (`fatal: invalid reference` - executed on git 2.52). Until M01.A's first commit lands, run both chats against the single checkout - one role at a time, mode stated in each chat's first message.
 
-You are the conduit - copy surfaces from the build chat to the orchestrator chat and decisions back, by switching windows. Only one role acts at a time. (Topologies A, B, C in `ORCHESTRATOR.md` §1 are Claude-Code-specific and don't apply in Copilot.)
+You are the conduit - copy surfaces from the build chat to the orchestrator chat and decisions back, by switching windows. Only one role acts at a time. **On Claude Code this is the one job the channel took over:** there, the packets move themselves and the human only adjudicates and releases the gates. Here, moving them is yours, and it is the largest single difference in day-to-day work between the two hosts. (Topologies A, B, C in `ORCHESTRATOR.md` §1 are Claude-Code-specific and don't apply in Copilot.)
 
 The role separation itself is honor-system on this host: `node scripts/set-mode.cjs <role>` still writes `.claude/role` and the instructions file teaches the mode-aware reading, but no hook blocks a mismatch - state the role in each chat's first message and check the stamp (§5.6). The pattern transfers whole: it is the operating model, not a Claude Code feature.
 
 ### 5.6 Mode-aware reading (honor-system)
 
-The framework has three modes - **work**, **verifier**, **orchestrator** - each with its own read-first list at `.claude/read-first-list*.txt`. In Claude Code the SessionStart hook switches automatically; **in Copilot you state the mode at the start of each chat**:
+The framework has four roles - **work**, **verifier**, **orchestrator**, **refactor** - each with its own read-first list at `.claude/read-first-list*.txt`. In Claude Code the SessionStart hook switches automatically; **in Copilot you state the role at the start of each chat**:
 
 - **Work / build chat** - your default. Say nothing special; the instructions file directs the agent to read `.claude/read-first-list.txt`.
 - **Verifier chat** (Full only) - start with: *"This is a verifier session. Read `.claude/read-first-list-verifier.txt` only. Do NOT read prior retrospectives - that is the bias guard."*
 - **Orchestrator chat** (Full only) - start with: *"This is an orchestrator session. Read `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`."*
+- **Refactor chat** (Full only, when the trigger fires) - start with: *"This is a refactor session. Read `.claude/read-first-list-refactor.txt`."*
 
-Verify each by checking the `mode=` value in the orientation stamp.
+Verify each by checking the `mode=` value in the orientation stamp. **One asymmetry to know about:** the instructions file's stamp form offers `work`, `verifier` and `orchestrator`, so a refactor chat has no matching value to print - say the role in words and hold the agent to the refactor reading list.
 
 ### 5.7 Invoking stages without slash commands
 
-Claude Code runs `.claude/commands/`; Copilot can't. The instructions file teaches the agent the plain conventions: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** - each opens the right doc, extracts the right prompt, and runs it as if pasted. Pasting the raw XML yourself always works too.
+Claude Code runs the eight commands in `.claude/commands/`; Copilot runs none of them. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** - each opens the right doc, extracts the right prompt, and runs it as if pasted. Pasting the raw XML yourself always works too.
+
+The other four have no stand-in, and it is worth knowing which job each one is handing back to you:
+
+- `/on-track` - the off-track check against `docs/backlog.md`. Ask for it in words whenever you want it.
+- `/approve-red` - the release of the red gate. On Claude Code it writes a marker a hook enforces; here your approval in the chat is the whole mechanism (§5.4).
+- `/listen` and `/send` - the two ends of the channel, which does not run on this host (§5.0). Nothing to invoke, because there is nothing to drive.
 
 ### 5.8 The orchestrator is stateless here; watch the model
 

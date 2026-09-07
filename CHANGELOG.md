@@ -2,13 +2,21 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
-## v1.0.5 - 2026-08-31
+## v1.0.6 - 2026-09-07
 
-**The current release** - the cold-start patch on the GA release; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop. This patch closes what the first fresh bootstrap on the previous release and a real multi-milestone build surfaced: the install story, the opening ceremony, the cost of starting a session, and the handoff between the two terminals.
+**The current release** - the documentation realignment on the cold-start patch; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No code or interface changes.
+
+- **Capabilities.** Everything in v1.0.5. Every user-facing document re-run against v1.0.5 as shipped, describing the Full path only, with every count on a shipped surface pinned to its machine source; two lines of substance moved (the `.claude/` template README's playbook path per layout, QUICKSTART's troubleshooting pointer); the doc check restored as mechanism - a ritual change names the documents it touches, the cut waits on a derived doc-loop record, and the documentation checklist ships in the tree.
+- **Limitations.** Unchanged from v1.0.5: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Two independent verifier rounds with the calibration self-test at zero false negatives in both, every landed document reconstructed against the live code, every re-pointed check mutation-tested on verifier-built fixtures, the release verification lane green once on the cut's head.
+
+## v1.0.5 - 2026-09-01
+
+The cold-start patch on the GA release, superseded by v1.0.6. No interface changes to the build loop. This patch closes what the first fresh bootstrap on the previous release and a real multi-milestone build surfaced: the install story, the opening ceremony, the cost of starting a session, and the handoff between the two terminals.
 
 - **Capabilities.** Everything in v1.0.4, plus:
-  - One-file install and upgrade: `sbak-install.cjs`, attested beside the ZIP, drives the whole install from inside `claude` - checksum and attestation verified, blast radius disclosed, one question at a time answered by the word that names the action, nothing written before your word, a real `CLAUDE.md` combined through one import line rather than replaced; the same command upgrades an installed kit and keeps what you modified; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - migrate them by hand until `kit-update --migrate` lands. The signed ZIP stays the manual path.
-  - One question opens the bootstrap: Full or Custom. Full infers the operating mode from your description and derives the risk posture from the spec, shown as one acceptance line; Custom runs the short interview. The boot-time ceremony that a read-only audit of every ritual could not tie to a named failure is gone.
+  - One-file install and upgrade: `sbak-install.cjs`, attested beside the ZIP, drives the whole install from inside `claude` - checksum and attestation verified, blast radius disclosed, its questions one step at a time each answered by the word that names the action, nothing written before your word, a real `CLAUDE.md` combined through one import line rather than replaced; the same command upgrades an installed kit and keeps what you modified; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - migrate them by hand until `kit-update --migrate` lands. The signed ZIP stays the manual path.
+  - The bootstrap opens on what you want to build: the operating mode is inferred from that answer and the risk posture derives from the spec, shown as one acceptance line. The boot-time ceremony that a read-only audit of every ritual could not tie to a named failure is gone.
   - Lazy orientation: the session-start stamp stays eager and a stampless session fails loud, while the reading list loads at its own moment with each read recorded; the red-approval refuses a stage whose required reads were never recorded.
   - A file-based channel between the orchestrator and builder terminals: stage packets and verdicts travel over an append-only log with automatic pickup in both directions; approvals stay the human's keystrokes.
   - Verification lanes in the generated project's floor: `fast` / `stage` / `release` over one registry, an always class, settled marking for closed milestones with an affected-files override, and a union pin; the test estate is reviewed at closeout.
