@@ -11,7 +11,7 @@
     "destructive_data_ops": ["migrate", "migration", "restore", "delete", "truncate", "drop table", "wipe", "purge", "destructive", "irreversible"],
     "archive_extraction": ["unzip", "untar", "extract", "archive", "backup"],
     "untrusted_fs_writes": ["upload", "untrusted path", "filename from", "file name from", "user-supplied path"],
-    "credentials": ["secret", "api key", "oauth", "token", "password", "credential", ".env", "provider key"],
+    "credentials": ["secret", "api key", "oauth", "auth token", "access token", "api token", "bearer token", "refresh token", "session token", "password", "credential", ".env", "provider key"],
     "untrusted_html": ["render html", "generated html", "untrusted html", "sanitize", "xss", "eval("],
     "installers": ["installer", "auto-update", "self-update", "signed binar", "release artifact", "packaging"]
   },

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // session-start-read-first.js
 //
 // Claude Code SessionStart hook. Auto-loads the read-first orientation files
@@ -53,7 +53,13 @@
 //     appends an `orientation_stamped` event to the session's receipts ledger — that is what
 //     lets the UserPromptSubmit hook fail LOUD on a stampless session (audit row 2), and it
 //     is why the hook now reads its stdin payload (for the session id). `--check` (entries-resolve, the V104 field finding):
-//     walk every list, exit 1 naming each dead entry, escaping entry or unknown `when:`.
+//     walk every list some role loads under this project's operating_mode (M32.1.C, V-23: the
+//     loader's own selection), exit 1 naming each dead entry, escaping entry or unknown `when:`.
+//   - M32.D — THE STAMP TELLS THE TRUTH. A soft byte budget (`read_first_bytes`, default 8192,
+//     with `read_first_bytes_tolerance_pct`, default 25) caps the session-start content inlined,
+//     in list order; what it withholds is named on a `NOT in context` stamp line and marked in
+//     the manifest. `--check` also refuses a listed Phase doc from a milestone other than the
+//     open stage's, and a budget key whose value is not a non-negative integer.
 //
 // Output is captured by Claude Code as additional context for the session.
 // Failure modes (file missing, list missing) surface as warnings, not hard
@@ -63,17 +69,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
-function repoRoot() {
-  try {
-    return execSync('git rev-parse --show-toplevel', {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).toString().trim();
-  } catch {
-    return process.cwd();
-  }
-}
+// THE REPO-ROOT RESOLVER (M32.A, §3.1; gate-1 ruling B: this hook adopts it too, so the kit
+// has exactly ONE resolver). It walks up from the payload cwd to a `.git` directory or
+// worktree file, then CLAUDE_PROJECT_DIR, then the start dir; it also carries the shared
+// bounded-stdin reader and the marker decoder (the M32.R Dup-1 / Dup-2 fold). The require is
+// load-bearing: orientation that cannot find its resolver has nothing honest to anchor on,
+// and the install self-integrity check owns the missing-module case.
+const hookRoot = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'hook-root.cjs'));
 
 // Shared, spelling-tolerant config reader (I7). Tolerates the THREE project-config.md
 // spellings for a scalar setting — the markdown table row `| key | value |`, the field
@@ -82,13 +86,17 @@ function repoRoot() {
 // capFromConfig accepted only the table row while operatingMode already tolerated all three,
 // so a key-value `read_first_cap:` silently fell back to the default cap. Returns the
 // lowercased token, or null if absent. (Key underscores match a space too, mirroring the
-// old `operating[_ ]mode` tolerance.)
-function readConfigValue(text, key) {
+// old `operating[_ ]mode` tolerance.) M32.D: `token` is an optional value pattern; the default
+// is the word token every existing key reads with (so those keys read byte-identically), and
+// the numeric budget keys pass NUM_TOKEN so a value is seen as written ("lots", "-5", "1.5")
+// and judged by the caller - one reader, never a second parser.
+function readConfigValue(text, key, token) {
   const k = key.replace(/_/g, '[_ ]');
+  const tok = token || '[A-Za-z][\\w-]*';
   // 1) markdown table row:  | key | value | …
-  const row = text.match(new RegExp('^\\|\\s*' + k + '\\s*\\|\\s*`?([A-Za-z][\\w-]*)`?\\s*\\|', 'mi'));
+  const row = text.match(new RegExp('^\\|\\s*' + k + '\\s*\\|\\s*`?(' + tok + ')`?\\s*\\|', 'mi'));
   // 2) field:  key: value  /  **key:** value  /  key* value
-  const field = row || text.match(new RegExp(k + '\\s*[:*]+\\s*`?([A-Za-z][\\w-]*)`?', 'i'));
+  const field = row || text.match(new RegExp(k + '\\s*[:*]+\\s*`?(' + tok + ')`?', 'i'));
   return field && field[1] ? field[1].toLowerCase() : null;
 }
 
@@ -103,6 +111,30 @@ function capFromConfig(configFile) {
     case 'unlimited': return Number.MAX_SAFE_INTEGER;
     default: return 8;
   }
+}
+
+// M32.D (§3.4) - the BYTE budget on session-start content. read_first_cap counts files; the
+// platform shows only about 2 KB of a large hook output inline and saves the rest to a file, so
+// a stamp counting files claimed context the session never saw. `read_first_bytes` (default
+// 8192) is the budget and `read_first_bytes_tolerance_pct` (default 25) the band; the ceiling is
+// budget * (1 + pct/100), compared in integer math (100 * total <= budget * (100 + pct)) so no
+// float drift moves the line. A present value that is not a non-negative integer is BAD: the
+// hook warns and uses the default (fail-open, IPC-004); only --check reports it as a problem.
+const NUM_TOKEN = '[^\\s|`]+';
+const BUDGET_KEYS = [['read_first_bytes', 8192], ['read_first_bytes_tolerance_pct', 25]];
+function budgetFromConfig(configFile) {
+  let text = null;
+  try { text = fs.readFileSync(configFile, 'utf8'); } catch (_) { text = null; }
+  const out = {};
+  for (const [key, dflt] of BUDGET_KEYS) {
+    const raw = text === null ? null : readConfigValue(text, key, NUM_TOKEN);
+    const bad = raw !== null && !/^\d+$/.test(raw);
+    out[key] = { key, raw, bad, value: raw === null || bad ? dflt : parseInt(raw, 10) };
+  }
+  return out;
+}
+function withinCeiling(total, budget) {
+  return 100 * total <= budget.read_first_bytes.value * (100 + budget.read_first_bytes_tolerance_pct.value);
 }
 
 // M30.G — the when: vocabulary + list-line grammar. Source of truth: scripts/lib/read-ledger.cjs
@@ -139,41 +171,21 @@ function loadList(listFile) {
   return out;
 }
 
-// M30.G — bounded stdin (the SessionStart payload carries session_id; the receipts adapter
-// reads the same way). A TTY or an empty pipe yields no payload — the hook still runs.
-function readPayload() {
-  try {
-    if (process.stdin.isTTY) return null;
-    const CHUNK = 65536; const MAX = 1 << 20;
-    const buf = Buffer.allocUnsafe(CHUNK); const out = []; let total = 0; let guard = 0;
-    while (total < MAX && guard < 100000) {
-      guard++;
-      let n;
-      try { n = fs.readSync(0, buf, 0, Math.min(CHUNK, MAX - total), null); }
-      catch (e) { if (e && e.code === 'EAGAIN') continue; break; }
-      if (n === 0) break;
-      out.push(Buffer.from(buf.subarray(0, n))); total += n;
-    }
-    const p = JSON.parse(Buffer.concat(out).toString('utf8'));
-    return (p && typeof p === 'object' && !Array.isArray(p)) ? p : null;
-  } catch (_) { return null; }
-}
+// M30.G — the SessionStart payload carries session_id (and, since M32.A, the cwd the root is
+// resolved from); the bounded read is hook-root.cjs's readHookInput, shared with the receipts
+// adapter. A TTY or an empty pipe yields no payload — the hook still runs.
 
 // Mode-file decode + race-tolerant read live in readActiveMode below; it handles
 // the same encodings (UTF-16LE+BOM from PowerShell `>`, UTF-8 BOM, plain UTF-8).
 
 const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 
-// Decode a tiny mode file across encodings (PowerShell `>` writes UTF-16LE+BOM;
-// Set-Content may add a UTF-8 BOM; Unix plain UTF-8). This BOM-decode + the
-// NUL-strip in strictToken are the REAL ERR-002 root (a UTF-16/BOM file read as
-// naive utf8 never matched the word, so Windows silently fell back to `work`).
-// The P#29 regression tests are the wall — keep them.
-function decodeBytes(buf) {
-  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString('utf16le', 2);
-  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.toString('utf8', 3);
-  return buf.toString('utf8');
-}
+// The mode file is decoded across encodings by hook-root.cjs's decodeBytes (PowerShell `>`
+// writes UTF-16LE+BOM; Set-Content may add a UTF-8 BOM; Unix plain UTF-8). That BOM-decode +
+// the NUL-strip in strictToken are the REAL ERR-002 root (a UTF-16/BOM file read as naive utf8
+// never matched the word, so Windows silently fell back to `work`). The P#29 regression tests
+// are the wall — keep them.
+const { decodeBytes, realOrLexical } = hookRoot;
 
 // STRICT resolution: `.claude/role` is canonical BARE-TOKEN state, written
 // only by scripts/set-mode.cjs (atomic). Decode, strip NULs (no-BOM UTF-16 tail),
@@ -234,6 +246,25 @@ const LIST_BY_MODE = {
   orchestrator: 'read-first-list-orchestrator.txt',
   refactor: 'read-first-list-refactor.txt',
 };
+
+// THE ONE LIST SELECTION (M32.1.C, V-23): the list a role loads under an operating_mode is the
+// first existing candidate, most-specific first. The loader below and `--check` both call it, so
+// `--check` (and kit-update --ready through it) walks exactly the lists some role of this
+// project loads: the installer places all seven (the mode is unknown at install), and the lists
+// no role selects under this project's mode are not orientation (drive note 8). The op filename
+// token strips underscores, so operating_mode "bug_fix" composes read-first-list-bugfix.txt.
+function listCandidates(op, mode) {
+  const opSlug = op.replace(/_/g, '');
+  return [`read-first-list-${opSlug}-${mode}.txt`, `read-first-list-${opSlug}.txt`, LIST_BY_MODE[mode], 'read-first-list.txt'];
+}
+function selectList(rootDir, op, mode) {
+  const c = listCandidates(op, mode);
+  return c.find((name) => fs.existsSync(path.join(rootDir, '.claude', name))) || c[c.length - 1];
+}
+function selectedLists(rootDir, op) {
+  const names = new Set(VALID_MODES.map((m) => selectList(rootDir, op, m)));
+  return Array.from(names).filter((name) => fs.existsSync(path.join(rootDir, '.claude', name))).sort();
+}
 
 const MODE_BANNER = {
   work: '',
@@ -335,9 +366,7 @@ function isFenced(relPath, denyGlobs) {
 // entry could dump OUT-OF-REPO file contents into agent context. Resolve every entry against
 // the repo root (symlink-aware where the target exists, lexical otherwise) and require it to
 // land INSIDE the root. An escaping entry is refused (read LOUDLY skipped, never emitted).
-function realOrLexical(p) {
-  try { return fs.realpathSync(p); } catch (_) { return path.resolve(p); }
-}
+// (realOrLexical - symlink-aware where the target exists, lexical otherwise - is hook-root.cjs's.)
 function isInsideRepo(rootDir, entry) {
   const base = realOrLexical(rootDir);
   const abs = realOrLexical(path.resolve(rootDir, entry));
@@ -345,23 +374,56 @@ function isInsideRepo(rootDir, entry) {
   return rel === '' || (!rel.startsWith('..' + path.sep) && rel !== '..' && !path.isAbsolute(rel));
 }
 
-const root = repoRoot();
+// M32.A: payload + root in ONE shared call. The root is resolved from the payload's cwd (walk-up
+// to `.git`), not from `git rev-parse` in the hook's own process cwd - one resolver for every
+// hook, and a worktree entered after session start resolves to the worktree.
+// M32.D (the stdin fold): --check is a command, not a hook run - it resolves its root from the
+// process cwd and NEVER reads stdin. Reading first made it block on an open stdin pipe with no
+// writer (the Phase-5 checklist runs it from an agent shell).
+const { payload, root } = process.argv.includes('--check')
+  ? { payload: null, root: hookRoot.repoRoot(null) }
+  : hookRoot.readHookInput();
 
-// M30.G — `--check` (entries-resolve - the V104 field finding: a bootstrap emitted a list entry that never resolved): every .claude/read-first-list*.txt, every entry
-// must resolve to a file inside the repo and carry a known when:. Exit 1 naming
+// M30.G — `--check` (entries-resolve - the V104 field finding: a bootstrap emitted a list entry that never resolved): every list a role of this
+// project loads (selectedLists, M32.1.C), every entry must resolve to a file inside the repo and carry a known when:. Exit 1 naming
 // `<list>: <entry> - <reason>` per problem; no session output. The same canonicalize-then-
 // confine discipline as DF-001. Named as a Phase-5 checklist step and the staleness pin's parse.
+// M32.D (§3.4): --check also learns the OPEN milestone. With `.claude/stage-active` holding
+// M<NN>.<X> (a fix iteration's trailing .<digit> allowed; NN = the digits between M and the first
+// dot), a listed Phase doc - the workshop's proposals/M<MM>-*.md or a project's
+// docs/build-prompts/M<MM>-*.md - must name that milestone (compared as numbers: M01 == M1). No
+// stage-active (bootstrap, an orchestrator between stages) skips the rule silently. In the field
+// every new session auto-loaded a closed milestone's plan.
+const PHASE_DOC_RE = /^(?:proposals|docs\/build-prompts)\/M(\d+)-[^/]*\.md$/;
+function openStage(rootDir) {
+  let buf;
+  try { buf = fs.readFileSync(path.join(rootDir, '.claude', 'stage-active')); } catch (_) { return null; }
+  const id = decodeBytes(buf).split(NUL).join('').trim();
+  const m = /^M(\d+)\.[A-Za-z0-9][\w.-]*$/.exec(id);
+  return m ? { id, nn: Number(m[1]) } : null;
+}
+
 if (process.argv.includes('--check')) {
   const probs = [];
-  let lists = [];
-  try { lists = fs.readdirSync(path.join(root, '.claude')).filter((n) => /^read-first-list.*\.txt$/.test(n)).sort(); } catch (_) { lists = []; }
+  const open = openStage(root);
+  // M32.1.C (V-23): the lists this project's roles load under its operating_mode - never every
+  // read-first-list*.txt on disk.
+  const lists = selectedLists(root, operatingMode(root));
   for (const lf of lists) {
     const entries = loadList(path.join(root, '.claude', lf)) || [];
     for (const e of entries) {
       if (!e.valid) { probs.push(`.claude/${lf}: ${e.path} - unknown when: ${JSON.stringify(e.when)} (one of: ${WHEN_VOCAB.join(', ')})`); continue; }
       if (!isInsideRepo(root, e.path)) { probs.push(`.claude/${lf}: ${e.path} - escapes the repo root (DF-001)`); continue; }
       if (!fs.existsSync(path.join(root, e.path))) probs.push(`.claude/${lf}: ${e.path} - resolves to no file (a dead orientation entry)`);
+      const pd = open ? PHASE_DOC_RE.exec(normRel(e.path)) : null;
+      if (pd && Number(pd[1]) !== open.nn) probs.push(`.claude/${lf}: ${e.path} - names milestone M${pd[1]} but the open stage is ${open.id}`);
     }
+  }
+  // M32.D: the two budget keys - a present value that is not a non-negative integer is a problem
+  // here (the session-start run only warns and falls back).
+  const budget = budgetFromConfig(path.join(root, 'project-config.md'));
+  for (const [key, dflt] of BUDGET_KEYS) {
+    if (budget[key].bad) probs.push(`project-config.md: ${key} - ${JSON.stringify(budget[key].raw)} is not a non-negative integer (session start falls back to the default ${dflt})`);
   }
   if (probs.length) {
     process.stderr.write(`read-first --check: ${probs.length} problem(s)\n` + probs.map((p) => '  ' + p + '\n').join(''));
@@ -371,7 +433,6 @@ if (process.argv.includes('--check')) {
   process.exit(0);
 }
 
-const payload = readPayload();
 const sessionId = payload && typeof payload.session_id === 'string' ? payload.session_id : null;
 
 // M30.G — the stamp EVENT: the one record that this hook RAN for this session, whatever it
@@ -418,32 +479,85 @@ if (modeRes.state === 'unresolved') {
   process.exit(0);
 }
 
-const mode = modeRes.state === 'absent' ? 'work' : modeRes.mode;
+// M32.1.B (drive note 8b; gate-1 Q3, orchestrator seq 114): ABSENT stays the work default in a
+// directory with no project files (bootstrap mode, the installer's session) - but in a
+// BOOTSTRAPPED project (project-config.md present) a fresh session with no role is not a
+// builder by default: on the drive one opened a stage in the main checkout on the word
+// "continue". It stamps role=unresolved and the mode-check refuses every prompt in it. Three
+// shapes must never brick, so the rule reads this session's OWN earlier stamps:
+//   * a role this session already stamped is inherited - the bootstrap session stamped work
+//     before Phase 1 wrote project-config.md, and a compaction re-fires this hook mid-session;
+//   * a `compact` with no earlier stamp keeps work - a session already running when the hooks
+//     arrived (the KF-62 installer session) predates the project by construction;
+//   * no session id, no receipts contract: nothing to read, the work default stands.
+// M32.1.C (V-14, R-40): and the bootstrap must have ENDED. A new window mid-bootstrap (a fresh
+// session after a STOPPED block, a /clear) is the bootstrap's own resume path: it keeps the work
+// default and the stamp says how to resume. This is the ONE probe (clarification 1, orchestrator
+// seq 123): the mode-check refuses only a session whose recorded stamps carry no role, so it
+// follows this verdict and the two agree by construction (CFI-05).
+// V-29: the line opens with a deliberate-stop phrase - inside the host's hook-block frame
+// "No role set." read like a crash (drive note 13).
+const NO_ROLE_LINE = 'Stopped on purpose: this window has no role yet. Run node scripts/set-mode.cjs <orchestrator|work> and reopen this window.';
+// The bootstrap has ENDED when project-config.md is tracked at HEAD - the bootstrap commit, not the
+// project CLAUDE.md (placed at Phase 3) and not --detect (it says project from Phase 1). On the
+// clone path HEAD carries the kit's history, so "HEAD exists" would not do. `./` makes git resolve
+// the path from <root>, not the repo root (a project under an outer repo, TR-6).
+// -> true ended | false git answered no (unborn HEAD, the file not at HEAD, not a repository) |
+//    null git could not run (the refusal stands: fail closed).
+function bootstrapEnded(rootDir) {
+  const r = spawnSync('git', ['-C', rootDir, 'cat-file', '-e', 'HEAD:./project-config.md'], { stdio: 'ignore', timeout: 10000, windowsHide: true });
+  if (r.error || r.status === null) return null;
+  return r.status === 0;
+}
+// The resume line names the playbook that exists in this tree (its "partial state" paragraph is
+// the resume procedure); neither present: the shipped layout's path.
+function resumeLine(rootDir) {
+  const p = !fs.existsSync(path.join(rootDir, 'sbak', 'bootstrap', 'PHASES.md')) && fs.existsSync(path.join(rootDir, 'bootstrap', 'PHASES.md'))
+    ? 'bootstrap/PHASES.md' : 'sbak/bootstrap/PHASES.md';
+  return `Bootstrap in progress: project-config.md is not committed yet. Say "resume the bootstrap" and Claude picks it up from the last finished phase (${p}).`;
+}
+function earlierStampRoles(rootDir, sid) {
+  if (!sid || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sid)) return null;
+  try {
+    const receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs'));
+    const f = path.join(rootDir, '.claude', 'receipts', `events-${sid}.jsonl`);
+    if (!fs.existsSync(f)) return [];
+    return receipts.readLedger(f, { maxBytes: 1 << 20 }).events.filter((e) => e.event === 'orientation_stamped').map((e) => e.role);
+  } catch (_) { return null; }
+}
+let inheritedRole = null;
+let resumeText = null;
+if (modeRes.state === 'absent' && fs.existsSync(configFile)) {
+  const earlier = earlierStampRoles(root, sessionId);
+  inheritedRole = (earlier || []).find((r) => VALID_MODES.includes(r)) || null;
+  const keepWork = earlier === null || (payload && payload.source === 'compact');
+  if (!inheritedRole && !keepWork && bootstrapEnded(root) === false) resumeText = resumeLine(root);
+  else if (!inheritedRole && !keepWork) {
+    console.log('## ⚠️ Orientation NOT loaded - no session role is set in this bootstrapped project');
+    console.log();
+    console.log(`**[read-first stamp]** role=unresolved, op=${op}, loaded 0 files, 0 bytes.`);
+    console.log(NO_ROLE_LINE);
+    console.log();
+    console.log('Agent: STOP. Show the person the line above. Every prompt in this window is refused until the role is set and the window is reopened.');
+    stampEvent(null);
+    process.exit(0);
+  }
+}
 
-// Compose the read-first list from both axes, most-specific first.
-// The op filename token strips underscores so operating_mode "bug_fix" composes
-// "read-first-list-bugfix.txt" (the shipped filename convention has no
-// underscores). The per-role base (LIST_BY_MODE) is the existing
-// per-session file — work maps to the bare "read-first-list.txt", which is also
-// the final catch-all, so greenfield resolves byte-identically to today.
+const mode = modeRes.state === 'absent' ? (inheritedRole || 'work') : modeRes.mode;
+
+// Compose the read-first list from both axes, most-specific first (selectList above, the one
+// selection --check shares). The per-role base (LIST_BY_MODE) is the existing per-session file
+// — work maps to the bare "read-first-list.txt", which is also the final catch-all, so
+// greenfield resolves byte-identically to today.
 const opSlug = op.replace(/_/g, '');
-const candidates = [
-  `read-first-list-${opSlug}-${mode}.txt`,
-  `read-first-list-${opSlug}.txt`,
-  LIST_BY_MODE[mode],
-  'read-first-list.txt',
-];
 // I7 fallback visibility: the list this project INTENDED to provide for (op, mode) —
 // the op-specific list for a non-greenfield op, else the per-role base. When the
 // resolved list is not that one (the op/mode list is absent and a less-specific catch-all
 // loaded), the stamp announces the fallback rather than degrading silently. Greenfield/work
 // resolves intended===resolved (read-first-list.txt), so today's behavior emits NO notice.
 const intendedList = op !== 'greenfield' ? `read-first-list-${opSlug}.txt` : LIST_BY_MODE[mode];
-let listFile = path.join(root, '.claude', candidates[candidates.length - 1]);
-for (const name of candidates) {
-  const candidate = path.join(root, '.claude', name);
-  if (fs.existsSync(candidate)) { listFile = candidate; break; }
-}
+const listFile = path.join(root, '.claude', selectList(root, op, mode));
 const resolvedList = path.basename(listFile);
 
 const cap = capFromConfig(configFile);
@@ -469,6 +583,13 @@ let loaded = 0;
 const missing = [];
 const fenced = [];
 const escaped = [];
+const withheld = []; // M32.D: session-start entries past the byte ceiling - "<path> (<bytes> bytes)"
+let overBudget = false;
+const budget = budgetFromConfig(configFile);
+for (const [key] of BUDGET_KEYS) {
+  const v = budget[key];
+  if (v.bad) process.stderr.write(`[read-first hook] WARN: project-config.md ${key} is ${JSON.stringify(v.raw)}, not a non-negative integer - using the default ${v.value} (read-first --check names it).\n`);
+}
 const denyRes = loadDenyGlobs(root);
 const denyGlobs = denyRes.globs;
 const fenceAll = denyRes.allDenied;
@@ -516,7 +637,8 @@ for (const e of files) {
     missing.push(f);
     continue;
   }
-  manifest.push({ path: f, when: e.when, why: e.why, note: e.explicit ? '' : ' (default)' });
+  const entry = { path: f, when: e.when, why: e.why, note: e.explicit ? '' : ' (default)', withheld: false };
+  manifest.push(entry);
   if (e.when !== 'session-start') continue; // the content layer is lazy — read at the boundary
   // Fence-aware: never read a deny-listed path into context (IPC-003). Under a present-but-
   // unparseable settings.json (fenceAll, DF-006) EVERY entry is fenced (fail-closed).
@@ -526,6 +648,15 @@ for (const e of files) {
   }
   const content = fs.readFileSync(abs, 'utf8');
   const bytes = Buffer.byteLength(content, 'utf8');
+  // M32.D: SOFT, in list order (ruling R-13) - an entry inlines while the running total
+  // INCLUDING it stays at or under the ceiling; the first entry past it and every session-start
+  // entry after that is withheld: measured, named in the stamp, never emitted.
+  if (overBudget || !withinCeiling(totalBytes + bytes, budget)) {
+    overBudget = true;
+    entry.withheld = true;
+    withheld.push(`${f} (${bytes} bytes)`);
+    continue;
+  }
   totalBytes += bytes;
   loaded++;
   payloadOut += `### ${f} (${bytes} bytes)\n\n\`\`\`\n`;
@@ -542,6 +673,7 @@ const listFileBasename = path.basename(listFile);
 // (pins and the mode-check contract parse it); the count clause says in plain words how many
 // entries were inlined out of how many are on the manifest.
 console.log(`**[read-first stamp]** role=${mode}, op=${op}, loaded ${loaded} of ${manifest.length} files (${manifest.length} on the manifest, read at their when:), ${skipped} skipped.`);
+if (resumeText) console.log(resumeText); // M32.1.C (V-14): a new window mid-bootstrap resumes it
 // LOUD truncation — a cap that drops list entries is announced (K kept of N,
 // with the first dropped name), never a silent hard-cut. Visibility only; the loader stays
 // fail-open (IPC-004), the cap still applies. `all[cap]` is the first entry past the cut.
@@ -552,6 +684,11 @@ if (all.length > cap) {
 // loaded, say so, rather than a bug_fix project quietly reading the greenfield list.
 if (resolvedList !== intendedList) {
   console.log(`**[read-first stamp]** fallback: ${intendedList} → ${resolvedList} (intended list absent — loaded the fallback; orientation may be less specific)`);
+}
+// M32.D: the stamp tells the truth - what the byte budget withheld is named, with its size, in
+// one byte-stable line, so "loaded K of N" never claims content the session did not receive.
+if (withheld.length > 0) {
+  console.log(`**[read-first stamp]** NOT in context: ${withheld.join(', ')} - read these files yourself before acting`);
 }
 if (skipped > 0) {
   console.log();
@@ -595,10 +732,13 @@ console.log();
 // the 3-line echo instruction and the Role/Op/List/Cap header faded — the stamp line carries
 // role + op, this header carries list + cap, CLAUDE.md and /stage carry the one-line echo.)
 console.log(`**[orientation manifest]** .claude/${listFileBasename} (${manifest.length} entries, cap ${cap === Number.MAX_SAFE_INTEGER ? 'unlimited' : cap}). Read each with your own tools at its when: - reads are recorded to the receipts ledger and the boundary's gate checks them (stage-open: approve-red; verify / closeout: read-ledger --check).`);
-const padTo = manifest.reduce((m, e) => Math.max(m, e.path.length), 0);
+// M32.D: a withheld entry carries ` [NOT in context]` after its path; the padding is computed
+// over the marked strings so the when: column stays aligned.
+const shown = (e) => e.path + (e.withheld ? ' [NOT in context]' : '');
+const padTo = manifest.reduce((m, e) => Math.max(m, shown(e).length), 0);
 for (const e of manifest) {
   const when = `when: ${e.when}${e.note}`;
-  console.log(`  - ${e.path.padEnd(padTo)}   ${when.padEnd(22)}${e.why ? '  ' + e.why : ''}`);
+  console.log(`  - ${shown(e).padEnd(padTo)}   ${when.padEnd(22)}${e.why ? '  ' + e.why : ''}`);
 }
 console.log();
 // The field report's memory finding (M30.G fold-in): memory is a hint, the repo is the truth.

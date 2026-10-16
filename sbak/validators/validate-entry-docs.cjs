@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-entry-docs.cjs
 //
 // THE DOC-SYNC ENGINE — one source of truth for what the kit SAYS about

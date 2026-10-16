@@ -61,16 +61,18 @@ The arming is **visible** ("cluster-gate armed because surface class = X"), keye
 
 ## The map
 
-> Organized by **surface**, one row per drivable affordance. Add a `## <Surface group>` heading per region and a table beneath it. Keep the seven columns; instantiate the vocabulary for your surface class (legend above).
+> Organized by **surface**, one row per drivable affordance. Add a `## <Surface group>` heading per region and a table beneath it. Keep the columns of the table below; instantiate the vocabulary for your surface class (legend above). The table ships empty, and a fresh map passes its own currency check: add a row as each surface ships, in the row shape the comment below gives.
 
 ### {{SURFACE_GROUP_1}}
 
 | Surface | Location | Gesture | Test-id | Effect | How-to-exercise | Evidence | State |
 |---|---|---|---|---|---|---|---|
-| {{SURFACE}} | {{WHERE_IT_SITS}} | {{INTERACTION}} | `{{TEST_ID}}` | {{WHAT_IT_DOES}} | {{MINIMAL_STEPS_TO_DRIVE_IT}} | `{{ASSEMBLED_RUN_REF}}` | verified |
-| {{SURFACE}} | {{WHERE_IT_SITS}} | {{INTERACTION}} | — | {{WHAT_IT_DOES}} | {{MINIMAL_STEPS_TO_DRIVE_IT}} | — | manual-only |
 
 <!--
+Row shape - one row per surface, a `verified` row and a `manual-only` row:
+| <surface> | <where it sits> | <interaction> | `<test-id>` | <what it does> | <minimal steps to drive it> | `<assembled-run ref>` | verified |
+| <surface> | <where it sits> | <interaction> | — | <what it does> | <minimal steps to drive it> | — | manual-only |
+
 Worked shapes by surface class (delete once you have real rows). The 8th column,
 **Evidence**, is the assembled-run REFERENCE (G10 cluster-gate): for a
 runtime/drivable class it points at the retained assembled-execution run — the

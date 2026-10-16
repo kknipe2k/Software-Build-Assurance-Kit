@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-operating-mode.cjs
 //
 // Pre-commit value check for the operating_mode dial.
@@ -92,6 +92,18 @@ function stagedConfigFiles() {
   return out.split(/\r?\n/).filter((f) => /(^|\/)project-config\.md$/.test(f));
 }
 
+// M32.1.A (drive note 9): the paste shell, asked once in discovery. Same reading rules as the
+// mode: table row or line-start field, the whole value, absent or a placeholder is fine.
+const VALID_SHELLS = ['cmd', 'powershell', 'bash'];
+function declaredShell(text) {
+  const live = stripHtmlComments(text);
+  const row = live.match(/^\|\s*shell\s*\|\s*([^|]+?)\s*\|/mi);
+  if (row) return row[1].replace(/`/g, '').trim().toLowerCase();
+  const field = fieldInBlock(live, 'shell');
+  if (field !== null && field !== '') return field.toLowerCase();
+  return null;
+}
+
 // Returns { ok, error } for one file.
 function validateFile(file) {
   let text;
@@ -99,6 +111,10 @@ function validateFile(file) {
     text = fs.readFileSync(file, 'utf8');
   } catch {
     return { ok: false, error: `${file}: cannot read file` };
+  }
+  const shell = declaredShell(text);
+  if (shell !== null && !/\{\{.*\}\}/.test(shell) && !VALID_SHELLS.includes(shell)) {
+    return { ok: false, error: `${file}: shell "${shell}" is not one of ${VALID_SHELLS.join(', ')}.` };
   }
   const mode = declaredMode(text);
   if (mode === null) return { ok: true }; // absent → greenfield default, never an error
@@ -138,7 +154,7 @@ function main() {
   }
 
   if (failed > 0) {
-    console.error(`\n${failed} project-config file(s) declare an invalid operating_mode. Fix to one of {${VALID.join(', ')}}, then re-stage.`);
+    console.error(`\n${failed} project-config file(s) declare an invalid operating_mode or shell. Fix to one of {${VALID.join(', ')}} / {${VALID_SHELLS.join(', ')}}, then re-stage.`);
     process.exit(1);
   }
   process.exit(0);

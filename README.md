@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.6-green" alt="Status: GA v1.0.6"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.7-green" alt="Status: GA v1.0.7"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -26,7 +26,7 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 - **[HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html)** - the visual overview. A few minutes, in your browser.
 - **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived from real commits, findings, and rework, not a staged demo.
 - **[WHY-THIS-KIT.md](WHY-THIS-KIT.md)** - deciding if it's worth your evening? Two pages, honest costs.
-- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.6 GA release: exactly what is claimed, what is not, and the notes for both.
+- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.7 GA release: exactly what is claimed, what is not, and the notes for both.
 
 ## How it works
 
@@ -77,27 +77,30 @@ Put `sbak-install.cjs` in the target directory - the directory you run in is the
 **1. Start the session in that directory and type the one word.**
 
 ```
+export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 claude
 ```
+
+Windows: `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"` in PowerShell, in place of the `export` line.
 
 ```
 sbak-install
 ```
 
-**Result:** the script carries its own instructions; Claude reads them and runs it one step at a time. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks `OK to proceed? Type install, list, or no` - `list` shows every file first. Every question ends with the exact word to type. On an existing repo you get a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through before that proceed. Nothing is written before your word. It creates the git repo if there is none, runs the adopt step, and prints `Done` with the hooks live. Then leave that session (type `/exit`, or press Ctrl+C twice) and start `claude` again in the same folder - the hooks it just installed only arm in a fresh session, and the install session itself will refuse further prompts.
+**Result:** the script carries its own instructions; Claude reads them and runs it one step at a time. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks `OK to proceed? Type install, list, or no` - `list` shows every file first. Every question ends with the exact word to type. On an existing repo you get a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through before that proceed. Nothing is written before your word. It creates the git repo if there is none, runs the adopt step, and prints `Done` with the hooks live. Stay in this window: in the same session, Claude asks what you want to build. The protected writes are done, so switch back to auto mode (Shift+Tab).
 
 **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own. If your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click.
 
 **2. Say what you want.**
 
-Your opening message can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`.
+Your answer can simply be what you want - *"fix a bug"*, *"add a feature"*, *"build something new"* - or just `go`.
 
-**Result:** the first response is the read-first stamp. Say what you want to build: the kit infers the kind of work, derives the risk posture from the spec, and shows the whole calibration as one acceptance line - `Full / <mode> / risk triggers: <list> [enter to accept]` - press enter, or type a correction. The kit then writes your project's scaffold, and from then on every session inherits the same rules automatically.
+**Result:** the kit infers the kind of work, derives the risk posture from the spec, and shows the whole calibration as one acceptance line - `Full / <mode> / risk triggers: <list> [type accept; a mode word or trigger token corrects it]` - type `accept`, or type a correction. The kit then writes your project's scaffold, and from then on every session inherits the same rules automatically.
 
 ### Verify your install
 
 - [ ] The installer printed `Done` and the adopt step reported `adoption COMPLETE` (exit 0).
-- [ ] You started a fresh `claude` and its first response began with a `[read-first stamp]` line.
+- [ ] Claude asked what you want to build in the same window, with no restart. The `[read-first stamp]` line starts every session after this one.
 - [ ] You said what you want to build and got the acceptance line.
 
 If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed; exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe; a clean re-run changes nothing.
@@ -226,10 +229,10 @@ Pick by the highest of complexity, time horizon, and audit needs. Re-tier whenev
 
 | Tier | For | Scaffold files | Approvals | Retrospective | Ledger | Review cost per stage |
 |---|---|---|---|---|---|---|
-| **Lite** | Under a week, low audit needs | 52 | per pull request | brief paragraph | changelog only | ~10 min |
-| **Full** (default) | a second reader, an audit need, or a multi-week horizon | 119 | per stage | process + product | append-only advisory; CI-enforced when a risk trigger is declared | ~30 min |
+| **Lite** | Under a week, low audit needs | 53 | per pull request | brief paragraph | changelog only | ~10 min |
+| **Full** (default) | a second reader, an audit need, or a multi-week horizon | 120 | per stage | process + product | append-only advisory; CI-enforced when a risk trigger is declared | ~30 min |
 
-Declaring a risk trigger at calibration arms CI enforcement of the append-only ledger and adds 2 files to the scaffold.
+Declaring a risk trigger at calibration arms CI enforcement of the append-only ledger and adds 3 files to the scaffold.
 
 The generated project's verification floor runs in three lanes over one registry: `fast` on every push, `stage` at a stage boundary, `release` as the complete floor. Only the full floor is release evidence.
 
@@ -253,11 +256,11 @@ Skip the bootstrap entirely: run in terminal `node scripts/set-mode.cjs orchestr
 <details>
 <summary><strong>What's in the box</strong></summary>
 
-The ZIP - and the `sbak/` payload of this repository, which is the same set - is 204 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
+The ZIP - and the `sbak/` payload of this repository, which is the same set - is 206 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
 
 | Directory | Files | What it is for you |
 |---|---|---|
-| `sbak/templates/` | 112 | Copied into your project by the bootstrap; never read here. |
+| `sbak/templates/` | 114 | Copied into your project by the bootstrap; never read here. |
 | `sbak/prompts/` | 23 | The verifier's seeded-defect exam; runs itself. |
 | `sbak/validators/` | 29 | Enforcement (the project-floor validators plus mode-specific and append-only checkers, `lib/`, and docs); CI runs it. |
 | `sbak/scripts/` | 18 | You run 2–3, read none. |
@@ -289,27 +292,43 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 **Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing.
 
-**Manual:** download `sbak-v1.0.6-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.6-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
+**Manual:** download `sbak-v1.0.7-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.7-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.6-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.7-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
+export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 claude
 ```
 
-Windows (cmd or PowerShell):
+Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.6-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.7-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
+set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
 claude
 ```
+
+Windows (PowerShell):
+
+```
+mkdir <projects-path>\my-project
+tar -xf sbak-v1.0.7-starter.zip -C <projects-path>\my-project
+cd <projects-path>\my-project
+git init
+node sbak\templates\scripts\kit-update.cjs --adopt
+$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"
+claude
+```
+
+(The `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP` line keeps Claude Code from stopping the kit's background channel watcher when memory runs low; Claude Code reads it only at launch, so it goes on its own line before `claude`.)
 
 The adopt step verifies itself, and its exit code is the contract: exit 0 means adoption COMPLETE and it prints exactly that; anything less exits non-zero and says why.
 
@@ -318,8 +337,14 @@ The adopt step verifies itself, and its exit code is the contract: exit 0 means 
 **Prefer to clone?** The clone alternate (same rule - give it a real home):
 
 ```
-git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git <projects-path>/my-project && cd <projects-path>/my-project && node sbak/templates/scripts/kit-update.cjs --adopt && claude
+git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git <projects-path>/my-project
+cd <projects-path>/my-project
+node sbak/templates/scripts/kit-update.cjs --adopt
+export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+claude
 ```
+
+Windows: `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"` in PowerShell, in place of the `export` line.
 
 One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.6
+# @kit-version 1.0.7
 # .githooks/pre-push  —  the fast lane: the tests your push affects, the open milestone's
 # own tests, and the always-tagged guards, on the native leg. The full matrix (Linux-in-
 # Docker + native, every test) is the `release` lane, run by /closeout, /verify and the
@@ -12,4 +12,8 @@
 # Emergency override: git push --no-verify  (logged, never routine; it cannot
 # bypass the required PR check — see docs/gates.md).
 set -e
+# The append-only leg (M32.B): every commit in the push must extend its parent's ledgers,
+# not only the final file against the base. The list is docs/append-only-ledgers.txt (the
+# same file CI reads); no list present (Lite, or an unarmed project) means one plain line.
+if [ -f docs/append-only-ledgers.txt ]; then node validators/check-append-only.cjs --per-commit --ledgers docs/append-only-ledgers.txt || exit 1; else echo "pre-push: no docs/append-only-ledgers.txt - append-only leg skipped"; fi
 node scripts/verify-local.cjs --lane fast

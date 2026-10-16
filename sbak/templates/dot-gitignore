@@ -38,4 +38,11 @@
 # trackable: negate or delete this line for the files you commit.
 reports/
 
+# The installer and its download / state folder (sbak-install's own files). The installer is a
+# release asset you can download again, and the state folder stays in place after a failed
+# install; neither belongs in the project's history. Root-anchored on purpose.
+/sbak-install.cjs
+/sbak-install.cjs.sha256
+/.sbak-install/
+
 # Add project/stack-specific ignores below (node_modules/, dist/, __pycache__/, etc.)

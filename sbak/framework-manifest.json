@@ -55,7 +55,7 @@
     "kit_version": {
       "kind": "derived",
       "source": "the release identity, DERIVED from release-manifest.json version — one root for the whole stamp chain; stamped into every scaffolded enforcement file and locked by the smoke stamp lock",
-      "value": "1.0.6"
+      "value": "1.0.7"
     },
     "operating_mode_count": {
       "kind": "bound",
@@ -99,8 +99,8 @@
       "kind": "referenced",
       "source": "golden-manifest.json tiers[tier].counts.rendered (read live)",
       "value": {
-        "full": 119,
-        "lite": 52
+        "full": 120,
+        "lite": 53
       }
     },
     "schema_count": {

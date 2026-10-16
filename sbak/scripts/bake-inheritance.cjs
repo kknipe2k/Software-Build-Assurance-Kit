@@ -869,7 +869,7 @@ try {
   } catch (e) {
     findings.push(`golden leg — the rendered read-ledger lib is unusable, so the stage-open reads could not be recorded (${e && e.message ? e.message : e}).`);
   }
-  runRendered('scripts/approve-red.cjs', []);         // 2) human approves the RED (reads recorded above)
+  runRendered('scripts/approve-red.cjs', ['--stage', 'M01.A', '--release-seq', 'none']); // 2) human approves the RED (reads recorded above); the bare release form, no channel here
   const s2 = redGate();
   runRendered('scripts/stage-active.cjs', ['--clear']); // 3) stage closed → dormant
   const s3 = redGate();

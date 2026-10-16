@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -56,6 +56,9 @@
 //     docs/tech-debt.md as IMPORTED entries — imported, never invented; the
 //     ledgers are append-only, so a re-run never duplicates an entry. --adopt
 //     runs it automatically (not under --dry-run).
+//
+// M32.J adds `--ready`: the end-of-bootstrap readiness check that prints the one READY line
+// (or a NOT READY line per failed check); see cmdReady below.
 //
 // TEMPLATE SOURCE resolution: `--kit <dir>` (a kit checkout) → else `./templates/` in
 // the project root (kept at bootstrap) → else exit 2 with guidance.
@@ -148,6 +151,7 @@ const MANAGED = [
   { file: 'scripts/lib/stage-structure.cjs', template: 'templates/scripts/lib/stage-structure.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts.cjs', template: 'templates/scripts/lib/receipts.cjs', render: 'copy' },
   { file: 'scripts/lib/read-ledger.cjs', template: 'templates/scripts/lib/read-ledger.cjs', render: 'copy' },
+  { file: 'scripts/lib/hook-root.cjs', template: 'templates/scripts/lib/hook-root.cjs', render: 'copy' },
   { file: 'scripts/channel.cjs', template: 'templates/scripts/channel.cjs', render: 'copy' },
   { file: 'scripts/lib/channel.cjs', template: 'templates/scripts/lib/channel.cjs', render: 'copy' },
   { file: 'scripts/lib/receipts-collect.cjs', template: 'templates/scripts/lib/receipts-collect.cjs', render: 'copy' },
@@ -182,8 +186,10 @@ function usage(msg) {
   process.stderr.write(
     'usage: node scripts/kit-update.cjs [--kit <kit-checkout>] [--apply <live-file>]\n' +
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
-    '                                   [--place-project-claude <filled-file>]\n' +
+    '                                   [--place-project-claude <filled-file>] [--ready]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
+    '  --ready prints the one READY line after the bootstrap commit (or a NOT READY line per\n' +
+    '  failed check, exit 1);\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
     '  enforcement wiring from templates/ (collisions reported, never overwritten; an existing\n' +
     '  .claude/settings.json is MERGED with a byte-exact archive + rollback, KF-56); --ingest\n' +
@@ -234,6 +240,64 @@ function cmdDetect(projRoot) {
   } else {
     process.stdout.write('kit-update: state=fresh — no project files and no stripped-state signals; a fresh bootstrap is the right path.\n');
   }
+  return 0;
+}
+
+// ── --ready: the one READY line (M32.J) ─────────────────────────────────────────────────
+// Bootstrap's Phase 5 runs this right after the bootstrap commit. Five checks, in order, and
+// ALL of them run, so the person sees every reason at once:
+//   state      - the --detect classifier (detectRepoState, reused) says `project`;
+//   wiring     - the project's own validators/validate-claude-integrity.cjs --settings passes
+//                (reused, never re-implemented; a validator that cannot run is a failure,
+//                never a skipped check);
+//   read-first - the read-first hook's own --check passes (stdin closed: the hook reads stdin
+//                when it is not given --check, and an open pipe hangs it);
+//   HEAD       - the bootstrap commit exists;
+//   tree       - nothing uncommitted except the channel's own traffic under .claude/channel/.
+// Pass: exactly one stdout line, exit 0. Any failure: one `NOT READY: <check> - <reason>`
+// line per failed check on stdout, no READY line, exit 1. The root is the cwd, as --detect.
+function readyReason(r) {
+  const lines = normalize(`${r.stderr || ''}\n${r.stdout || ''}`).split('\n')
+    .map((l) => l.replace(/^(FAIL|NOTE)\s+claude-integrity:\s*/, '').trim()).filter(Boolean);
+  const s = lines.join('; ');
+  return s.length > 400 ? s.slice(0, 397) + '...' : (s || `exit ${r.status}`);
+}
+function cmdReady(projRoot) {
+  const run = (cmd, args) => spawnSync(cmd, args, { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const fails = [];
+  const state = detectRepoState(projRoot).state;
+  if (state !== 'project') fails.push(['state', `--detect says state=${state}, not project (none of ${PROJECT_FILES.join(', ')} is present)`]);
+  const integrity = path.join(projRoot, 'validators', 'validate-claude-integrity.cjs');
+  if (!fs.existsSync(integrity)) {
+    fails.push(['wiring', 'validators/validate-claude-integrity.cjs is absent, so the session-hook wiring cannot be checked']);
+  } else {
+    const r = run(process.execPath, [integrity, '--settings', path.join('.claude', 'settings.json')]);
+    if (r.status !== 0) fails.push(['wiring', readyReason(r)]);
+  }
+  const hook = path.join(projRoot, '.claude', 'hooks', 'session-start-read-first.cjs');
+  if (!fs.existsSync(hook)) {
+    fails.push(['read-first', '.claude/hooks/session-start-read-first.cjs is absent, so the read-first lists cannot be checked']);
+  } else {
+    const r = run(process.execPath, [hook, '--check']);
+    if (r.status !== 0) fails.push(['read-first', readyReason(r)]);
+  }
+  const head = run('git', ['rev-parse', '--verify', '--short', 'HEAD']);
+  const sha = head.status === 0 ? String(head.stdout).trim() : '';
+  if (!sha) fails.push(['HEAD', 'no commit yet - the bootstrap commit has not landed (git rev-parse --verify HEAD failed)']);
+  const ps = run('git', ['status', '--porcelain', '--untracked-files=all']);
+  if (ps.status !== 0) {
+    fails.push(['tree', `git status failed: ${readyReason(ps)}`]);
+  } else {
+    const dirty = normalize(ps.stdout).split('\n').filter(Boolean)
+      .map((l) => l.slice(3).replace(/^.* -> /, '').replace(/^"|"$/g, ''))
+      .filter((p) => !p.startsWith('.claude/channel/'));
+    if (dirty.length) fails.push(['tree', `${dirty.length} uncommitted path(s), first: ${dirty.slice(0, 3).join(', ')}`]);
+  }
+  if (fails.length) {
+    for (const [check, why] of fails) process.stdout.write(`NOT READY: ${check} - ${why}\n`);
+    return 1;
+  }
+  process.stdout.write(`READY. Project committed at ${sha}. Next: open a fresh terminal as the orchestrator.\n`);
   return 0;
 }
 
@@ -310,6 +374,13 @@ function cmdIngest(projRoot, dryRun) {
   process.stdout.write('kit-update: ingest — ' + added + (dryRun ? ' would be' : '') + ' imported (TD-labeled / .skip / fixme / retry markers; existing entries never duplicated).\n');
   return 0;
 }
+
+// The kit's public repository. An installed project has no copy of the kit's CHANGELOG.md
+// (release-manifest.json marks it repo-identity: declared, never packed), so a line that sends a
+// person there gives this address. The slug is a copy of sbak-install.cjs's REPO_SLUG, which this
+// script cannot read in a project; a smoke pin holds the two equal and the path to the manifest.
+const KIT_REPO_SLUG = 'kknipe2k/Software-Build-Assurance-Kit';
+const KIT_CHANGELOG_URL = `https://github.com/${KIT_REPO_SLUG}/blob/main/CHANGELOG.md`;
 
 // ── --adopt: the installer (UAT #2/#0/#16; C.3.5 route table) ───────────────────────────
 // The packed kit nests under ONE dir at the unzip root (M22.D namespace repack;
@@ -771,6 +842,10 @@ function main() {
   // --place-project-claude is Phase-3 placement, not template comparison — dispatched
   // before template resolution AND before the kit-repo no-op (it acts on the project root).
   if (placeIdx !== -1) process.exit(cmdPlaceProjectClaude(projRoot, argv[placeIdx + 1]));
+  // --ready is the end-of-bootstrap readiness check - it inspects the project root and needs
+  // no template source, so it is dispatched before the kit-repo no-op too (inside the kit
+  // workshop it honestly reports NOT READY: the workshop is not a bootstrapped project).
+  if (argv.includes('--ready')) process.exit(cmdReady(projRoot));
 
   // KIT-REPO NO-OP — the workshop-only pair, BOTH required (see the header note:
   // the packed fixture set made rows.json the wrong discriminator, and demanding
@@ -823,7 +898,12 @@ function main() {
     const liveStamp = stampOf(live);
     const tplStamp = stampOf(tpl);
     if (liveStamp !== null && tplStamp !== null && liveStamp !== tplStamp) {
-      report.push({ row, cls: 'stamp', detail: `live @${liveStamp} vs template @${tplStamp} (kit updated; --apply to take the template)` });
+      // A wiring row is bootstrap-filled, so --apply refuses it (below): the line names the manual
+      // change instead, the release CHANGELOG's subsection for projects on the live stamp's release,
+      // by its public address, because the project has no copy of that file.
+      report.push({ row, cls: 'stamp', detail: row.render === 'wiring'
+        ? `live @${liveStamp} vs template @${tplStamp} - a bootstrap-filled file, so --apply refuses it: make the change by hand from "Manual change for a v${liveStamp} project" in the kit's CHANGELOG, ${KIT_CHANGELOG_URL}, then raise its @kit-version line`
+        : `live @${liveStamp} vs template @${tplStamp} (kit updated; --apply to take the template)` });
       continue;
     }
     if (row.render === 'wiring') {

@@ -43,11 +43,11 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.6-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.7-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.6-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.6-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.6-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.6-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.7-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.7-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.7-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.7-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -60,7 +60,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.6-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.7-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -71,7 +71,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.6-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.7-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -151,7 +151,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 
 ## 4. Describe what you want to build
 
-**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 52 files for Lite, 119 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 53 files for Lite, 120 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle, and **before any disk write the agent states the blast radius** ("I'll create about N files across `.claude/`, `.githooks/`, `scripts/`, `docs/`, `.github/`, plus root files") so you consent to the footprint up front. In Agent Mode, VS Code additionally shows the diff for every file write - **Apply** or **Discard**, per edit.
 
@@ -210,7 +210,7 @@ The agent runs the same three-gate per-stage loop as the Claude Code track. The 
 
 - **Gate 1 - plan.** The agent states its deliverable + test plan and waits. Confirm or correct.
   - *Or* **best practice: copy/paste the plan to the orchestrator window's chat for adjudication** - it returns a prompt to paste back to the build chat. At every gate you have that option; it is the best practice.
-- **Gate 2 - red-stop.** The agent writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. Approve the test design, or send it back. **Best practice: copy/paste the RED surface to the orchestrator window's chat for adjudication.** This catches shallow or wrong-contract tests at the cheapest moment. In the two-window flow the release rides the orchestrator's verdict packet, which ends with the explicit line `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs` - the agent acts only on that line, and the approval script runs fine on this host. What Copilot does not have is the hook that *blocks* edits until then - the stop is the agent honoring the rule, so if you ever see implementation edits before your approval, stop the stage and say so.
+- **Gate 2 - red-stop.** The agent writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. Approve the test design, or send it back. **Best practice: copy/paste the RED surface to the orchestrator window's chat for adjudication.** This catches shallow or wrong-contract tests at the cheapest moment. In the two-window flow the release rides the orchestrator's verdict packet, which ends with the explicit line `RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>` - the agent acts only on that line, and the approval script runs fine on this host. What Copilot does not have is the hook that *blocks* edits until then - the stop is the agent honoring the rule, so if you ever see implementation edits before your approval, stop the stage and say so.
 - **Gate 3 - stage-end.** The agent implements to green, runs the gates (VS Code shows each command - approve before run), fills the retrospective including the required **user friction stamp you fill yourself** (`verdict:` pass or fail, plus an optional sentence - the independent check on the agent's self-grade), and surfaces the whole stage: diff, gate results, retrospective, draft commit message. It says *"I will not commit until you approve."* **Best practice: copy/paste the stage-end bundle to the orchestrator window's chat for adjudication.** The stamp slot is enforced by a pre-commit validator - an empty stamp fails the commit, and that validator runs mechanically here (it is a Git hook, not a session hook).
 
 Review the bundle. If good: tell the agent to commit (or commit yourself via Source Control). Do **not** allow a commit before you have reviewed and approved - gate G1, the framework's single most important rule. If it ever commits without approval, that's a bug; surface it.
@@ -222,7 +222,7 @@ Open a new chat for the next stage and repeat. After the main build stages come 
 At Full tier the framework splits into two session types - **orchestrator** (authors Phase docs, adjudicates the build's surfaces, routes findings) and **build** (executes one stage). In Copilot that maps to two VS Code windows, each with its own chat:
 
 - **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed). Orchestrator window: the main checkout. Build window: `../<project>-build-wt`. Shared `.git`, isolated working trees, no file-race risk. Open each via **File, then Open Folder** (same `code .` caveat as §1).
-- **Not on day one:** a freshly bootstrapped project has **zero commits**, so the milestone branch cannot exist yet and `node scripts/set-mode.cjs --split <milestone-branch>` refuses (`fatal: invalid reference` - executed on git 2.52). Until M01.A's first commit lands, run both chats against the single checkout - one role at a time, mode stated in each chat's first message.
+- **From day one:** bootstrap ends with its own commit - the bootstrap commit is the project's first commit - so `node scripts/set-mode.cjs --split <milestone-branch>` works as soon as bootstrap closes. Only a repo with no commit at all (never bootstrapped) has to wait: there the split refuses, and both chats run against the single checkout - one role at a time, mode stated in each chat's first message - until its first commit lands.
 
 You are the conduit - copy surfaces from the build chat to the orchestrator chat and decisions back, by switching windows. Only one role acts at a time. **On Claude Code this is the one job the channel took over:** there, the packets move themselves and the human only adjudicates and releases the gates. Here, moving them is yours, and it is the largest single difference in day-to-day work between the two hosts. (Topologies A, B, C in `ORCHESTRATOR.md` §1 are Claude-Code-specific and don't apply in Copilot.)
 
@@ -237,7 +237,7 @@ The framework has four roles - **work**, **verifier**, **orchestrator**, **refac
 - **Orchestrator chat** (Full only) - start with: *"This is an orchestrator session. Read `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`."*
 - **Refactor chat** (Full only, when the trigger fires) - start with: *"This is a refactor session. Read `.claude/read-first-list-refactor.txt`."*
 
-Verify each by checking the `mode=` value in the orientation stamp. **One asymmetry to know about:** the instructions file's stamp form offers `work`, `verifier` and `orchestrator`, so a refactor chat has no matching value to print - say the role in words and hold the agent to the refactor reading list.
+Verify each by checking the `mode=` value in the orientation stamp: the instructions file's stamp form offers all four - `work`, `verifier`, `orchestrator` and `refactor`.
 
 ### 5.7 Invoking stages without slash commands
 

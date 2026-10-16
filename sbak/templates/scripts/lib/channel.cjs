@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/lib/channel.cjs
 //   (kit source of truth: templates/scripts/lib/channel.cjs)
 //
@@ -65,11 +65,8 @@ const SEND_ASK_RULE = 'Bash(node scripts/channel.cjs send *)';
 // The strict role reader (the hooks' rule: bare token; absent = work; garbage = unresolved).
 // ---------------------------------------------------------------------------
 const NUL = String.fromCharCode(0);
-function decodeBytes(b) {
-  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) return b.toString('utf16le', 2);
-  if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return b.toString('utf8', 3);
-  return b.toString('utf8');
-}
+// decodeBytes + realOrLexical: the shared hook helpers (M32.A fold of M32.R Dup-1 / Dup-2).
+const { decodeBytes, realOrLexical } = require(path.join(__dirname, 'hook-root.cjs'));
 // -> { state: 'absent' | 'resolved' | 'unresolved', role }
 function readRole(tree) {
   const f = path.join(tree, '.claude', 'role');
@@ -87,7 +84,6 @@ function git(cwd, args) {
   return r.status === 0 ? String(r.stdout).replace(/\r?\n$/, '') : null;
 }
 function normPath(p) { const s = path.resolve(p).replace(/\\/g, '/'); return process.platform === 'win32' ? s.toLowerCase() : s; }
-function realOrLexical(p) { try { return fs.realpathSync(p); } catch (_) { return path.resolve(p); } }
 function worktrees(cwd) {
   const out = git(cwd, ['worktree', 'list', '--porcelain']);
   if (out === null) return null;
@@ -202,11 +198,22 @@ function emit(cwd, emitter, event, extra) {
 function stageOf(tree) {
   try { const t = fs.readFileSync(path.join(tree, '.claude', 'stage-active'), 'utf8').split(NUL).join('').trim(); return STAGE_RE.test(t) ? t : '-'; } catch (_) { return '-'; }
 }
+// The trunk, resolved the way verify-local's base fallback reads it: main, then master (a project
+// adopted into an existing master repo). The ONE resolver: the packets' ahead list, `channel
+// status` and /closeout's commit list all read it. Nothing here ever renames a branch.
+function trunkOf(tree) {
+  for (const b of ['main', 'master']) if (git(tree, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`]) !== null) return b;
+  return null;
+}
+function aheadOf(tree) {
+  const trunk = trunkOf(tree);
+  const raw = trunk === null ? null : git(tree, ['log', '--oneline', `${trunk}..HEAD`]);
+  return { trunk, ahead: raw === null ? [] : raw.split(/\r?\n/).filter(Boolean) };
+}
 function stateOf(tree) {
   const branch = git(tree, ['rev-parse', '--abbrev-ref', 'HEAD']) || '-';
   const head = git(tree, ['rev-parse', '--short', 'HEAD']) || '-';
-  const aheadRaw = git(tree, ['log', '--oneline', 'main..HEAD']);
-  const ahead = aheadRaw === null ? [] : aheadRaw.split(/\r?\n/).filter(Boolean);
+  const { ahead } = aheadOf(tree);
   const statusRaw = git(tree, ['status', '--short']);
   const status = statusRaw === null ? [] : statusRaw.split(/\r?\n/).filter(Boolean);
   return { branch, head, ahead, status };
@@ -291,6 +298,10 @@ function stampLine(cwd) {
   return `**[channel]** ${summaryLine(res, u.unread).replace(/^channel: /, '').replace(' new from ', ' unread from ').replace(' - run: ', ' - first action: ')}`;
 }
 
+// The liveness probe (KF-67: a watch marker is not a listener): `channel status` and the
+// stage-active listening gate (M32.1.C, V-27) judge a marker's pid with this one function.
+function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return !!(e && e.code === 'EPERM'); } }
+
 // The human's consumption (approve-red.cjs): advance past a pending approval-request.
 function consumeApproval(cwd) {
   const res = resolve(cwd);
@@ -307,5 +318,5 @@ module.exports = {
   SCHEMA, CLASSES, BUILDER_CLASSES, ORCH_CLASSES, WRITER_ROLES, FILES, SIDE, PEER, PEER_NAME, KIND_RE, SEND_ASK_RULE, writersOf,
   readRole, repoIdentity, worktrees, resolve, readLog, readCursor, writeCursor, readTurn, writeTurn,
   unreadFor, append, sendGate, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
-  stampLine, consumeApproval, emit, writeAtomic,
+  stampLine, consumeApproval, emit, writeAtomic, pidAlive, trunkOf, aheadOf,
 };

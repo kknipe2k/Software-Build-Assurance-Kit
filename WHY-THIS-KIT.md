@@ -26,8 +26,8 @@ validators at pre-commit and CI, so sessions don't need it preloaded to obey it.
 Full is the default tier; re-tier any time via a logged override. New process mass is
 budgeted: a new gate requires a named real failure it would have caught (N5).
 
-- **Lite** - 52 scaffold files, brief retros, CHANGELOG-only ledger, advisory validators.
-- **Full** (default) - 119 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
+- **Lite** - 53 scaffold files, brief retros, CHANGELOG-only ledger, advisory validators.
+- **Full** (default) - 120 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
 
 
 ### 3. Calibrated fresh-context verification
@@ -92,7 +92,7 @@ The claims above lean on published evidence about frameworks and scaffolding lik
 ---
 
 *Counts on this page - 23 validator scripts in the shipped kit, 4 hooks, 9 shipped project scripts,
-8 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 52/119 scaffold files, and
+8 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 53/120 scaffold files, and
 the covered-stack set - are policed by `sbak/validators/validate-entry-docs.cjs` and the smoke
 suite against derived facts; the full smoke suite runs in the development repository (it does
 not ship), and `sbak/scripts/bake-inheritance.cjs` is the effectiveness proof that does. Start

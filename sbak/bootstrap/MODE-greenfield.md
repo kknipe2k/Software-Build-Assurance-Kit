@@ -37,6 +37,10 @@ For **all tiers**, web-verify any technical choices (library versions, framework
 Surface a one-page summary of the answers + the inferred tier + expertise. User confirms or revises. **Lock tier and expertise to `project-config.md` only after Phase 1.** Don't generate the config file yet — the spec may surface a complexity higher than the initial tier suggested, and the right move is to bump tier before scaffolding.
 
 
+## The paste shell (one discovery question)
+
+On a win32 host, ask once, as its own question during discovery: `Which shell do you paste into: cmd or PowerShell?` A POSIX host records `bash` without asking. The answer lands in `project-config.md` as `shell: cmd|powershell|bash`, and every launch block the bootstrap prints renders in that shell.
+
 ## The leading-dial summary
 
 - **`greenfield`** (default) — build software from scratch. The full bootstrap workflow above. **Implemented.**

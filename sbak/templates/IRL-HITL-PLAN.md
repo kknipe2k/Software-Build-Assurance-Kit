@@ -59,7 +59,7 @@ stalls. Every human answer in this project has exactly one home — name it.
 | The ask | Surfaces at | Where the answer gets typed |
 |---|---|---|
 | Gate-1 approval (deliverable + test plan) | Stage open | Reply in the orchestrator session |
-| RED-stop release | After the failing tests | `node scripts/approve-red.cjs` in the build session |
+| RED-stop release | After the failing tests | `node scripts/approve-red.cjs --stage <id> --release-seq <n>` in the build session |
 | Gate-3 approval (commit authorization) | Stage-end packet | Reply in the orchestrator session |
 | User friction stamp (`pass` \| `fail`) | Stage-end packet | The ```user-stamp``` block in `retrospectives/<stage>-retrospective.md` — transcribed verbatim, never self-placed |
 | Drive-moment result | Milestone close | {{DRIVE_RECORD_HOME}} |

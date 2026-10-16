@@ -11,6 +11,10 @@
   - **The inter-phase re-tier (end of Phase R) — an EXPLICIT user event, never automatic.** When R5 passes and `docs/findings-to-illustrate.md` exists, surface: *"given the findings you want to illustrate, here's what the app needs to do → that suggests `<tier>`; **confirm or revise**."* Do **not** auto-apply a tier. On confirmation, **Phase A** opens at the chosen tier and **inherits that tier's full scaffold + Stage V** — Phase A is **NOT** Lite-locked like Phase R. Phase A then proceeds as a normal greenfield build at the re-tiered tier; if it reveals more complexity mid-construction, the standard re-tier-mid-phase protocol applies.
   - **Workflow detail:** `sbak/BUILD-PLAYBOOK.md` §3.9; gates `G_RP_R1/R2/R3/A1/A2` (`sbak/PROCESS-VALIDATION.md`).
 
+## The paste shell (one discovery question)
+
+On a win32 host, ask once, as its own question during discovery: `Which shell do you paste into: cmd or PowerShell?` A POSIX host records `bash` without asking. The answer lands in `project-config.md` as `shell: cmd|powershell|bash`, and every launch block the bootstrap prints renders in that shell.
+
 ## The leading-dial summary
 
 - **`research_publish`** — synthesize literature/data into a paper + interactive app. The hybrid two-phase shape: Phase R (grounded STORM research, always Lite process, mandatory sources registry) → an **explicit user re-tier** → Phase A (the interactive app at the tier it warrants, inheriting that tier's full scaffold + Stage V). **Implemented** (`sbak/BUILD-PLAYBOOK.md` §3.9).

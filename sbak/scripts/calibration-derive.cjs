@@ -126,14 +126,84 @@ if (lanesArg !== null) {
 // ── the Full-path glance (M30.D): mode + risk triggers derived from the SPEC, as DATA ────
 // One stdout line, printed by the agent verbatim — never composed. Keyword tables live in
 // calibration-core.json (risk_trigger_keywords / mode_keywords / glance_smells); this branch
-// adds no heuristic beyond a lowercased substring match against those lists. Fail closed on
-// an unknown --mode or a core missing the tables.
+// adds no heuristic beyond a lowercased substring match against those lists, and one
+// sentence-local rule (M32.1.A, drive note 5): a risk-trigger hit whose sentence carries a
+// negation word before it, that sits in a table column headed Out / Not / No / Deferred, or
+// whose row's status cell reads Out (M32.1.C, V-24) does not arm. A trigger whose every hit is negated is printed under the glance as a smell
+// line, so the eyeball still sees it. Fail closed on an unknown --mode or a core missing the
+// tables.
+const NEGATION_WORDS = /\b(no|not|never|without|none)\b/;
+const NEGATED_COLUMN = /^(out|not|no|deferred)\b/i;
+// M32.1.C (V-24, drive note 4): a table with a status-like column (the header cell is wholly
+// `In or out`, `In/out`, `Status` or `Scope`) - a row whose status cell is WHOLLY `out`, `no`,
+// `not`, `deferred` or `not in scope` (any case) negates that row's other cells. Whole-cell only,
+// so `Not started` does not negate. The drive's spec was rewritten to please the derivation
+// because an Out cell VALUE armed its row; the header rule above stays.
+const STATUS_HEADER = /^(in or out|in\/out|status|scope)$/i;
+const NEGATED_STATUS = /^(out|no|not|deferred|not in scope)$/i;
+const plainCell = (c) => String(c || '').replace(/[*_`]/g, '').trim();
+// The spec as units: prose split on sentence ends (wrapped lines joined), headings and list
+// items on their own, table cells one by one with their column header.
+function specUnits(raw) {
+  const units = [];
+  let para = [];
+  const flush = () => {
+    if (!para.length) return;
+    for (const s of para.join(' ').split(/(?<=[.!?])\s+/)) if (s.trim()) units.push({ text: s.trim(), negatedColumn: false });
+    para = [];
+  };
+  let header = null;
+  for (const line of raw.replace(/\r\n?/g, '\n').split('\n')) {
+    const t = line.trim();
+    if (/^\|/.test(t)) {
+      flush();
+      const cells = t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      if (header === null) { header = cells; for (const c of cells) units.push({ text: c, negatedColumn: false }); continue; }
+      if (cells.every((c) => /^:?-{3,}:?$/.test(c))) continue;
+      const rowOut = cells.some((c, i) => STATUS_HEADER.test(plainCell(header[i])) && NEGATED_STATUS.test(plainCell(c)));
+      cells.forEach((c, i) => units.push({ text: c, negatedColumn: rowOut || NEGATED_COLUMN.test(header[i] || '') }));
+      continue;
+    }
+    header = null;
+    if (t === '') { flush(); continue; }
+    if (/^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>)/.test(t)) flush();
+    para.push(t);
+    if (/^#{1,6}\s/.test(t)) flush();
+  }
+  flush();
+  return units;
+}
+// The quoted fragment of a smell line: the unit, trimmed around the hit, never a double quote.
+function smellFragment(text, at, len) {
+  let f = text;
+  if (text.length > 100) {
+    const a = Math.max(0, at - 60); const b = Math.min(text.length, at + len + 30);
+    f = (a > 0 ? '...' : '') + text.slice(a, b).trim() + (b < text.length ? '...' : '');
+  }
+  return f.replace(/"/g, '\'');
+}
 if (fromSpecPath) {
   let specRaw;
   try { specRaw = fs.readFileSync(path.resolve(fromSpecPath), 'utf8'); } catch (e) { die('spec unreadable at ' + fromSpecPath + ': ' + e.message); }
   const spec = specRaw.toLowerCase();
   if (!core.risk_trigger_keywords || !core.mode_keywords) die('calibration-core.json lacks risk_trigger_keywords/mode_keywords — the glance derives from the core\'s data tables only');
-  const trig = core.risk_triggers.filter((t) => (core.risk_trigger_keywords[t] || []).some((k) => spec.includes(k)));
+  const units = specUnits(specRaw);
+  const trig = [];
+  const negated = [];
+  for (const t of core.risk_triggers) {
+    let armed = false; let firstNegated = null;
+    for (const u of units) {
+      const low = u.text.toLowerCase();
+      for (const k of core.risk_trigger_keywords[t] || []) {
+        for (let at = low.indexOf(k); at !== -1; at = low.indexOf(k, at + 1)) {
+          if (u.negatedColumn || NEGATION_WORDS.test(low.slice(0, at))) { if (!firstNegated) firstNegated = smellFragment(u.text, at, k.length); }
+          else armed = true;
+        }
+      }
+    }
+    if (armed) trig.push(t);
+    else if (firstNegated) negated.push({ trigger: t, fragment: firstNegated });
+  }
   let gMode = null;
   if (modeArg !== null) {
     if (!core.operating_modes.includes(modeArg)) die('unknown --mode "' + modeArg + '" (core: ' + core.operating_modes.join(', ') + ')');
@@ -147,11 +217,12 @@ if (fromSpecPath) {
   }
   let note = null;
   for (const s of core.glance_smells || []) { if (s.mode === gMode && (s.spec_any || []).some((k) => spec.includes(k))) { note = s.note; break; } }
-  const glance = 'Full / ' + gMode + ' / risk triggers: ' + (trig.length ? trig.join(', ') : 'none') + (note ? ' / note: ' + note : '') + ' [enter to accept]';
+  const glance = 'Full / ' + gMode + ' / risk triggers: ' + (trig.length ? trig.join(', ') : 'none') + (note ? ' / note: ' + note : '') + ' [type accept; a mode word or trigger token corrects it]';
+  const smells = negated.map((n) => 'mentioned only in negation: ' + n.trigger + ' ("' + n.fragment + '")');
   // the lane fills ride the JSON only - the glance LINE is the ruled one line, unchanged.
   const lanes = core.derivations && core.derivations.test_lanes ? laneFills(runnerFor(spec)) : null;
-  if (asJson) process.stdout.write(JSON.stringify({ tier: 'Full', operating_mode: gMode, risk_triggers: trig, glance, test_lanes: lanes }, null, 2) + '\n');
-  else process.stdout.write(glance + '\n');
+  if (asJson) process.stdout.write(JSON.stringify({ tier: 'Full', operating_mode: gMode, risk_triggers: trig, negated, glance, test_lanes: lanes }, null, 2) + '\n');
+  else process.stdout.write([glance].concat(smells).join('\n') + '\n');
   process.exit(0);
 }
 

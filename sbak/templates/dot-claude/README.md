@@ -6,7 +6,7 @@ This directory ships with the **Software Build Assurance Kit**. After bootstrap,
 
 | File | Purpose |
 |---|---|
-| `settings.json` | Project-scoped Claude Code settings. Registers the SessionStart hook for `startup`, `resume`, `clear`, and `compact` matchers. |
+| `settings.json` | Project-scoped Claude Code settings. Registers the SessionStart hooks as one group with no matcher, so every source fires them (`startup`, `resume`, `clear`, `compact`, `fork`, and any later one). |
 | `hooks/session-start-read-first.cjs` | The hook (Node.js). Reads `role`, picks the matching read-first list, caps to the configured size, and prints the STAMP LAYER: the stamp line, the session identity, an orientation manifest (every entry with its `when:` boundary) and the memory-is-a-hint rule; only entries tagged `when: session-start` are inlined. The rest are read at their boundary with the agent's own tools; the receipts adapter records each read and the boundary's gate (`approve-red` for `stage-open`) checks the ledger. |
 | `read-first-list.txt` | Plain-text list for **work-mode** sessions (build stages A–D). One path per line, relative to repo root. May reference retrospectives. |
 | `read-first-list-verifier.txt` | Plain-text list for **verifier-mode** sessions. DELIBERATELY OMITS prior retrospectives - the fresh-context bias guard for Stage V. |

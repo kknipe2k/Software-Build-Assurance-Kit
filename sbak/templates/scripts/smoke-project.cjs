@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -120,7 +120,7 @@ if (fs.existsSync(H_RG) && fs.existsSync(S_SA) && fs.existsSync(S_AR)) {
   runNode(S_SA, ['M01.A'], { cwd: rg });                 // open a stage, un-approved
   ok('hook red-gate (pretooluse): failing case — a pre-approval implementation edit must block (exit 2)',
     redGate().code === 2);
-  runNode(S_AR, [], { cwd: rg });                        // human approval
+  runNode(S_AR, ['--stage', 'M01.A', '--release-seq', 'none'], { cwd: rg }); // human approval (the bare release form)
   ok('hook red-gate (pretooluse): happy — after approve-red the edit is allowed', redGate().code === 0);
   runNode(S_SA, ['--clear'], { cwd: rg });               // stage closed -> dormant
   ok('hook red-gate (pretooluse): happy — cleared stage goes dormant (allow)', redGate().code === 0);
@@ -143,6 +143,7 @@ if (fs.existsSync(H_RL)) {
   ok('hook receipts-lifecycle: happy — a UserPromptSubmit payload appends a turn_started event (a dead hook appends nothing)',
     r.code === 0 && appended, `exit ${r.code}, appended ${appended}`);
   const rlFail = fixtureDir('receipts-failopen');
+  fs.writeFileSync(path.join(rlFail, '.claude', 'role'), 'work\n'); // a control file anchors the root here, so the failing append is THIS tree's (a markerless .claude/ is not a root and the walk would leave the fixture)
   fs.writeFileSync(path.join(rlFail, '.claude', 'receipts'), 'x'); // a FILE where the dir must go -> append throws
   r = runNode(H_RL, [], { cwd: rlFail, input: JSON.stringify({ cwd: rlFail, session_id: 'sMini', hook_event_name: 'UserPromptSubmit' }) });
   ok('hook receipts-lifecycle: failing case — an unwritable receipts dir stays FAIL-OPEN (exit 0, never blocks)',

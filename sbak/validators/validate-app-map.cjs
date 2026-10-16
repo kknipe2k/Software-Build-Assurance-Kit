@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-app-map.cjs
 //
 // The App-Map currency primitive (M04) — sibling to check-append-only.cjs in
@@ -379,8 +379,10 @@ function main() {
   // dropped the whole table). Surface it LOUDLY as a finding rather than passing green on
   // "0 verified" — the exact fail-open shape this backstop names, caught even when the header fix above
   // cannot recover the column.
+  // Rows inside an HTML comment are not visible rows: the template's row shape and its worked
+  // examples live there, so a fresh map with an empty entries table passes its own PR check.
   if (entries.length === 0) {
-    const looksVerified = normalize(mapText).split('\n').some((l) => {
+    const looksVerified = normalize(mapText).replace(/<!--[\s\S]*?-->/g, '').split('\n').some((l) => {
       const t = l.trim();
       return t.startsWith('|') && !isSeparatorRow(splitRow(t)) && /\bverified\b/i.test(t);
     });

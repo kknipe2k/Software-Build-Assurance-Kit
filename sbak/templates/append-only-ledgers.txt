@@ -1,0 +1,27 @@
+# docs/append-only-ledgers.txt - the ONE list of this project's append-only ledgers.
+#
+# Read by BOTH enforcement points of validators/check-append-only.cjs: the pre-push hook
+# (.githooks/pre-push, `--per-commit --ledgers docs/append-only-ledgers.txt`, every push)
+# and the CI workflow (.github/workflows/append-only-ledger.yml, every pull request).
+# One path per line, repo-relative, forward slashes; `#` lines and blank lines are ignored.
+# A path absent from this project (a ledger it never opened) passes harmlessly: absent is
+# "new", never a violation. To add or remove a ledger, edit THIS file - nowhere else.
+#
+# The merge valve: the walk compares each commit with its first parent, so a merge of main
+# whose resolution puts main's rows above the branch's reads as a mid-file insert. Then
+# resolve the branch's rows first, or add an exception (--exceptions <file>, one
+# `<sha> <path> <reason>` line).
+#
+# NOT listed on purpose: project-config.md. Its override log is append-only, but the file
+# as a whole is editable (the Tier line and toggle table change on re-tier), so a whole-file
+# byte-prefix check would false-positive. Its override log stays honor-system.
+docs/gap-analysis.md
+docs/sessions.md
+docs/tech-debt.md
+docs/consultations.md
+docs/off-track-log.md
+docs/sources/registry.md
+.claude/channel/orch-to-builder.jsonl
+.claude/channel/builder-to-orch.jsonl
+docs/audit/findings-ledger.md
+docs/release-state.md

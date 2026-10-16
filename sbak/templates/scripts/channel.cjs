@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //
@@ -49,7 +49,7 @@ function bodyBuf() {
 }
 function resolved() { const r = ch.resolve(cwd); if (!r.ok) die(r.line); return r; }
 function sleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
-function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e && e.code === 'EPERM'; } }
+const pidAlive = ch.pidAlive; // the one KF-67 probe (the stage-active gate shares it)
 
 // ---------------------------------------------------------------------------
 if (verb === 'publish' || verb === 'send') {
@@ -121,6 +121,12 @@ if (verb === 'watch') {
   } catch (_) { /* no marker */ }
   clearMarker();
   if (u0.unread.length) { out(ch.summaryLine(res, u0.unread)); process.exit(4); }
+  // M32.I (KF-65): Claude Code reaps idle background shells under host memory pressure unless the
+  // session was LAUNCHED with this variable (setting it from a shell command has no effect). The
+  // value is trimmed: cmd's `set X=1 && claude` stores "1 " with a trailing space.
+  if (String(process.env.CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP || '').trim() !== '1') {
+    out('channel: note - this host\'s Claude Code may reap background shells under memory pressure; launch sessions with CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 to keep the watcher alive');
+  }
 
   const inbox = ch.inboxFile(res);
   const sizeOf = (f) => { try { const s = fs.statSync(f); return { size: s.size, mtime: s.mtimeMs }; } catch (_) { return { size: 0, mtime: 0 }; } };
@@ -165,15 +171,33 @@ if (verb === 'status') {
   const res = resolved();
   const inbox = ch.unreadFor(res);
   const turn = ch.readTurn(res.root);
+  // M32.I (KF-67): a marker is not a listener. Each marker's pid is probed; a dead one (ESRCH, or a
+  // marker that cannot be read at all) is reported as DEAD and its stale file removed.
+  const watchers = [];
+  const dead = [];
+  for (const side of ['work', 'orchestrator']) {
+    const marker = path.join(res.root, `watch.${side}.json`);
+    if (!fs.existsSync(marker)) continue;
+    let m = null;
+    try { m = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch (_) { m = null; }
+    if (m && Number.isInteger(m.pid) && m.pid > 0 && pidAlive(m.pid)) { watchers.push(side); continue; }
+    dead.push({ side, pid: m && Number.isInteger(m.pid) ? m.pid : null, since: m && typeof m.since === 'string' ? m.since : null });
+    try { fs.rmSync(marker, { force: true }); } catch (_) { /* fine */ }
+  }
+  // The builder tree's unpushed work against the resolved trunk (main, else master): the list
+  // /closeout derives its CHANGELOG from, read through the one resolver.
+  const tk = ch.aheadOf(res.tree);
   const st = {
     role: res.role, repo: res.repo, root: res.root, turn: turn ? turn.holder : null,
     cursors: { work: ch.readCursor(res.root, 'work'), orchestrator: ch.readCursor(res.root, 'orchestrator') },
     unread: inbox.fault ? null : inbox.unread.length, fault: inbox.fault ? inbox.fault.line : null,
-    watchers: ['work', 'orchestrator'].filter((r) => fs.existsSync(path.join(res.root, `watch.${r}.json`))),
+    watchers, dead_watchers: dead, trunk: tk.trunk, ahead: tk.ahead,
   };
   if (flag('--json')) { out(JSON.stringify(st)); process.exit(0); }
+  const deadText = dead.map((d) => ` - watcher DEAD: ${d.side} (pid ${d.pid === null ? 'unknown' : d.pid}, armed ${d.since || 'unknown'}) - re-arm: node scripts/channel.cjs watch`).join('');
   out(`channel: role=${st.role} repo=${st.repo} root=${st.root}`);
-  out(`channel: turn: ${st.turn || 'idle'} - cursors work=${st.cursors.work} orchestrator=${st.cursors.orchestrator} - unread for me: ${st.fault ? 'FAULT' : st.unread}${st.watchers.length ? ` - watching: ${st.watchers.join(', ')}` : ''}`);
+  out(`channel: turn: ${st.turn || 'idle'} - cursors work=${st.cursors.work} orchestrator=${st.cursors.orchestrator} - unread for me: ${st.fault ? 'FAULT' : st.unread}${st.watchers.length ? ` - watching: ${st.watchers.join(', ')}` : ''}${deadText}`);
+  out(st.trunk === null ? 'channel: trunk unresolved - no main or master branch here' : `channel: trunk ${st.trunk} - ${st.ahead.length} commit(s) ahead of it`);
   if (st.fault) out(st.fault);
   process.exit(0);
 }

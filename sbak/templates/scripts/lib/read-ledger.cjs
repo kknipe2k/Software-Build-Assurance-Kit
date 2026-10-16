@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/lib/read-ledger.cjs
 //   (kit source of truth: templates/scripts/lib/read-ledger.cjs)
 //
@@ -64,9 +64,8 @@ function parseListLine(line) {
   return { path: p, when, why: (m[2] || '').trim(), explicit: true, valid: WHEN_VOCAB.indexOf(when) !== -1 };
 }
 
-function realOrLexical(p) {
-  try { return fs.realpathSync(p); } catch (_) { return path.resolve(p); }
-}
+// decodeBytes + realOrLexical: the shared hook helpers (M32.A fold of M32.R Dup-1 / Dup-2).
+const { decodeBytes, realOrLexical } = require(path.join(__dirname, 'hook-root.cjs'));
 // Canonical relative path of an existing regular file inside `root`, or null.
 function canonicalRel(root, p) {
   if (typeof p !== 'string' || !p) return null;
@@ -111,11 +110,6 @@ function readRefsFromBash(root, command) {
 const VALID_ROLES = ['work', 'verifier', 'orchestrator', 'refactor'];
 const LIST_BY_ROLE = { work: 'read-first-list.txt', verifier: 'read-first-list-verifier.txt', orchestrator: 'read-first-list-orchestrator.txt', refactor: 'read-first-list-refactor.txt' };
 const NUL = String.fromCharCode(0);
-function decodeBytes(b) {
-  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) return b.toString('utf16le', 2);
-  if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return b.toString('utf8', 3);
-  return b.toString('utf8');
-}
 function currentRole(root) {
   try {
     const t = decodeBytes(fs.readFileSync(path.join(root, '.claude', 'role'))).split(NUL).join('').trim().toLowerCase();
@@ -260,6 +254,7 @@ module.exports = {
   WHEN_VOCAB, WHEN_DEFAULT, MAX_REFS_PER_COMMAND,
   parseListLine, canonicalRel, refFor, refForPath, readRefsFromBash,
   resolveListFile, loadManifest, stagePromptReadFirst, requiredReads, recordedRefs, checkReads,
+  readConfigValue, // verify-local reads docker_leg through it (M32.1.D): one config reader
 };
 
 if (require.main === module) {

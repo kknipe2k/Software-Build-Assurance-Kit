@@ -13,6 +13,10 @@
   - **Phase doc:** use `sbak/templates/BUGFIX-PHASE-DOC.md` (3 phases — Phase A/B = `work_stage_prompt`, Phase C = `verifier_stage_prompt`; no new schema).
   - **Close:** a one-line `CHANGELOG.md` entry + the PR description **instead of** Stage E closeout — there is no spec/milestone arc to reconcile. Workflow detail: `sbak/BUILD-PLAYBOOK.md` §3.7; gates `G_BUGFIX_A1/B1/C1` (`sbak/PROCESS-VALIDATION.md`).
 
+## The paste shell (one discovery question)
+
+On a win32 host, ask once, as its own question during discovery: `Which shell do you paste into: cmd or PowerShell?` A POSIX host records `bash` without asking. The answer lands in `project-config.md` as `shell: cmd|powershell|bash`, and every launch block the bootstrap prints renders in that shell.
+
 ## The leading-dial summary
 
 - **`bug_fix`** — fix a known defect in existing code. Reduced 3-phase shape (reproducer + impact analysis → minimal fix → single Verifier pass); no spec/scope/milestones; CHANGELOG one-liner instead of Stage E. **Implemented.**

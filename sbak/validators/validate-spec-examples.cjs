@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-spec-examples.cjs
 //
 // THE SPEC-EXAMPLE HARVEST GATE — every literal example in the spec must appear in at
@@ -112,6 +112,12 @@ const RED = '\x1b[31m', GREEN = '\x1b[32m', DIM = '\x1b[2m', RESET = '\x1b[0m';
 // spec examples with someone else's fixtures.
 const SKIP_DIRS = new Set(['node_modules', '.git', 'sbak', 'dist', 'build', 'out',
   'coverage', '.claude', '.github', 'vendor', 'target', '__pycache__', '.venv', 'venv']);
+// Root-relative PATHS that are never test surface (M32.1.C, V-22): a Full scaffold ships the kit's
+// own calibration set under prompts/calibration/ (its fixtures/ folder matched TEST_DIR_SEGMENTS),
+// so every Full bootstrap commit read 11 kit files as the project's tests and the no-surface skip
+// never fired. A path, not a basename: a project's own tests/fixtures/ - and the same folder
+// names anywhere below the root - stay test surface.
+const SKIP_PATHS = new Set(['prompts/calibration']);
 const TEST_DIR_SEGMENTS = new Set(['tests', 'test', '__tests__', 'fixtures', 'fixture']);
 const TEST_FILE_RE = /(\.(spec|test)\.[cm]?[jt]sx?|(^|[/\\])test_[^/\\]*\.py|_test\.(py|go|rs|rb)|_spec\.rb|\.test\.(py|go|rs))$/;
 
@@ -132,6 +138,7 @@ function testSurface(root, specAbs) {
       const p = path.join(dir, e.name);
       if (e.isDirectory()) {
         if (SKIP_DIRS.has(e.name)) continue;
+        if (SKIP_PATHS.has(path.relative(root, p).split(path.sep).join('/'))) continue;
         // The SPEC tree is never its own fixture. Without this the spec would satisfy
         // every one of its own examples by containing them, and the gate would be a
         // tautology that reports green forever — the single worst outcome available here.
@@ -348,8 +355,9 @@ function main() {
   for (const m of missing) {
     process.stdout.write(
       `  ${RED}MISSING${RESET} ${m.file}:${m.line}  ${oneLine(m.text)}\n`
-      + `${DIM}          harvested as a ${m.kind}; no test fixture contains it. Add a fixture, or record `
-      + `\`harvest-waiver: <reason>\` beside it in the spec.${RESET}\n`);
+      + `${DIM}          harvested as a ${m.kind}; no test fixture contains it. Land it verbatim under `
+      + `tests/fixtures/ (the first stage that adds a test file lands every spec example; the test `
+      + `that runs it may come later), or record \`harvest-waiver: <reason>\` beside it in the spec.${RESET}\n`);
   }
 
   if (!missing.length) {

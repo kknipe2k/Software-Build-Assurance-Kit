@@ -369,7 +369,7 @@ The plan-challenge *runs*, but nothing yet proves it *works* — a verifier that
 
 ### Findings + the D.fix loop
 
-Each pass produces numbered findings at 🔴 (blocks merge) / 🟡 (carry forward to next milestone's Stage A) / 🟢 (append to `docs/tech-debt.md`). Findings file: `retrospectives/M[NN].V-findings.md`. Required top-of-file coverage caveat names which passes ran, which didn't, and which bug classes are therefore NOT checked — keeps users from reading "Verifier passed" as broader coverage than the tier provides.
+Each pass produces numbered findings at 🔴 (blocks merge) / 🟡 (carry forward to next milestone's Stage A, as a Stage R 🟡 in `retrospectives/M[NN].R-findings.md` does, §3.4.5) / 🟢 (append to `docs/tech-debt.md`). Findings file: `retrospectives/M[NN].V-findings.md`. Required top-of-file coverage caveat names which passes ran, which didn't, and which bug classes are therefore NOT checked — keeps users from reading "Verifier passed" as broader coverage than the tier provides.
 
 🔴 findings trigger a **D.fix stage** (a work stage scoped to the finding). After D.fix commits, Verifier re-runs. Bounded iteration: **max 2 D.fix rounds per milestone**; third 🔴 round escalates to maintainer rather than continuing. **Structural signal**: if D.fix introduces a 🔴 outside the originally-scoped finding, the fix is broader than the bug — stop iterating, consider re-tiering the milestone scope.
 

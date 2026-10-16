@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -54,6 +54,14 @@ const path = require('path');
 let readLedger = null;
 try { readLedger = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'read-ledger.cjs')); } catch (_) { readLedger = null; }
 
+// THE REPO-ROOT RESOLVER (M32.A, §3.1): the ledger lives under the REPO ROOT's .claude/receipts,
+// resolved from the payload cwd by walking up to `.git` (dir or worktree file), never under the
+// session cwd a Bash `cd` has moved - which wrote a stray <subfolder>/.claude/receipts/ and
+// hashed read_refs against the wrong base. Wrapped like every other require here: a metrics
+// fault must never change this hook's exit (RCPT-09); absent -> nothing is recorded.
+let hookRoot = null;
+try { hookRoot = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'hook-root.cjs')); } catch (_) { hookRoot = null; }
+
 // The ONLY exit. The metrics path never blocks a hook (RCPT-09). Flipping this to a
 // non-zero value is the M20.6.B mut1 the fail-open lock kills.
 const METRICS_EXIT_CODE = 0;
@@ -77,41 +85,14 @@ const EVENT_MAP = {
   PermissionRequest: 'permission_requested',
 };
 
-// ---- bounded stdin (no-hang guard; hooks receive their payload here) ----
-const MAX_STDIN_BYTES = 1 << 20; // 1 MiB defensive ceiling
-function readStdinBounded() {
-  const CHUNK = 65536;
-  const buf = Buffer.allocUnsafe(CHUNK);
-  const out = [];
-  let total = 0;
-  let guard = 0;
-  while (total < MAX_STDIN_BYTES && guard < 100000) {
-    guard++;
-    let n;
-    try {
-      n = fs.readSync(0, buf, 0, Math.min(CHUNK, MAX_STDIN_BYTES - total), null);
-    } catch (e) {
-      if (e && e.code === 'EAGAIN') continue; // not ready yet; bounded by guard
-      break; // EOF (some platforms throw) or unreadable → stop
-    }
-    if (n === 0) break;
-    out.push(Buffer.from(buf.subarray(0, n)));
-    total += n;
-  }
-  return Buffer.concat(out).toString('utf8');
-}
+// (The bounded stdin read and the marker decoder are hook-root.cjs's since M32.A - one copy.)
 
 // ---- session-role resolution (mirror the A-stage hooks; single marker) ----
 const VALID_ROLES = ['work', 'verifier', 'orchestrator', 'refactor'];
 const NUL = String.fromCharCode(0);
-function decodeBytes(b) {
-  if (b.length >= 2 && b[0] === 0xff && b[1] === 0xfe) return b.toString('utf16le', 2);
-  if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return b.toString('utf8', 3);
-  return b.toString('utf8');
-}
 function readMarkerFile(claudeDir, name) {
   try {
-    return decodeBytes(fs.readFileSync(path.join(claudeDir, name))).split(NUL).join('').trim();
+    return hookRoot.decodeBytes(fs.readFileSync(path.join(claudeDir, name))).split(NUL).join('').trim();
   } catch (_) {
     return undefined; // absent / unreadable
   }
@@ -149,18 +130,16 @@ function degrade(receiptsDir, emitter, at) {
 }
 
 function main() {
-  if (!receipts) return; // no contract available → nothing to record (exit unaffected)
+  if (!receipts || !hookRoot) return; // no contract / no resolver → nothing to record (exit unaffected)
 
-  let payload;
-  try { payload = JSON.parse(readStdinBounded()); } catch (_) { return; } // unparseable → no honest emitter → silent
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return;
+  // M32.A: parse + root in one shared call; the ledger anchors on the REPO ROOT.
+  const { payload, root, claudeDir } = hookRoot.readHookInput();
+  if (!payload) return; // unparseable → no honest emitter → silent
 
   const hookName = payload.hook_event_name;
   const eventName = EVENT_MAP[hookName];
   if (!eventName) return; // unmapped boundary → forge nothing (authorization floor)
 
-  const cwd = (typeof payload.cwd === 'string' && payload.cwd) ? payload.cwd : process.cwd();
-  const claudeDir = path.join(cwd, '.claude');
   const receiptsDir = path.join(claudeDir, 'receipts');
   const at = new Date().toISOString();
 
@@ -177,7 +156,9 @@ function main() {
   // → no stage: frozen history and un-staged sessions stay phase-unknown, never guessed.
   const stageTok = readMarkerFile(claudeDir, 'stage-active');
   if (stageTok && receipts.STAGE_RE.test(stageTok)) raw.stage = stageTok;
-  if (hookName === 'SessionStart' && typeof payload.source === 'string') raw.source = payload.source;
+  // M32.I: every session_started names its source - the payload's value, or "unknown"
+  // when the payload carries none - so a source the kit has never heard of shows up by name.
+  if (hookName === 'SessionStart') raw.source = typeof payload.source === 'string' ? payload.source : 'unknown';
   if (typeof payload.tool_name === 'string') raw.tool_category = receipts.toolCategory(payload.tool_name);
   if (typeof payload.tool_use_id === 'string') raw.tool_use_id = payload.tool_use_id; // defensive; absent is honest
   // Release-origin classification (UAT #15, M22.A; anchored M22.B): an in-session
@@ -208,9 +189,12 @@ function main() {
   // in-session WITH the line (the ruling-5-sanctioned path); without it =
   // the self-release tell; a script event with no hook marker at all = the
   // human's outside shell.
+  // M32.1.B (R-35 a): the line names the bare release command with its stage and the pending
+  // approval-request's seq (or none), in plain ASCII (doc-arc class 26) - the one accepting form;
+  // the pre-M32.1.B em-dash line with no flags no longer classifies.
   const lineMarker = hookName === 'UserPromptSubmit'
     && typeof payload.prompt === 'string'
-    && /^\s*RED-RELEASE: approved — builder, run node scripts\/approve-red\.cjs\s*$/m.test(payload.prompt);
+    && /^\s*RED-RELEASE: approved - builder, run node scripts\/approve-red\.cjs --stage [A-Za-z0-9][A-Za-z0-9._-]{0,63} --release-seq (?:[1-9][0-9]{0,8}|none)\s*$/m.test(payload.prompt);
 
   let res;
   try { res = receipts.appendEvent(receiptsDir, raw); }
@@ -237,11 +221,13 @@ function main() {
   if (hookName === 'PostToolUse' && readLedger && payload.tool_input && typeof payload.tool_input === 'object') {
     let refs = [];
     try {
+      // M32.A: refs canonicalise against the REPO ROOT, so a read from a subfolder session
+      // hashes to the same read_ref the gate derives from the stage prompt's <read_first>.
       if (payload.tool_name === 'Read' && typeof payload.tool_input.file_path === 'string') {
-        const r = readLedger.refForPath(cwd, payload.tool_input.file_path);
+        const r = readLedger.refForPath(root, payload.tool_input.file_path);
         if (r) refs = [r];
       } else if (payload.tool_name === 'Bash' && typeof payload.tool_input.command === 'string') {
-        refs = readLedger.readRefsFromBash(cwd, payload.tool_input.command);
+        refs = readLedger.readRefsFromBash(root, payload.tool_input.command);
       }
     } catch (_) { refs = []; }
     for (const ref of refs) {

@@ -13,13 +13,13 @@
 Read these files in order before doing anything else:
 
 1. `CLAUDE.md` — the project's standing execution rules
-2. `project-config.md` — the active tier, expertise, and toggle values
+2. `project-config.md` — the active tier and toggle values
 3. The active milestone's Phase doc in `docs/build-prompts/` (if one is in progress)
 4. The orientation files for your role — see "Mode-aware reading" below
 
 Then echo this exact line so the user can verify you loaded orientation:
 
-> `[orientation loaded: mode=<work|verifier|orchestrator>, model=<your model>, N files]`
+> `[orientation loaded: mode=<work|verifier|orchestrator|refactor>, model=<your model>, N files]`
 
 Include the model you are running on (e.g. `model=claude-opus-4-8`). This matters in Copilot — see "Model-class transparency" below.
 
@@ -38,6 +38,7 @@ The framework distinguishes session types. In Claude Code the SessionStart hook 
 - **Work / build session** (executing a stage from a §X.5 prompt) — read every entry in `.claude/read-first-list.txt`. Mode: `work`.
 - **Verifier session** (Stage V — Full only) — read every entry in `.claude/read-first-list-verifier.txt`. **Critical:** do NOT read prior retrospectives (`retrospectives/M[NN].*-retrospective.md`) — that is the fresh-context bias guard. Reading them defeats the Verifier's job.
 - **Orchestrator session** (Full only — authoring Phase docs / ADRs, routing Verifier findings, running PRs) — read every entry in `.claude/read-first-list-orchestrator.txt`, including `ORCHESTRATOR.md`. Build / verifier / closeout sessions must NOT read `ORCHESTRATOR.md`.
+- **Refactor session** (Stage R, Full only, when its milestone-boundary trigger fires) - read every entry in `.claude/read-first-list-refactor.txt`. Mode: `refactor`.
 
 At Lite tier the roles collapse into one session and only `work` mode applies.
 
@@ -49,7 +50,7 @@ In Claude Code the orchestrator is a long-lived `claude --resume` session that h
 
 Copilot meters premium model usage. When your plan's premium requests run out, chat continues on an included base model — generally not a Claude model at all — and a stage that needs heavy reasoning (spec authoring, `design.md` authoring, Phase-doc authoring, any verifier pass, closeout summarization) is materially degraded on a lighter or non-Claude model without anything surfacing the swap. The framework does not promise Opus-equivalent output on Haiku; it asks you to make the condition visible:
 
-**1. Always report your model in the orientation stamp** — `[orientation loaded: mode=<X>, model=<your model>, N files]`. State the actual model (e.g. `model=claude-opus-4-8`, `model=claude-haiku-4-5`). If you cannot determine it, say `model=unknown` and treat the session as potentially-degraded.
+**1. Always report your model in the orientation stamp** — `[orientation loaded: mode=<X>, model=<your model>, N files]`, where `<X>` is one of `work|verifier|orchestrator|refactor`. State the actual model (e.g. `model=claude-opus-4-8`, `model=claude-haiku-4-5`). If you cannot determine it, say `model=unknown` and treat the session as potentially-degraded.
 
 **2. Before any heavy-reasoning stage, self-check the model.** These stages produce materially worse output on Haiku and must surface a warning *before* starting if you are on Haiku (or `unknown`):
 

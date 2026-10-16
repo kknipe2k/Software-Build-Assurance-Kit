@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
@@ -86,10 +86,10 @@ const PLACEHOLDER = /\{\{.*\}\}/;
 // explicit list, never a date/git heuristic — deterministic in file mode + CI,
 // and a new file can only join it via a reviewable diff.
 const REPO_ROOT = path.resolve(__dirname, '..');
-function grandfatheredSet() {
+function grandfatheredSet(key = 'files') {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(__dirname, 'retro-stamp-grandfather.json'), 'utf8'));
-    return new Set(Array.isArray(j.files) ? j.files : []);
+    return new Set(Array.isArray(j[key]) ? j[key] : []);
   } catch (_) {
     return new Set();
   }
@@ -188,12 +188,23 @@ const HUMAN_DRIVE_FIELDS = ['drove', 'verified', 'recorded'];
 // and typed-number fields - the shapes a tired session emits. It cannot grade whether the
 // content is TRUE or the synthesis good; the stage-end review and Stage V are that wall.
 const HANDOFF_FIELDS = ['landed', 'open', 'next-agent', 'drive', 'mutation', 'counts-from', 'off-track'];
+// M32.J: handoff contract v2 adds the efficiency line - what this stage cut, what it would cut
+// next, what it kept whole and why. Versioned by a `contract:` line INSIDE the fence: a note
+// declaring `contract: v2` (or later) must carry `efficiency:` with all three sub-lines, real;
+// a note with no contract line is a pre-v2 note and validates exactly as before (history is
+// never re-failed - the same marker-gating the fence itself uses).
+// M32.1.A (V-5): the contract is dated, not self-declared. A stage retro whose filename
+// milestone is >= 32 must carry the `contract:` line; omitting it no longer opts out of v2.
+// The M32 retros written before v2 existed are listed by exact path under
+// `contract_v2_files` in the grandfather baseline (the kit's own history only).
+const CONTRACT_V2_FROM_MILESTONE = 32;
+const EFFICIENCY_SUBFIELDS = ['cut', 'would cut next', 'kept whole'];
 const HANDOFF_STOCK = new Set([
   'as planned', 'none', 'see above', 'done', 'ok', 'all good', 'covered', 'fine',
   'yes', 'no', 'n/a', 'na', 'tbd', 'good', 'pass', 'passed',
 ]);
 
-function validateHandoff(file, text, errors) {
+function validateHandoff(file, text, errors, contractGrandfathered) {
   const blocks = extractBlocks(text, 'handoff');
   if (blocks.length === 0) return; // pre-contract retro: the legacy shape, untouched
   const body = blocks[0];
@@ -217,6 +228,34 @@ function validateHandoff(file, text, errors) {
     }
     if (key === 'drive' && /^n\/a\b/i.test(val) && !/^n\/a\s*[-—]\s*\S{3,}/i.test(val)) {
       errors.push(`${file}: handoff \`drive:\` says n/a with no reason - the sentinel is \`n/a - <reason>\`, a field, not an exemption.`);
+    }
+  }
+  validateEfficiency(file, body, errors, contractGrandfathered);
+}
+
+function validateEfficiency(file, body, errors, contractGrandfathered) {
+  const contract = fieldInBlock(body, 'contract');
+  if (contract === null) {
+    const m = /^M(\d+)\./.exec(path.basename(file));
+    if (m && parseInt(m[1], 10) >= CONTRACT_V2_FROM_MILESTONE && !(contractGrandfathered && contractGrandfathered.has(relKey(file)))) {
+      errors.push(`${file}: handoff note has no \`contract:\` line - a milestone ${m[1]} retro speaks handoff contract v2 (from M${CONTRACT_V2_FROM_MILESTONE}): add \`contract: v2\` and the \`efficiency:\` field.`);
+    }
+    return;
+  }
+  const v = /^v?(\d+)/i.exec(contract.trim());
+  if (!v || parseInt(v[1], 10) < 2) return; // pre-v2 note: grandfathered
+  if (fieldInBlock(body, 'efficiency') === null) {
+    errors.push(`${file}: handoff note (contract ${contract.trim()}) has no \`efficiency:\` field - write what this stage cut, what you would cut next, and what you kept whole and why (\`cut:\` / \`would cut next:\` / \`kept whole:\`).`);
+    return;
+  }
+  for (const sub of EFFICIENCY_SUBFIELDS) {
+    const s = fieldInBlock(body, sub);
+    if (s === null) {
+      errors.push(`${file}: handoff \`efficiency:\` has no \`${sub}:\` line - all three are required.`);
+    } else if (PLACEHOLDER.test(s) || isBlankValue(s)) {
+      errors.push(`${file}: handoff \`efficiency:\` \`${sub}:\` is blank or a placeholder - name the specific thing.`);
+    } else if (HANDOFF_STOCK.has(String(s).trim().toLowerCase())) {
+      errors.push(`${file}: handoff \`efficiency:\` \`${sub}:\` is boilerplate ("${String(s).trim()}") - name the specific thing.`);
     }
   }
 }
@@ -300,7 +339,7 @@ function validateLegacy(file, body, text, errors, advisories) {
 }
 
 // Returns { ok, errors:[], advisories:[] } for one file.
-function validateFile(file, grandfathered) {
+function validateFile(file, grandfathered, contractGrandfathered) {
   const errors = [];
   const advisories = [];
 
@@ -317,7 +356,7 @@ function validateFile(file, grandfathered) {
 
   // 0b. M30.I (fade 1): the handoff-note content contract - marker-gated on the ```handoff
   //     fence, so history and legacy retros are untouched (the M12 guard).
-  validateHandoff(file, text, errors);
+  validateHandoff(file, text, errors, contractGrandfathered);
 
   // 1. Locate the ```user-stamp fenced block (LINE-ANCHORED — M16.A; a mid-prose mention is
   //    not the stamp).
@@ -397,10 +436,11 @@ function main() {
   }
 
   const grandfathered = grandfatheredSet();
+  const contractGrandfathered = grandfatheredSet('contract_v2_files');
   let failed = 0;
   const allAdvisories = [];
   for (const f of files) {
-    const { ok, errors, advisories } = validateFile(f, grandfathered);
+    const { ok, errors, advisories } = validateFile(f, grandfathered, contractGrandfathered);
     for (const e of errors) console.error(`FAIL  ${e}`);
     allAdvisories.push(...advisories);
     if (!ok) failed++;

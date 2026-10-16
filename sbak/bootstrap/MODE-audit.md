@@ -13,6 +13,10 @@
   - **Workflow detail:** `sbak/BUILD-PLAYBOOK.md` §3.8; gates `G_AUDIT_S1/P1/C1/OUT` off the numbered line (`sbak/PROCESS-VALIDATION.md`).
 
 
+## The paste shell (one discovery question)
+
+On a win32 host, ask once, as its own question during discovery: `Which shell do you paste into: cmd or PowerShell?` A POSIX host records `bash` without asking. The answer lands in `project-config.md` as `shell: cmd|powershell|bash`, and every launch block the bootstrap prints renders in that shell.
+
 ## The leading-dial summary
 
 - **`audit`** — review an existing codebase (security / performance / architecture / compliance); the deliverable is a findings report + remediation backlog, not new code. The existing codebase is the spec: **Phase S → Phase P → Phase C → consolidation**, **no milestones and no Stage V** (audit *is* verification). Tier selects the dimension count (Lite 1–2 / Full 3–4, up to all 8 by explicit choice); `audit_multi_model` default `false` (Path A — fresh-context challenges). **Implemented** (`sbak/BUILD-PLAYBOOK.md` §3.8).

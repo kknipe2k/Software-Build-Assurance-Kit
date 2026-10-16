@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // validators/validate-reconciliation.cjs
 //
 // Evidence-retention + count-reconciliation, shipped framework-
@@ -440,6 +440,27 @@ function stagedFiles() {
   return out.split(/\r?\n/).filter((f) => f && /\.md$/i.test(f));
 }
 
+// The merge in progress, or null when none (`git rev-parse -q --verify MERGE_HEAD`).
+function mergeHeadSha() {
+  const r = spawnSync('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { encoding: 'utf8' });
+  if (r.error || r.status !== 0) return null;
+  const sha = (r.stdout || '').trim();
+  return sha ? sha : null;
+}
+
+// THE SKIP PREDICATE (mutant target): the staged blob (`:<path>`) equals the MERGE_HEAD
+// blob. Dropping the compare (always false) makes pin 8a of the M32.B smoke section fail;
+// forcing it true would skip a merge-edited file and fail pin 8b.
+function stagedBlobEqualsMergeHead(file) {
+  const rel = file.replace(/\\/g, '/');
+  const a = spawnSync('git', ['rev-parse', '-q', '--verify', `:${rel}`], { encoding: 'utf8' });
+  const b = spawnSync('git', ['rev-parse', '-q', '--verify', `MERGE_HEAD:${rel}`], { encoding: 'utf8' });
+  if (a.error || b.error || a.status !== 0 || b.status !== 0) return false;
+  const ab = (a.stdout || '').trim();
+  const bb = (b.stdout || '').trim();
+  return ab !== '' && ab === bb;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const warn = args.includes('--warn');
@@ -457,8 +478,20 @@ function main() {
   }
 
   const staged = args.includes('--staged');
+  // MERGE-AWARE SKIP (M32.B, §3.2). During a merge commit (MERGE_HEAD resolves) a staged
+  // file whose index blob EQUALS the MERGE_HEAD blob was authored on the other branch and
+  // already passed its own gate there; recomputing it against THIS branch's state (a
+  // `source: <file>` count whose source moved here, a git range that differs here) would
+  // false-block the merge. It is skipped with one line. A file the merge itself changed
+  // (one staged edit on top) has a different blob and is recomputed as always. Read via
+  // git, never by `.git/MERGE_HEAD` path (a worktree keeps .git as a file).
+  const mergeHead = staged ? mergeHeadSha() : null;
   const findings = [];
   for (const f of files) {
+    if (mergeHead !== null && stagedBlobEqualsMergeHead(f)) {
+      process.stdout.write(`skip  ${f} - merge-inherited (staged blob equals MERGE_HEAD's), not recomputed against this branch\n`);
+      continue;
+    }
     let text;
     try {
       text = fs.readFileSync(f, 'utf8');

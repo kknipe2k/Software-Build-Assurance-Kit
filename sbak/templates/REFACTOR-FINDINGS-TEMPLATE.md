@@ -90,6 +90,8 @@ For each 🔴:
 
 For each 🟡: open a `D.refactor` stage scoped to the finding before the next milestone (or carry forward with an explicit note).
 
+To write a carry as prose, put it on its own line as `[carry M<NN>] <what milestone NN must do>`; `validators/validate-carry-forward.cjs` requires that text in milestone NN's Phase doc, and every 🟡 finding id in this file in the next Phase doc.
+
 For each 🟢: appended to `docs/tech-debt.md` with date + finding number. **Stage R both reads `docs/tech-debt.md`** (its entry count is one half of the trigger) **and writes to it** (🟢 findings append as new `TD-NNN` entries — append-only; never edit prior entries).
 
 ---

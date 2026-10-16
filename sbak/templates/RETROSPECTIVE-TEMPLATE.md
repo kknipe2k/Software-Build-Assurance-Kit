@@ -42,9 +42,12 @@ If the round count exceeds the budget, surface to user before proceeding (per `C
 
 ## Handoff note
 
-> The next session's only memory. Seven required fields, none blank, none boilerplate — `validators/validate-retrospective.cjs` enforces the contract mechanically (it catches blank/placeholder/stock/typed-number fields; whether the content is TRUE is the stage-end review's job). Numbers are SEEDED from receipts or a named command, never typed.
+> The next session's only memory. Eight required fields, none blank, none boilerplate — `validators/validate-retrospective.cjs` enforces the contract mechanically (it catches blank/placeholder/stock/typed-number fields; whether the content is TRUE is the stage-end review's job). Numbers are SEEDED from receipts or a named command, never typed. Keep the `contract: v2` line: it is what makes the `efficiency:` field required.
+>
+> **The efficiency line is fenced.** Never cut communication between terminals, the status lines, or any word to or from the owner. Reading is strategic, never reflexive: read what the work depends on, in full, and say what you skipped. Cut freely: serial runs that could be parallel, re-runs of green work, idle waits, decision-free round-trips. Name specific things; "read less" fails the line.
 
 ```handoff
+contract: v2
 landed: {{what landed — files, tests, run-of-record (the command + result reference)}}
 open: {{what is open — each item with its NAMED next owner (a stage id or person)}}
 next-agent: {{what the next agent must know — the gotchas, the sharp edges, the load-bearing choices}}
@@ -52,6 +55,10 @@ drive: {{the agent's drive of the real assembled surface + run reference — or 
 mutation: {{the one-line test-mutation naming — which mutation was run, which check flipped RED alone}}
 counts-from: {{the command or receipt every count in this note derives from — never a bare number}}
 off-track: {{highest-priority unblocked backlog item #N · this stage built #M · justified? (G8 — an unlogged inversion is off track by default; see docs/off-track-log.md)}}
+efficiency:
+  cut: {{what this stage cut - a specific run, wait or round-trip}}
+  would cut next: {{what you would cut next time, specifically}}
+  kept whole: {{what you kept whole and why - the reads and the comms the work depended on}}
 ```
 
 If the off-track line shows an inversion: surface it now — an explicit user re-prioritization (HITL co-authored, G8 clause b) or a logged build-sequence justification before continuing.

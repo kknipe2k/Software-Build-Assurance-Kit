@@ -13,8 +13,17 @@ name: append-only-ledger
 #                violation without blocking (append_only_advisory).
 #   * Lite     — no ledgers; delete this workflow.
 #
-# To add or remove a ledger, edit the LEDGERS list below — that is the ONLY
-# place. Do NOT split into per-ledger jobs; the checker takes many paths at once.
+# To add or remove a ledger, edit docs/append-only-ledgers.txt — that is the ONLY place:
+# the same file the pre-push hook's append-only leg reads, so the hook and CI never
+# disagree about what is a ledger. Do NOT split into per-ledger jobs; the checker takes
+# many paths at once.
+#
+# The check WALKS EVERY COMMIT (M32.B): `--per-commit` compares each commit's ledgers
+# against its first parent's, so a rewrite inside the branch is caught even when the
+# final file still extends the base. `--head` is the PR head sha because the
+# pull_request checkout is a synthetic merge (HEAD^1 = base, HEAD^2 = the PR head) and
+# a walk from that HEAD would be one step. Owner-approved rewrites go in an
+# `--exceptions` file, printed on every run (see the checker's header).
 #
 # NOTE on docs/sessions.md (added M27.D, KF-48 instance 2). The generated
 # templates/sessions.md has always told every project "CI enforces via diff check",
@@ -43,24 +52,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # ▼▼▼ The configurable ledger path set — the ONLY place to edit. ▼▼▼
-  # Space-separated, repo-relative, forward slashes. A path absent from a given
-  # project (e.g. a Standard project that never opened docs/consultations.md)
-  # passes harmlessly: absent-from-base is treated as a new file.
-  LEDGERS: >-
-    docs/gap-analysis.md
-    docs/sessions.md
-    docs/tech-debt.md
-    docs/consultations.md
-    docs/off-track-log.md
-    docs/sources/registry.md
-    .claude/channel/orch-to-builder.jsonl
-    .claude/channel/builder-to-orch.jsonl
-    docs/audit/findings-ledger.md
-    docs/release-state.md
-  # ▲▲▲ ────────────────────────────────────────────────────────── ▲▲▲
-
 jobs:
   append-only:
     runs-on: ubuntu-latest
@@ -74,8 +65,8 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: '24'
-      - name: Check ledgers are append-only
-        # ${{ ... }}.base.sha is the PR base commit — passed to --base explicitly
-        # rather than relying on the local merge-base default. $LEDGERS is unquoted
-        # on purpose: bash word-splits it into one literal path argument per ledger.
-        run: node validators/check-append-only.cjs --base "${{ github.event.pull_request.base.sha }}" $LEDGERS
+      - name: Check ledgers are append-only (every commit)
+        # base.sha is the PR base commit and head.sha the PR head — both passed
+        # explicitly rather than relying on the local merge-base default or on the
+        # synthetic-merge HEAD. The ledger list is the file, read by the hook too.
+        run: node validators/check-append-only.cjs --per-commit --base "${{ github.event.pull_request.base.sha }}" --head "${{ github.event.pull_request.head.sha }}" --ledgers docs/append-only-ledgers.txt

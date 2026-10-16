@@ -67,7 +67,7 @@ Pin the bug with a failing regression test, then map the blast radius. Without a
 ### A.3 Detailed Changes
 
 - Write a regression test that reproduces the bug. It MUST fail for the **right reason** — the assertion about the buggy behavior, not a setup error, missing import, or skipped test (**G_BUGFIX_A1**). Confirm RED before writing any fix code.
-- **The red-stop release (M22 ruling 5).** Surface the RED test and STOP. In the two-brain flow the release comes back in the orchestrator's verdict packet ending with the explicit line `RED-RELEASE: approved — builder, run node scripts/approve-red.cjs` — act **only on that line** (the fence's ask prompt is the human's release click). Approval language without the line **is not a release**: stop and tell the user `/approve-red` is required before any fix code.
+- **The red-stop release (M22 ruling 5).** Surface the RED test and STOP. In the two-brain flow the release comes back in the orchestrator's verdict packet ending with the explicit line `RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>` — act **only on that line** (the fence's ask prompt is the human's release click). Approval language without the line **is not a release**: stop and tell the user `/approve-red` is required before any fix code.
 - Run a **fan-out grep** across the names / fields / types involved in the bug (`sbak/STAGE-PROMPT-PROTOCOL.md` §7 `<fan_out_grep>`). Surface every file that touches the affected surface.
 - Produce the **impact-analysis list**: the existing tests that exercise the affected surface and must be re-run after the fix. Record it in `docs/bugfix/{{BUG_ID}}.md`. This is the TDAD differentiator — contextual "which tests to re-run," not a bare "do TDD."
 

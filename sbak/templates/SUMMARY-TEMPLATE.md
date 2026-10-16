@@ -70,6 +70,8 @@ If any stage exceeded its budget without surfacing, that's a process-adherence v
 
 Aggregated from per-stage retrospectives' "Decisions for the parent milestone or framework" sections. Each decision: what to change, where, when.
 
+A decision a later milestone must act on can also be written on its own line as `[carry M<NN>] <the obligation>`; `validators/validate-carry-forward.cjs` requires that text in milestone NN's Phase doc.
+
 | # | Decision | Where it lands | When |
 |---|---|---|---|
 | 1 | {{decision summary}} | `{{file}}` | before M[NN+1] Stage A starts |

@@ -3,8 +3,8 @@
   "tiers": {
     "full": {
       "counts": {
-        "rendered": 119,
-        "rows": 119,
+        "rendered": 120,
+        "rows": 120,
         "unrendered": 0
       },
       "files": [
@@ -14,7 +14,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "035e224a3d9f59d48910226b73d9c90ded180e0087a18d8e56cacce935ede885"
+          "sha256": "df59b10b1cf2ff89da23b6aa8c968bc62d7aef0970c9fac5beeb3b8614cd289e"
         },
         {
           "bom": false,
@@ -22,7 +22,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0c2b6df1b83277581a5e9d99eb94b5706e542b42bb6e5efd49cff776cd20d52b"
+          "sha256": "5be4bbeec2306934e8f56c51e1fd8c54008e06a5b35a10d6425fe9852906bf50"
         },
         {
           "bom": false,
@@ -30,7 +30,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "acf98fe8c2f62e6508e823394b80703e46d7bf81e6f105a1b73c077f2a306a71"
+          "sha256": "95770f32af99ff80f6d8d1655dcc4390013465afcad69d1199fedb5f441bb4af"
         },
         {
           "bom": false,
@@ -46,7 +46,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a8b6bbf11fb34452b1b200fad9ef904c062de882ff07c8c942f95718f71ea73b"
+          "sha256": "eb761c1f3d024926c4a65bf0852f2d2a6b28fe6d7132454f514e8f3a4032144b"
         },
         {
           "bom": false,
@@ -54,7 +54,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e8b66a7d89fed25b269c8055c3cf44ae285a64383cbc3e28ff000eaa57b2a8ba"
+          "sha256": "e886ff63e883f91e2e528f77715c779a68a6c88e7f46dd7ede9f02c586a0921f"
         },
         {
           "bom": false,
@@ -62,7 +62,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "db90d9e9a4bef2d4827d5854c439a3e03a4011ded913066690266461bfc407c6"
+          "sha256": "941a2add359b93f005155dcd13fa685a891977e09935b8d09ecce914fa4858f2"
         },
         {
           "bom": false,
@@ -70,7 +70,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "ffce158b66568ddfbaa73f7d6629300ce87e0da8070a1c8fdff74c21ba6ffb05"
+          "sha256": "d9be2a089d78588cd8c3040e9a71ebde6e6f81f3935caf5e28545cc002f67655"
         },
         {
           "bom": false,
@@ -78,7 +78,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0f6860c260afe279f1520ababb73dcaed0a9d5df1a6a964c84b1fa5cdc06a38b"
+          "sha256": "e93c97f71cfec3a8151f8889d3af74cd597d1b7655055105fff81030b1fb7f6f"
         },
         {
           "bom": false,
@@ -86,7 +86,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bafc1ce32fb6581a11e76a8bd0cfa9be1874f4b9010bc94e72451bcba43ebc02"
+          "sha256": "47fe2d1c53423373c0f8355358c9d44054d163fa783f1b268747436ef7ab83c4"
         },
         {
           "bom": false,
@@ -94,7 +94,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a43271fad4c55783f730d614dbe53f5830fd20b91f7978199063c89e51a09e56"
+          "sha256": "a50a69cce7c0ad887237e16232f46964c692ef72a53b36b555c6df8fa5cd8724"
         },
         {
           "bom": false,
@@ -102,7 +102,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b1ddf030a33f493254f032ae3dba1dfa1b7403e653c450d89b94daa67e19626d"
+          "sha256": "0321b2656abe37de31cd79610ab21ab390a43935bb0a794b861524a371773083"
         },
         {
           "bom": false,
@@ -142,7 +142,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "461374de22b9e5c70c191ac2c2cc231ff4e1125fe51f49ee7c0f0c6d2168625f"
+          "sha256": "138190a0b845b1d042ee0be634fcac73f61e08a9390de0a2a7e484d40c663e25"
         },
         {
           "bom": false,
@@ -158,7 +158,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e24ff4325cdc6331e4d7c59edc43334fff926878800a1a7d44bcbbe86ce0df96"
+          "sha256": "91281cecde8397013bf6a89a8773dfa97563f4225f865f7227b4a03ea5ee94b7"
         },
         {
           "bom": false,
@@ -166,7 +166,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a350a79afd046d66002b318d14c2d1afe9e4cbfbc5886fdf0424ce917787578f"
+          "sha256": "a5eca99d7455dd340873701c3f0750d77f5780d3fab9e9d3acffe9ca81d242c3"
         },
         {
           "bom": false,
@@ -174,7 +174,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9e22326d74044a231851a9630d4b7cb33f45bcfdabb26a58906f9056e0078cdf"
+          "sha256": "477b1c711772e1278b13c510b3845da0fcc916fe44d9f342061fa0706847f4ae"
         },
         {
           "bom": false,
@@ -190,7 +190,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "4c4e16592f4ab820be926e1806882586f11c15ab62ebcf1f16d036a1e0a79067"
+          "sha256": "eca2d2df766fe55bb75bed400a6f2cfd1588a02be2b42f8b3411b2a5ce4489d9"
         },
         {
           "bom": false,
@@ -214,7 +214,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c22af462d2849912a853d192d1f5649f0e103f62e078a9b28db86be169402742"
+          "sha256": "3ee0d93713713d8374af42d17bed947999763a7fe666afa0882b82aadd205450"
         },
         {
           "bom": false,
@@ -230,7 +230,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "d51bb185a48cbe5e01bcd9e0259e3de725426c2c484bc58073bdd5c268de8ab5"
+          "sha256": "fb707a5bda2d2fd75cc7ff58aa3679996d9b9ed0ad98b540ce1dabcad6f14063"
         },
         {
           "bom": false,
@@ -246,7 +246,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "7a99e53f89ea56f9f8653148fa698e27caa9a561611d97edab7f3111387469ad"
+          "sha256": "05039b3694352275afb697826a9307f5373f3db0523ef16380af68f611be5350"
         },
         {
           "bom": false,
@@ -270,7 +270,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0171e297c0a20fbda89d455dda15c1d73bebd8ef0706e692e3819ce11fd5f047"
+          "sha256": "2774417c977633001b9c9e267345142aff88041d6113e2315c59b1083dc1932b"
         },
         {
           "bom": false,
@@ -310,7 +310,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "96ae022da14d69172da9205bdf6a88f8e7dca2453bcd7f114f331674cd532ace"
+          "sha256": "bfb9f8d58532df3e8baca0a1f2c5aaf0ab30db8ed43700fdb99a9814b9e5ca1d"
         },
         {
           "bom": false,
@@ -342,7 +342,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "78bc73448ea8d092529cee64083df1cdaeb12b46901ef6822d2c8f8e4bbff5d0"
+          "sha256": "31ba6d59d1995bcd2b624d6d8924686008c4e170e2d1e0b71df778cb635fab10"
         },
         {
           "bom": false,
@@ -390,7 +390,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "860555ef771f4a4d47fc329365b14d05fe7418f5eb1570f948e3ee6a564f108a"
+          "sha256": "4d22c42a103571020a8364d95ee54fcc99ae9df8259f0bc55906c1475e7dc877"
         },
         {
           "bom": false,
@@ -398,7 +398,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "32d29ee6bfb2268f5941d2c54e1cd388392d6a5fe2a5c1d1db32c3ab1567fcbc"
+          "sha256": "04c715732eb557011f4b09a9b732e7914d868feef4847799be0d96f5b0ddf89a"
         },
         {
           "bom": false,
@@ -406,7 +406,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "cd6f6966bb2c04ffb72b0ae12e0e9ef3bcdfff9018417d3ac19f824b1ebcb676"
+          "sha256": "5f0bcc8c8899fc50a69c10330fe7845cda6690c5527b30577839e4eb4b0de1bc"
         },
         {
           "bom": false,
@@ -422,7 +422,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b2a974720abb3e2cfe9bd1ec184e38aadf01ce67dc04adb8288c8bd797309b4b"
+          "sha256": "18d572fa877fe1b62063f34fe588f54a99f87c7a45c4f84e2619b6b33ee6fab5"
         },
         {
           "bom": false,
@@ -430,7 +430,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "7727dc690f2313f84fe08435ab92106accf39ebcaefa4e490472cd9929308f64"
+          "sha256": "691bac447314e2148da3681f3ed09a84fe6bd4ac12a5d56f8ac87003ead7d9da"
         },
         {
           "bom": false,
@@ -646,7 +646,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "611c0c4bcd0b0f027f70932f7f29faa6bfc00e583782e0ce95f3f1695671ff0d"
+          "sha256": "3a431a79e3c9897ecd350b0f5b1f1eef12401d91536933d92cd3b93bd3ba93e9"
         },
         {
           "bom": false,
@@ -654,7 +654,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bc7c2970e73f18170e1c018823e8bb47312afa20d42e5570e5b6427fd6d2b507"
+          "sha256": "9f0e88381c44bd2118e3d0ad6224a6cdc04e367606f3087f3b304a84aa717b01"
         },
         {
           "bom": false,
@@ -662,7 +662,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "891bc213cb735bcc82ad8200a09ec65d40b07f4330639df3210265449bb2d3d4"
+          "sha256": "4e377310c6e95702cb1f43ac899627a09a8b02ba687df43cb20b68a9c0640adb"
         },
         {
           "bom": false,
@@ -670,7 +670,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c01d9dc13340fe7ac231e1cc5c4166aef59d697c76ea4ac74a45154226d0cfba"
+          "sha256": "b0d73ffaf2b4044a98d6bbcc2f6e718d7e70e6e5b9f3fbb55d1f52eceaa21508"
         },
         {
           "bom": false,
@@ -678,7 +678,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "ba80fce61b43c6d0f0dda73778701818bc2b2d68b8ccaad5bde1a65116ab9265"
+          "sha256": "6b339d839a9540b8aac4ecf515f468c9849b857a3f49f40569f9e8713edafff0"
         },
         {
           "bom": false,
@@ -686,7 +686,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8e5511880ce7ba6c372ccb211dd08aa8a458565b7f639d69932106cd1c8c3636"
+          "sha256": "a717c7cbb28816446dd9f21d36591975d22f60754f15a425f4cf39e37d04279b"
         },
         {
           "bom": false,
@@ -694,7 +694,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a6c04e47fa0a919e01e1ec2f3cc11402b6730e7d04ae12fa9bd884370b18d74e"
+          "sha256": "c065b98a6348f12eda797d0875242418ebff8192dde26f4d19019bb1820890a4"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/hook-root.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "337d23d7518a331545feb0bf68461b70837a34ac5c8ea78725fcda6d620b2324"
         },
         {
           "bom": false,
@@ -702,7 +710,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "f5a4105f93e5dfa7199063273affcf0abbc4bbd4ce01886e3e02b099c3938100"
+          "sha256": "5406087607803e0e84a9c9a72152dbac287bfaaef67f18561ec9271dbb65b906"
         },
         {
           "bom": false,
@@ -710,7 +718,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "91125ffc56a510a9793d8e05adad503ad871ebd4ac4ee94b53e8728f5a583196"
+          "sha256": "49187cf9d1d2940202d2561d88d99bacfefe8a3386c90f5b6710c3a6e18041a5"
         },
         {
           "bom": false,
@@ -718,7 +726,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9e98a7b1cd8624424400a69cbe13925df6d4b0807b227ac46d84b9a2e05cd087"
+          "sha256": "87d133a959f85ad192472e878c24685bf5b5a58cf4514c54b81038cc41731c50"
         },
         {
           "bom": false,
@@ -726,7 +734,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "561f6f3d173a10105e0ef3040a78248ad0a4312ec2423b896afba0f4e68c9785"
+          "sha256": "173d11678a522ef67a63f074aa585a099a3ecef4f33cd5a85c1af1144172f7f0"
         },
         {
           "bom": false,
@@ -734,7 +742,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "181dbf06ddedcc8d10aa3929bb4900fba7f7cb68fcbf6ca664923f1aa6e7d99c"
+          "sha256": "416ccfce095c6eae99fdfe1489babb96fdcc254e5b82f25c3f286778efae93d7"
         },
         {
           "bom": false,
@@ -742,7 +750,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "90f6e119cf70952bb3f7a321279d2287060bc744d0d2fce53393adf1ea78168a"
+          "sha256": "49c64098737a886d05d114bbf1942d6bad23ad80fbef87c3dc0972a27d5c21ce"
         },
         {
           "bom": false,
@@ -750,7 +758,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "74dcaa1c50520414c9fcbd6efa7ffded42156f8dcb57dab51e1e7a1295665a9c"
+          "sha256": "5404734d63b7a20b8678d04362978a6de691aa99949ad3d25f9e0826bbfc75cc"
         },
         {
           "bom": false,
@@ -758,7 +766,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "48f5a8095957659910a07c79e00a6f7158a931ff4d1b7fd9496c8ed8c5284586"
+          "sha256": "b3d3ee6741242710b48b29b354db0d7c200607f4bced0f1609efc89a9a0744b5"
         },
         {
           "bom": false,
@@ -766,7 +774,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8daf35a7e4adee7f00bac5527a5c50183dd4d3adff03ea5290ff1cedf1dae7d7"
+          "sha256": "4578bebca1846058f89c481c20f8627ac45cbe7de71b4866fdbe9bc33df023c4"
         },
         {
           "bom": false,
@@ -774,7 +782,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8b6e7fda953223a32e5ece7634a9e4b02a60ec920cce0d62ce811545eb315c6b"
+          "sha256": "73652345d01a65b3f2f9bb00639a021a8acdd0fa8039a185f41b8882595ba284"
         },
         {
           "bom": false,
@@ -782,7 +790,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "2382b9d479081add5dd14b5556ce86c3a991a885ad4e6a1d3e25188d4ca82501"
+          "sha256": "6d62302d5f605ccb848f256f0472758535c0263eb0eb3aefc309faa4b26d1a5a"
         },
         {
           "bom": false,
@@ -790,7 +798,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e01f1579ec691ff6d1239bdc8890a9284a0cacee9a79310d2c8e4639cb650609"
+          "sha256": "4c20ab3802bc38c6a1d3357ec4902986f9597ecfd0b59350affdae0fd5b94585"
         },
         {
           "bom": false,
@@ -798,7 +806,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8758833e3b959aa68e24d7f8e0ed8a6f5f5a9947db914e459d7b28d974f95027"
+          "sha256": "07da4c87bef3c3fd9e20294248d462f84f5c5e36fd38b5d3adc307a6170a0d51"
         },
         {
           "bom": false,
@@ -806,7 +814,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "947d40831a72d9c34087ab773a515681c08c6e2a27520ef1ef43d52a0587d682"
+          "sha256": "36b9b973a2e2f3e402cad857d9a787701399d665b2499e972812cc40436e17cd"
         },
         {
           "bom": false,
@@ -814,7 +822,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e43e8da9be99f130813209005952191e1adf631bc519580afa13036a6b5f9549"
+          "sha256": "5bf35430c244d1151e7f7eb6d5de06e6aae1724573eef60d25b58d9c5e2a1fcb"
         },
         {
           "bom": false,
@@ -822,7 +830,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c994cb296d653dfeff16d0ae39047ed4a1a00c3b594add444d079676208de736"
+          "sha256": "cf6ceb68484bc986b00c373cc6a855e4d9292b3739c72e556b275120616bd53b"
         },
         {
           "bom": false,
@@ -830,7 +838,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "cc1b68ba27b10e884e63507f9be678627578c0e09af4238f80c1f46ec7fa265b"
+          "sha256": "630b7dc7e824aa93ad2aec4d99b975a108285c220c355a3e8f8ca0ce68ccc630"
         },
         {
           "bom": false,
@@ -838,7 +846,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "6e5c27a0fb6a17d56284f87780317c3a0d71bf154ce917e891d508214d2a3b0c"
+          "sha256": "86498caeae4f9050d240a4dff84efb10c9aa528972c530edab3c5b1b9de4810f"
         },
         {
           "bom": false,
@@ -846,7 +854,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0cd955edd3d5f0d57e053e794784a7734a0aaa10d992b503c95171b09127dda1"
+          "sha256": "1f237ee2cbf2672de937ecb00df134e36d04d8f938e9d94e206c6db9222783ba"
         },
         {
           "bom": false,
@@ -854,7 +862,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "6bace8c02ad3058f4b2c9e6d13f205bef65c533279cd164252c2441e3bae584e"
+          "sha256": "bb6f3de20eddc05a19051827ccb2b6c371f596e023f291d86a7e309641da8b78"
         },
         {
           "bom": false,
@@ -862,7 +870,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c9fead6e7fdc6d07d73f2c6d59ef38e8a3be66b942d30655d276a569979ef799"
+          "sha256": "d8aa877b87a294f606ae100903652b8b82ff914d6918e2ae660ddd222d561c53"
         },
         {
           "bom": false,
@@ -870,7 +878,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b127b8a19660e68e40fa8ceddcfac315e89f7a8e7fa0448b160660cc5572dd2d"
+          "sha256": "ad06c7b19ebf4276dabe9401184c0015ab99a353a5c20a938038b65b9584e13e"
         },
         {
           "bom": false,
@@ -878,7 +886,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c760c79502e618921cb0802d5231eb440cf280b026b6ad67ed43093ac4b075c6"
+          "sha256": "553045b5f9b2cfa1d2b01b7e4ad5a913fb8e5c77d9c65d8417f741a39732f9df"
         },
         {
           "bom": false,
@@ -886,7 +894,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "73ad62752dd5b17647680ad8a97cc3e6c90f2b948c766fca696522b2c4928dfc"
+          "sha256": "be566cd6db3bb7e9e3cd99d1e9c57a9d610beb076b81f1fb85a7d00a3ec03202"
         },
         {
           "bom": false,
@@ -894,7 +902,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0e92c715c754099ecfb3e605e4449900394817ff0e7df93b670adf4042241c85"
+          "sha256": "dbcb93933eb14539fd134a8eff566aba5ceb2824f8f87cf87c0e5ce403b9fdc3"
         },
         {
           "bom": false,
@@ -902,7 +910,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "5930ce71886b40b91c54741c16eb408886f2a651270a38267c4a4f7b331148f2"
+          "sha256": "4cb8b67ed39e46f82e74a1666ee1a098a8f4cca5cc924822b4692dcfe587e020"
         },
         {
           "bom": false,
@@ -910,7 +918,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b588f347946281a33937a604cacb4d9331da8513d1cd11dd4817b03930c5390e"
+          "sha256": "61ad34905dffc8b138acc7aa6eb7d4d6df99c72740ae11b3b08b72a80357f4ab"
         },
         {
           "bom": false,
@@ -918,7 +926,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "376a32bf244dec4ee3abc6cbc4a9fddf293b30e3355d8e86c115806464bf9203"
+          "sha256": "207208674db0660d28956c8fc0782b83e226382c35346fa4aa0aa7623b8f650d"
         },
         {
           "bom": false,
@@ -926,7 +934,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "2bc2bb80b8a25f3dc2846bf9ee7c7594e32b1f05883f84687dc864cc6e34592f"
+          "sha256": "d6428c584e90e541410409fb71f7983ce6bcf285a1ca00d3a2127c55a74ec647"
         },
         {
           "bom": false,
@@ -934,7 +942,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "483a04a26d243ca33de9fd99c3f30944d03047b5f53586eec113ef3d862e6edc"
+          "sha256": "f6a77037f9680d9fedeae8245a83841de827e0988721282daa1c72061e2c3f9d"
         },
         {
           "bom": false,
@@ -942,7 +950,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "91bfb3c71010c02cd7f8e8e50ebd1fbc34017a737eab0326023ad56ffe7a6b69"
+          "sha256": "4aba286aa96cb20ef64cf3c46c24e3c515474f4c244127415b68013f2c7482b8"
         },
         {
           "bom": false,
@@ -950,7 +958,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "97ac5aa3396d9c952b0ad890e1f6bbf7fb1f21a0da11c32be3a5aad8cbdaaf93"
+          "sha256": "ee9e7af3aeb783f27a94ce9ec6f2a6f27900e086e28309ee72799c1ca50421cd"
         },
         {
           "bom": false,
@@ -958,15 +966,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "435e152117389ed40b4537c0007e9fc874dee753ed9834b475c7d48fd32ed118"
+          "sha256": "ddce95af645491335a73b6f586e32cdf25213a3094a6d5817899bb345a72bc25"
         }
       ],
       "tier": "full"
     },
     "lite": {
       "counts": {
-        "rendered": 52,
-        "rows": 52,
+        "rendered": 53,
+        "rows": 53,
         "unrendered": 0
       },
       "files": [
@@ -976,7 +984,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "0f6860c260afe279f1520ababb73dcaed0a9d5df1a6a964c84b1fa5cdc06a38b"
+          "sha256": "e93c97f71cfec3a8151f8889d3af74cd597d1b7655055105fff81030b1fb7f6f"
         },
         {
           "bom": false,
@@ -984,7 +992,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bafc1ce32fb6581a11e76a8bd0cfa9be1874f4b9010bc94e72451bcba43ebc02"
+          "sha256": "47fe2d1c53423373c0f8355358c9d44054d163fa783f1b268747436ef7ab83c4"
         },
         {
           "bom": false,
@@ -992,7 +1000,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a43271fad4c55783f730d614dbe53f5830fd20b91f7978199063c89e51a09e56"
+          "sha256": "a50a69cce7c0ad887237e16232f46964c692ef72a53b36b555c6df8fa5cd8724"
         },
         {
           "bom": false,
@@ -1000,7 +1008,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b1ddf030a33f493254f032ae3dba1dfa1b7403e653c450d89b94daa67e19626d"
+          "sha256": "0321b2656abe37de31cd79610ab21ab390a43935bb0a794b861524a371773083"
         },
         {
           "bom": false,
@@ -1040,7 +1048,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "461374de22b9e5c70c191ac2c2cc231ff4e1125fe51f49ee7c0f0c6d2168625f"
+          "sha256": "138190a0b845b1d042ee0be634fcac73f61e08a9390de0a2a7e484d40c663e25"
         },
         {
           "bom": false,
@@ -1056,7 +1064,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "1235a4a241e4e95961f6762659a3dc960642c38d65d2ef2b1f8ecd0a03cde40c"
+          "sha256": "5e53f86868be6ad90f7820c9dc960f770974a865fe2753e7606e3b7ad2f0b0b0"
         },
         {
           "bom": false,
@@ -1064,7 +1072,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a350a79afd046d66002b318d14c2d1afe9e4cbfbc5886fdf0424ce917787578f"
+          "sha256": "a5eca99d7455dd340873701c3f0750d77f5780d3fab9e9d3acffe9ca81d242c3"
         },
         {
           "bom": false,
@@ -1072,7 +1080,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9e22326d74044a231851a9630d4b7cb33f45bcfdabb26a58906f9056e0078cdf"
+          "sha256": "477b1c711772e1278b13c510b3845da0fcc916fe44d9f342061fa0706847f4ae"
         },
         {
           "bom": false,
@@ -1088,7 +1096,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c22af462d2849912a853d192d1f5649f0e103f62e078a9b28db86be169402742"
+          "sha256": "3ee0d93713713d8374af42d17bed947999763a7fe666afa0882b82aadd205450"
         },
         {
           "bom": false,
@@ -1104,7 +1112,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "d51bb185a48cbe5e01bcd9e0259e3de725426c2c484bc58073bdd5c268de8ab5"
+          "sha256": "fb707a5bda2d2fd75cc7ff58aa3679996d9b9ed0ad98b540ce1dabcad6f14063"
         },
         {
           "bom": false,
@@ -1144,7 +1152,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "78bc73448ea8d092529cee64083df1cdaeb12b46901ef6822d2c8f8e4bbff5d0"
+          "sha256": "31ba6d59d1995bcd2b624d6d8924686008c4e170e2d1e0b71df778cb635fab10"
         },
         {
           "bom": false,
@@ -1160,7 +1168,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "860555ef771f4a4d47fc329365b14d05fe7418f5eb1570f948e3ee6a564f108a"
+          "sha256": "4d22c42a103571020a8364d95ee54fcc99ae9df8259f0bc55906c1475e7dc877"
         },
         {
           "bom": false,
@@ -1168,7 +1176,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "611c0c4bcd0b0f027f70932f7f29faa6bfc00e583782e0ce95f3f1695671ff0d"
+          "sha256": "3a431a79e3c9897ecd350b0f5b1f1eef12401d91536933d92cd3b93bd3ba93e9"
         },
         {
           "bom": false,
@@ -1176,7 +1184,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "bc7c2970e73f18170e1c018823e8bb47312afa20d42e5570e5b6427fd6d2b507"
+          "sha256": "9f0e88381c44bd2118e3d0ad6224a6cdc04e367606f3087f3b304a84aa717b01"
         },
         {
           "bom": false,
@@ -1184,7 +1192,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "891bc213cb735bcc82ad8200a09ec65d40b07f4330639df3210265449bb2d3d4"
+          "sha256": "4e377310c6e95702cb1f43ac899627a09a8b02ba687df43cb20b68a9c0640adb"
         },
         {
           "bom": false,
@@ -1192,7 +1200,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c01d9dc13340fe7ac231e1cc5c4166aef59d697c76ea4ac74a45154226d0cfba"
+          "sha256": "b0d73ffaf2b4044a98d6bbcc2f6e718d7e70e6e5b9f3fbb55d1f52eceaa21508"
         },
         {
           "bom": false,
@@ -1200,7 +1208,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "ba80fce61b43c6d0f0dda73778701818bc2b2d68b8ccaad5bde1a65116ab9265"
+          "sha256": "6b339d839a9540b8aac4ecf515f468c9849b857a3f49f40569f9e8713edafff0"
         },
         {
           "bom": false,
@@ -1208,7 +1216,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8e5511880ce7ba6c372ccb211dd08aa8a458565b7f639d69932106cd1c8c3636"
+          "sha256": "a717c7cbb28816446dd9f21d36591975d22f60754f15a425f4cf39e37d04279b"
         },
         {
           "bom": false,
@@ -1216,7 +1224,15 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "a6c04e47fa0a919e01e1ec2f3cc11402b6730e7d04ae12fa9bd884370b18d74e"
+          "sha256": "c065b98a6348f12eda797d0875242418ebff8192dde26f4d19019bb1820890a4"
+        },
+        {
+          "bom": false,
+          "file": "scripts/lib/hook-root.cjs",
+          "mojibake": false,
+          "placeholders": [],
+          "rendered": true,
+          "sha256": "337d23d7518a331545feb0bf68461b70837a34ac5c8ea78725fcda6d620b2324"
         },
         {
           "bom": false,
@@ -1224,7 +1240,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "f5a4105f93e5dfa7199063273affcf0abbc4bbd4ce01886e3e02b099c3938100"
+          "sha256": "5406087607803e0e84a9c9a72152dbac287bfaaef67f18561ec9271dbb65b906"
         },
         {
           "bom": false,
@@ -1232,7 +1248,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "91125ffc56a510a9793d8e05adad503ad871ebd4ac4ee94b53e8728f5a583196"
+          "sha256": "49187cf9d1d2940202d2561d88d99bacfefe8a3386c90f5b6710c3a6e18041a5"
         },
         {
           "bom": false,
@@ -1240,7 +1256,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "9e98a7b1cd8624424400a69cbe13925df6d4b0807b227ac46d84b9a2e05cd087"
+          "sha256": "87d133a959f85ad192472e878c24685bf5b5a58cf4514c54b81038cc41731c50"
         },
         {
           "bom": false,
@@ -1248,7 +1264,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "561f6f3d173a10105e0ef3040a78248ad0a4312ec2423b896afba0f4e68c9785"
+          "sha256": "173d11678a522ef67a63f074aa585a099a3ecef4f33cd5a85c1af1144172f7f0"
         },
         {
           "bom": false,
@@ -1256,7 +1272,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "181dbf06ddedcc8d10aa3929bb4900fba7f7cb68fcbf6ca664923f1aa6e7d99c"
+          "sha256": "416ccfce095c6eae99fdfe1489babb96fdcc254e5b82f25c3f286778efae93d7"
         },
         {
           "bom": false,
@@ -1264,7 +1280,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "90f6e119cf70952bb3f7a321279d2287060bc744d0d2fce53393adf1ea78168a"
+          "sha256": "49c64098737a886d05d114bbf1942d6bad23ad80fbef87c3dc0972a27d5c21ce"
         },
         {
           "bom": false,
@@ -1272,7 +1288,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "74dcaa1c50520414c9fcbd6efa7ffded42156f8dcb57dab51e1e7a1295665a9c"
+          "sha256": "5404734d63b7a20b8678d04362978a6de691aa99949ad3d25f9e0826bbfc75cc"
         },
         {
           "bom": false,
@@ -1280,7 +1296,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "48f5a8095957659910a07c79e00a6f7158a931ff4d1b7fd9496c8ed8c5284586"
+          "sha256": "b3d3ee6741242710b48b29b354db0d7c200607f4bced0f1609efc89a9a0744b5"
         },
         {
           "bom": false,
@@ -1288,7 +1304,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8daf35a7e4adee7f00bac5527a5c50183dd4d3adff03ea5290ff1cedf1dae7d7"
+          "sha256": "4578bebca1846058f89c481c20f8627ac45cbe7de71b4866fdbe9bc33df023c4"
         },
         {
           "bom": false,
@@ -1296,7 +1312,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8b6e7fda953223a32e5ece7634a9e4b02a60ec920cce0d62ce811545eb315c6b"
+          "sha256": "73652345d01a65b3f2f9bb00639a021a8acdd0fa8039a185f41b8882595ba284"
         },
         {
           "bom": false,
@@ -1304,7 +1320,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "2382b9d479081add5dd14b5556ce86c3a991a885ad4e6a1d3e25188d4ca82501"
+          "sha256": "6d62302d5f605ccb848f256f0472758535c0263eb0eb3aefc309faa4b26d1a5a"
         },
         {
           "bom": false,
@@ -1312,7 +1328,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "e01f1579ec691ff6d1239bdc8890a9284a0cacee9a79310d2c8e4639cb650609"
+          "sha256": "4c20ab3802bc38c6a1d3357ec4902986f9597ecfd0b59350affdae0fd5b94585"
         },
         {
           "bom": false,
@@ -1320,7 +1336,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "8758833e3b959aa68e24d7f8e0ed8a6f5f5a9947db914e459d7b28d974f95027"
+          "sha256": "07da4c87bef3c3fd9e20294248d462f84f5c5e36fd38b5d3adc307a6170a0d51"
         },
         {
           "bom": false,
@@ -1328,7 +1344,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "947d40831a72d9c34087ab773a515681c08c6e2a27520ef1ef43d52a0587d682"
+          "sha256": "36b9b973a2e2f3e402cad857d9a787701399d665b2499e972812cc40436e17cd"
         },
         {
           "bom": false,
@@ -1336,7 +1352,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "6e5c27a0fb6a17d56284f87780317c3a0d71bf154ce917e891d508214d2a3b0c"
+          "sha256": "86498caeae4f9050d240a4dff84efb10c9aa528972c530edab3c5b1b9de4810f"
         },
         {
           "bom": false,
@@ -1344,7 +1360,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c9fead6e7fdc6d07d73f2c6d59ef38e8a3be66b942d30655d276a569979ef799"
+          "sha256": "d8aa877b87a294f606ae100903652b8b82ff914d6918e2ae660ddd222d561c53"
         },
         {
           "bom": false,
@@ -1352,7 +1368,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "b127b8a19660e68e40fa8ceddcfac315e89f7a8e7fa0448b160660cc5572dd2d"
+          "sha256": "ad06c7b19ebf4276dabe9401184c0015ab99a353a5c20a938038b65b9584e13e"
         },
         {
           "bom": false,
@@ -1360,7 +1376,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "c760c79502e618921cb0802d5231eb440cf280b026b6ad67ed43093ac4b075c6"
+          "sha256": "553045b5f9b2cfa1d2b01b7e4ad5a913fb8e5c77d9c65d8417f741a39732f9df"
         },
         {
           "bom": false,
@@ -1368,7 +1384,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "73ad62752dd5b17647680ad8a97cc3e6c90f2b948c766fca696522b2c4928dfc"
+          "sha256": "be566cd6db3bb7e9e3cd99d1e9c57a9d610beb076b81f1fb85a7d00a3ec03202"
         },
         {
           "bom": false,
@@ -1376,7 +1392,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "483a04a26d243ca33de9fd99c3f30944d03047b5f53586eec113ef3d862e6edc"
+          "sha256": "f6a77037f9680d9fedeae8245a83841de827e0988721282daa1c72061e2c3f9d"
         },
         {
           "bom": false,
@@ -1384,7 +1400,7 @@
           "mojibake": false,
           "placeholders": [],
           "rendered": true,
-          "sha256": "91bfb3c71010c02cd7f8e8e50ebd1fbc34017a737eab0326023ad56ffe7a6b69"
+          "sha256": "4aba286aa96cb20ef64cf3c46c24e3c515474f4c244127415b68013f2c7482b8"
         }
       ],
       "tier": "lite"

@@ -210,54 +210,14 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/session-start-read-first.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-read-first.cjs\""
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
-          }
-        ]
-      },
-      {
-        "matcher": "resume",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/session-start-read-first.cjs"
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
-          }
-        ]
-      },
-      {
-        "matcher": "clear",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/session-start-read-first.cjs"
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
-          }
-        ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/session-start-read-first.cjs"
-          },
-          {
-            "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -267,7 +227,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -277,11 +237,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/user-prompt-submit-mode-check.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/user-prompt-submit-mode-check.cjs\""
           },
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -291,7 +251,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -302,7 +262,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/pretooluse-red-gate.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-red-gate.cjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/pretooluse-red-gate.cjs\""
           }
         ]
       },
@@ -311,7 +280,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -322,7 +291,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -333,7 +302,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }
@@ -344,7 +313,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/receipts-lifecycle.cjs"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/receipts-lifecycle.cjs\""
           }
         ]
       }

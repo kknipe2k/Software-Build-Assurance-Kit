@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid),
@@ -59,7 +59,7 @@
 
 'use strict';
 
-const { spawnSync, execFileSync } = require('child_process');
+const { spawn, spawnSync, execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -347,15 +347,71 @@ function stepsFor(task, lane, plan, root) {
   return steps;
 }
 
+// node --test exits 0 when its pattern matches no file, so a step whose command is the kit's
+// default runner is judged on the runner's OWN summary: `tests 0` fails the step. Other runners
+// already fail on no tests (pytest exits 5; vitest and jest print "No test files found" and exit
+// 1) and are not judged. The judged step pipes stdout and writes every chunk straight through as
+// it arrives, so the run stays live on screen; only a bounded tail is kept to read the summary
+// (spec `\u2139 tests N`, or tap `# tests N`: Node 20 and 22 print tap when stdout is a pipe).
+// A project with no test file yet (the bootstrap commit, before its first test stage) reports
+// `tests 0` honestly: when git tracks no test-shaped file, the step is a skip - never a pass - and
+// the release lane fails it as a required skip; the guard bites once the first test file exists.
+const NODE_TEST = /\bnode(?:\.exe)?"?\s+(?:\S+\s+)*?--test(?=\s|$)/;
+function testsRun(tail) {
+  let n = null;
+  const rx = /^[^\S\n]*(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)[^\S\n]*$/gm;
+  const t = tail.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r\n/g, '\n');
+  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1]);
+  return n;
+}
+// Read only on the tests-0 path, so a normal run pays nothing. git failing, or no repository, is
+// "unknown", never "none": the FAIL stands.
+const NO_TEST_YET = 'no test file in this project yet (git ls-files finds none) - the step is judged once the first test file is committed';
+const TEST_SHAPED = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[^/]+$/;
+function noTestFiles(root) {
+  const r = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0 || typeof r.stdout !== 'string') return false;
+  return !r.stdout.split('\0').some((f) => f && TEST_SHAPED.test(f));
+}
 function runStep(step, root, quiet) {
   const t0 = Date.now();
-  let r;
-  if (step.file) r = spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root });
-  else {
-    const [sh, args] = process.platform === 'win32' ? ['cmd', ['/c', step.shell]] : ['sh', ['-lc', step.shell]];
-    r = spawnSync(sh, args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root });
-  }
-  return { name: step.name, cmd: step.cmd, exitCode: r.status === null ? 1 : r.status, durationMs: Date.now() - t0 };
+  const done = (status) => ({ name: step.name, cmd: step.cmd, exitCode: status === null ? 1 : status, durationMs: Date.now() - t0 });
+  if (step.file) return done(spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root }).status);
+  // On Windows the command reaches cmd intact, in Node's own shell form (cmd /d /s /c "<command>",
+  // arguments verbatim). cmd /c under Node's default argument quoting turned every inner " into \",
+  // which cmd passes through, so a quoted test glob matched no file. The POSIX branch is unchanged.
+  const win = process.platform === 'win32';
+  const [sh, args] = win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
+  const opts = { cwd: root, windowsVerbatimArguments: win };
+  const io = quiet ? 'ignore' : 'inherit';
+  if (!NODE_TEST.test(step.shell)) return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  return new Promise((resolve) => {
+    let tail = '';
+    const child = spawn(sh, args, Object.assign({ stdio: [io, 'pipe', io] }, opts));
+    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + b.toString('utf8')).slice(-65536); });
+    child.on('error', () => resolve(done(1)));
+    child.on('close', (code) => { // a signal leaves code null, which fails like the sync path
+      if (code !== 0 || testsRun(tail) !== 0) return resolve(done(code));
+      if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
+      if (!quiet) process.stdout.write(`${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
+      return resolve(done(1));
+    });
+  });
+}
+
+// docker_leg is derived at calibration from the ship targets (calibration-core.json) and recorded
+// in project-config.md; it is read here at run time through the read ledger's config reader - one
+// reader, never a second parser. false: the release lane is native-only. Absent, unfilled or
+// unreadable: the Linux leg runs as before, and the lane says so once.
+function dockerLeg(root) {
+  let text;
+  try { text = fs.readFileSync(path.join(root, 'project-config.md'), 'utf8'); } catch (_) { return { value: null, why: 'project-config.md is unreadable' }; }
+  let read = null;
+  try { read = require(path.join(__dirname, 'lib', 'read-ledger.cjs')).readConfigValue; } catch (_) { read = null; }
+  if (typeof read !== 'function') return { value: null, why: 'scripts/lib/read-ledger.cjs has no config reader' };
+  const v = read(text, 'docker_leg');
+  if (v === 'true' || v === 'false') return { value: v === 'true', why: null };
+  return { value: null, why: v === null ? 'no docker_leg value in project-config.md' : `docker_leg "${v}" is neither true nor false` };
 }
 
 function atomicWrite(p, text) {
@@ -427,7 +483,7 @@ function reconcile(root, milestone, write) {
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────────────
-if (require.main === module) {
+if (require.main === module) (async () => {
   const argv = process.argv.slice(2);
   const KNOWN = ['--lane', '--list', '--json', '--summary', '--summary-only', '--reconcile', '--write'];
   for (let i = 0; i < argv.length; i++) {
@@ -483,6 +539,8 @@ if (require.main === module) {
     }
   }
 
+  const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
+  if (!quiet && docker && docker.value === null) process.stdout.write(`${DIM}note docker_leg not read (${docker.why}) - the Linux leg runs as before${RESET}\n`);
   const availability = {};
   for (const t of selected) for (const r of (t.requires || [])) if (!(r in availability)) availability[r] = REQUIREMENTS[r].probe();
   const results = [];
@@ -490,7 +548,8 @@ if (require.main === module) {
   const suiteStart = Date.now();
   for (const t of selected) {
     let skip = null; let verdict = null;
-    if (t.id === 'linux' && process.env.VERIFY_SKIP_LINUX === '1') { skip = 'VERIFY_SKIP_LINUX=1 - the emergency skip, logged here; never routine'; verdict = 'skip'; }
+    if (t.id === 'linux' && docker && docker.value === false) { skip = 'docker_leg: false in project-config.md - this project ships to no Linux target, so the release lane is native-only'; verdict = 'skip'; }
+    else if (t.id === 'linux' && process.env.VERIFY_SKIP_LINUX === '1') { skip = 'VERIFY_SKIP_LINUX=1 - the emergency skip, logged here; never routine'; verdict = 'skip'; }
     else {
       const unmet = (t.requires || []).filter((r) => !availability[r]);
       if (unmet.length) { skip = unmet.map((r) => REQUIREMENTS[r].reason).join('; '); verdict = requiredSkipIsFailure(lane) ? 'fail' : 'skip'; }
@@ -507,15 +566,23 @@ if (require.main === module) {
     const t0 = Date.now(); const ran = []; let code = 0;
     for (const s of steps) {
       if (!quiet) process.stdout.write(`${DIM}$ [${s.name}] ${s.cmd}${RESET}\n`);
-      const r = runStep(s, root, quiet);
+      const r = await runStep(s, root, quiet);
       ran.push(r);
+      if (r.skip) continue; // no test file yet: judged below, never a pass
       if (r.exitCode !== 0) { code = r.exitCode; break; }
     }
     const durationMs = Date.now() - t0;
-    if (code !== 0) failed = true;
-    if (!quiet) process.stdout.write(code === 0 ? `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n` : `${RED}FAIL ${t.label} (exit ${code}, ${(durationMs / 1000).toFixed(1)}s)${RESET}\n`);
-    results.push({ id: t.id, label: t.label, lanes: t.lanes.slice(), requires: (t.requires || []).slice(), verdict: code === 0 ? 'pass' : 'fail', skipReason: null, durationMs, exitCode: code, steps: ran });
-    if (code !== 0) break; // stop on first failure, as before
+    // A step skipped for "no test file yet" makes the task a skip; in the release lane it is a
+    // required check that did not run, which fails it - the same rule as an unmet requirement.
+    const skipped = code === 0 ? ran.find((x) => x.skip) || null : null;
+    verdict = code !== 0 ? 'fail' : !skipped ? 'pass' : requiredSkipIsFailure(lane) ? 'fail' : ran.every((x) => x.skip) ? 'skip' : 'pass';
+    if (verdict === 'fail') failed = true;
+    if (!quiet) process.stdout.write(code !== 0 ? `${RED}FAIL ${t.label} (exit ${code}, ${(durationMs / 1000).toFixed(1)}s)${RESET}\n`
+      : verdict === 'fail' ? `${RED}FAIL required check did not run: ${skipped.skip}${RESET}\n`
+      : skipped ? `${DIM}SKIP [${skipped.name}] ${skipped.skip}${RESET}\n${verdict === 'pass' ? `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n` : ''}`
+      : `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n`);
+    results.push({ id: t.id, label: t.label, lanes: t.lanes.slice(), requires: (t.requires || []).slice(), verdict, skipReason: skipped ? skipped.skip : null, durationMs, exitCode: verdict === 'fail' && code === 0 ? 1 : code, steps: ran });
+    if (verdict === 'fail') break; // stop on first failure, as before
   }
 
   const counts = { pass: 0, fail: 0, skip: 0 };
@@ -539,6 +606,6 @@ if (require.main === module) {
     ? `\n${RED}local verification FAILED (lane ${lane}).${RESET} ${DIM}push blocked. Fix and re-push, or (emergency only) 'git push --no-verify'.${RESET}\n`
     : `\n${GREEN}local verification passed (lane ${lane}, ${(summary.totalDurationMs / 1000).toFixed(1)}s).${RESET}\n`);
   process.exit(failed ? 1 : 0);
-}
+})().catch((e) => { process.stderr.write(`verify-local: failed closed - ${e && e.message ? e.message : e}\n`); process.exit(1); });
 
 module.exports = { TASKS, LANES, DEFAULT_LANE, OUTSIDE_SOURCE, laneTasks, requiredSkipIsFailure, registryHash, computePlan, isOutsideSource, discoverTests };

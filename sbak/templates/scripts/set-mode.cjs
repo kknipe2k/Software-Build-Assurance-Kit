@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -141,9 +141,36 @@ function doSplit(branch) {
     fs.renameSync(tmp, path.join(target, '.claude', 'role'));
   } catch (e) { fail(`--split: the worktree exists at ${target} but its role could not be written: ${e && e.message ? e.message : 'error'}`); }
   process.stdout.write(`worktree created: ${target} (branch ${branch}) - role = work written there.\n`);
-  process.stdout.write('Open the BUILD terminal and paste this whole block (the guard refuses a wrong tree before the launch):\n\n');
-  process.stdout.write(`cd ${target}\n`);
-  process.stdout.write(`node scripts/set-mode.cjs work --expect ${target} && claude\n`);
+  const sh = pasteShell(top);
+  if (sh.note) process.stdout.write(sh.note + '\n');
+  process.stdout.write(`Open the BUILD terminal and paste these lines, one at a time (${SHELL_FORMS[sh.shell].label}) - the guard refuses a wrong tree before the launch:\n\n`);
+  process.stdout.write(SHELL_FORMS[sh.shell].cd(target) + '\n');
+  process.stdout.write(SHELL_FORMS[sh.shell].env + '\n');
+  process.stdout.write(`node scripts/set-mode.cjs work --expect ${target}\n`);
+  process.stdout.write('claude\n');
+  const others = Object.keys(SHELL_FORMS).filter((s) => s !== sh.shell).map((s) => `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)} and ${SHELL_FORMS[s].env}`);
+  process.stdout.write(`(${others.join('; ')}; then the same two commands)\n`);
+}
+
+// M32.1.A (drive note 9): the launch block renders in the shell the person pastes into, read from
+// the `shell` row of project-config.md (asked once in discovery). The variable stays on its own
+// line in every form: chained with && in cmd it stores the value with a trailing space.
+const REAP_VAR = 'CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP';
+const SHELL_FORMS = {
+  cmd: { label: 'cmd', cd: (p) => `cd /d ${p}`, env: `set ${REAP_VAR}=1` },
+  powershell: { label: 'PowerShell', cd: (p) => `cd "${p}"`, env: `$env:${REAP_VAR}="1"` },
+  bash: { label: 'bash', cd: (p) => `cd "${p}"`, env: `export ${REAP_VAR}=1` },
+};
+function pasteShell(top) {
+  const dflt = process.platform === 'win32' ? 'cmd' : 'bash';
+  const why = `${dflt}, the ${process.platform === 'win32' ? 'win32' : 'POSIX'} default.`;
+  let text = '';
+  try { text = fs.readFileSync(path.join(top, 'project-config.md'), 'utf8').replace(/<!--[\s\S]*?-->/g, ''); } catch (_) { /* no config yet */ }
+  const m = /^\|\s*shell\s*\|\s*([^|]+?)\s*\|/mi.exec(text) || /^shell:\s*(\S+)/mi.exec(text);
+  const v = m ? m[1].replace(/`/g, '').trim().toLowerCase() : null;
+  if (v !== null && SHELL_FORMS[v]) return { shell: v, note: null };
+  if (v === null || /\{\{.*\}\}/.test(v)) return { shell: dflt, note: `shell: not set in project-config.md - ${why}` };
+  return { shell: dflt, note: `shell: "${v}" in project-config.md is not cmd, powershell or bash - ${why}` };
 }
 
 // The identity guard: the role is written only when this shell's toplevel IS the expected tree.

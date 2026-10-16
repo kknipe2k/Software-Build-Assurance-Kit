@@ -75,6 +75,8 @@ Stage E (closeout) replaces X.3/X.4 with closeout-specific sections (deliverable
 
 **App-Map delta (when `app_map: on`).** A stage that ships or changes a drivable surface (any class — `ui` / `command` / `endpoint` / `api`) updates `docs/app-map.md` as a close-gate deliverable — but only the **delta**: new/changed entries for the surfaces *this stage* touched, plus a one-line "what's new this stage." This mirrors the gotchas live-log → graduation split: the fresh, narrowly-scoped build session owns its delta; the whole-map reconcile + the `as-of-commit` refresh are **Stage E's** job, not the build session's. Each `verified` entry cites a test-id the harness already asserts; `manual-only` entries are honest about being human-asserted. The CLI prompt carries this as the `<app_map_delta>` element (see Stage A example below). If the stage touched a surface-source path but legitimately changed no surface (a no-UX refactor), the build session logs an `app-map-unchanged: <reason>` token in its stage surface rather than silently skipping — the currency tripwire's only sanctioned escape.
 
+**Spec-examples landing (the first test stage).** `validators/validate-spec-examples.cjs` arms on the first commit that adds a test file and demands every example in `spec/` at once, so the first stage that adds a test file also lands each spec example verbatim under `tests/fixtures/` - name them in that stage's X.2 layout and X.4 tests; the test that runs an example may come in a later stage. A plan that harvests the examples later blocks its own first test commit at pre-commit.
+
 | Stage | Title | Estimated effort |
 |---|---|---|
 | A | {{stage A title}} | {{N}} hours |

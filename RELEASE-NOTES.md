@@ -1,28 +1,30 @@
-# Release notes - v1.0.6
+# Release notes - v1.0.7
 
-**This is the current release of the Software Build Assurance Kit - the documentation realignment on the GA release's cold-start patch.** The 1.0 bar is an integrity bar, not a feature bar: five decision-record properties, each demonstrated absent-of-defect **by execution** on verifier-built fixtures, in the authoritative CI environment. The evidence trail for every claim below is public in this repository's checks and in `example-receipt.html`.
+**This is the current release of the Software Build Assurance Kit - a field-repair hotfix of the GA release.** The 1.0 bar is an integrity bar, not a feature bar: five decision-record properties, each demonstrated absent-of-defect **by execution** on verifier-built fixtures, in the authoritative CI environment. The evidence trail for every claim below is public in this repository's checks and in `example-receipt.html`.
 
 Read this page before you adopt the kit for anything you care about. It says what works, what does not, and what evidence backs each claim. The release history in the same shape is in [CHANGELOG.md](CHANGELOG.md).
 
-## What v1.0.6 changes
+## What v1.0.7 changes
 
-No code or interface changes. This release realigns every user-facing document with v1.0.5 as it shipped, and restores the check that let them drift:
+No interface changes to the build loop. This hotfix closes what a real multi-milestone build on v1.0.6 and three hands-on first-run drives surfaced: gates that passed where they should have failed, and walls a new project hit on its first day.
+
+- **A project's own test lanes run its tests on Windows.** The test command reaches `cmd` intact; before, it lost its quoting, so `node --test` matched no file and the lane still passed. A `node --test` run that reports zero tests now fails the step and names the pattern to check. While a project tracks no test file at all - the bootstrap commit, before the first test stage - the step is a named skip instead, so the first push goes through; the release lane still fails a project with no tests.
+- **The red gate judges the right repository.** It resolves the repository from the file it guards, from any folder, and judges a new file reached through a junction or a symbolic link by its real parent. It allows the scratch homes and refuses every other path outside the repository. The release command is accepted only in its one approved form, and its receipt binds the orchestrator's verdict to the human's click.
+- **The bootstrap drops in, boots and goes.** It ends with its own commit, `kit-update --ready` prints one READY line (or the NOT READY lines that say what is missing), and every role's turn ends on one loud line saying what the person does next.
+- **First-run walls removed.** The installer makes the trunk `main`, and the tools that list unpushed work resolve it. The spec examples land where the examples gate looks. `docker_leg: false` in `project-config.md` gives a native-only release lane for a project with no Linux target. A fresh App-Map passes its own check. A stage opens only while the orchestrator is listening.
+- **Checks tightened.** The append-only check walks every commit, CI runs one gate per step with no blocking gate that lacks an engine, and the session-start stamp reports its true byte budget.
+
+### Upgrading a v1.0.6 project
+
+Run the same command as the install: download this release's `sbak-install.cjs` into the project folder, start `claude` there, type `sbak-install`, and answer `upgrade`. The upgrade refreshes `sbak/` and the kit-managed scripts. It leaves the project's own `scripts/verify-local.cjs` at v1.0.6 by design, because the bootstrap filled it with the project's test commands - and on Windows that file is where the test-lane fix lives. Make that change by hand from "Manual change for a v1.0.6 project" in the [CHANGELOG](https://github.com/kknipe2k/Software-Build-Assurance-Kit/blob/main/CHANGELOG.md): edits 1 to 5 are required, 6 to 8 are optional.
+
+### Carried from the previous release, unchanged
+
+No code or interface changes. That release realigned every user-facing document with the release before it as it shipped, and restored the check that let them drift:
 
 - **Every document re-run through the per-document loop.** The README, QUICKSTART, QUICKSTART-COPILOT, HOW-IT-WORKS, WHY-THIS-KIT, STAGE-LOOP, the example receipt, these notes, the changelog, SECURITY, the limitations page and the two entry pages under `docs/` describe the kit as the previous release shipped it: the one-file installer, the opening on what you want to build, lazy orientation, the channel between the two terminals, the verification lanes. Every count on a shipped surface reads its machine source through a regression check that failed before the fix landed.
 - **Two lines of substance moved.** The `.claude/` template README names the playbook at the path each layout ships it to, and QUICKSTART's troubleshooting row no longer points at guidance the trimmed README does not carry.
 - **The doc check restored as mechanism.** A ritual change must name the documents it touches, the cut waits on a doc-loop record derived from the manifest's user-facing set, and the checklist that governs a documentation pass ships in the tree.
-
-### Carried from the previous release, unchanged
-
-
-No interface changes to the build loop. This patch closes what the first fresh bootstrap on the previous release and a real multi-milestone build surfaced - the install story, the opening ceremony, the cost of starting a session, and the handoff between the two terminals:
-
-- **One file installs the kit.** Download `sbak-install.cjs` from the release page into the directory the kit should live in, start `claude`, type `sbak-install`. The script carries its own instructions and is attested with the release beside the ZIP. It pins the release it installs, verifies the ZIP's checksum and - where `gh` is available - its attestation, discloses what it will write, asks its questions one step at a time (each answered by the word that names the action), and writes nothing before your word. A real `CLAUDE.md` is combined through one import line, never replaced without the word. The same command upgrades an installed kit: `sbak/` and the live kit files refresh, and files you modified are kept and named; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - migrate them by hand until `kit-update --migrate` lands. The signed ZIP stays available as the manual path.
-- **The bootstrap opens on what you want to build.** Nothing else is asked: the operating mode is inferred from that answer, the risk posture derives from the spec by script, and the whole calibration shows as one acceptance line you press enter on. The boot-time ceremony a read-only audit of every ritual could not tie to a named failure is gone; what stayed had earned its place.
-- **Orientation loads lazily.** The session-start stamp stays eager - a stampless session fails loud from the hook - while the reading list is a manifest read at its own moment (stage open, verify, closeout) with each read recorded; the red-approval refuses a stage whose required reads were never recorded. Sessions start at a fraction of the context cost.
-- **A channel between the two terminals.** The orchestrator and the builder exchange stage packets - stage open, the plan, the red-stop, the stage-end, the verdicts - over a file-based, append-only log, picked up automatically in both directions: `/listen` puts the orchestrator on watch, and `/send` carries every block it returns to the builder. The verifier and refactorer sessions run on the same channel. It starts at the worktree split, so the bootstrap session and the first handoff still move by hand. Approvals are never automated: the RED release and the commit approval stay the human's keystrokes.
-- **Verification lanes in the generated project's floor.** `fast`, `stage` and `release` lanes over one registry, an always class that rides every lane, settled marking for closed milestones with an affected-files override, and a union pin proving no test falls between lanes; the test estate is reviewed at closeout.
-- **The accumulated field findings.** The settings deny list names the real `.env` variants and carries no catch-all, so `.env.example` - the mandated committed artifact - passes; the retrospective ends in a machine-checked handoff note; the closeout packet leads with deltas-from-plan and the open findings and is validated before it surfaces, and the release-state row is required at closeout; the gate manifest is validated.
 
 ## What GA means here
 
@@ -49,7 +51,7 @@ Each was verified twice: by the framework's own gates, and by an independent fre
 - **Verification lanes over one registry.** `verify-local --lane fast|stage|release` - three filters over a single task registry, with `release` derived as the complete registry so omission is structurally impossible. Every run emits a deterministic JSON summary (verdicts, named skip reasons, durations in stated milliseconds, a registry hash). The bare invocation is the complete floor; `fast` and `stage` are developer feedback and are never release evidence.
 - **An enforcement layer that is itself tested.** Validators and hooks guard the stage protocol, the retrospective stamp, test honesty, risk declarations, destructive operations, release readiness, entry-doc drift, spec-example coverage, and more - and an enumeration check in CI proves each shipped validator is catalogued everywhere that lists them. A regression suite proves each check still fires; `sbak/scripts/bake-inheritance.cjs` ships as the effectiveness proof a reader can run.
 - **Evidence you can read.** Sessions leave append-only event ledgers. A collector turns those plus committed history into a deterministic report bound to real commits, showing findings, fixes, and rework - with unknown values reported as unknown rather than as zero.
-- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifacts are `sbak-v1.0.6-starter.zip` and, beside it, `sbak-install.cjs` - both attested.
+- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifacts are `sbak-v1.0.7-starter.zip` and, beside it, `sbak-install.cjs` - both attested.
 - **Runs on a supported runtime.** CI and the generated workflows pin Node 24 (Active LTS), and a floor check derives the minimum Node the kit's own prescribed test form requires from the prescription itself - the pins and the prescription cannot silently diverge again.
 
 ## Limitations

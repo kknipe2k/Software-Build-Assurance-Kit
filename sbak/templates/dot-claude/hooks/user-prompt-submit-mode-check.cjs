@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /
@@ -74,6 +74,16 @@ try {
   CLASSIFIER_ERR = e && e.message ? e.message : String(e);
 }
 
+// THE REPO-ROOT RESOLVER (M32.A, §3.1). This hook had TWO cwd anchors - the stamp/send paths
+// read payload.cwd, the role read that decides the mismatch read process.cwd() - so a verifier
+// session that cd'd into a subfolder found no .claude/role there and accepted a work prompt.
+// Both anchors now read the root hook-root.cjs resolves (walk up from the payload cwd to a
+// `.git` directory or worktree file, then CLAUDE_PROJECT_DIR, then the start dir). The require
+// is load-bearing like the classifier's: a guard that cannot find its resolver must not
+// quietly fall back to the anchor that failed. The shared stdin reader and decoder ride it.
+const hookRoot = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'hook-root.cjs'));
+const { decodeBytes } = hookRoot;
+
 const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 
 // Map a stage-prompt root element to the mode that should be executing it.
@@ -90,40 +100,13 @@ const ROOT_TO_MODE = {
   audit_pass_prompt: 'verifier',
 };
 
-// Bounded stdin read (IPC-001): a defensive ceiling so a pathological / never-
-// closing / oversized stream cannot be slurped whole or hang the prompt path. The
-// payload we need (the JSON, or the stage-prompt head) is kilobytes; we read up to
-// the cap and stop. Mode detection only needs the head.
-const MAX_STDIN_BYTES = 1 << 20; // 1 MiB
-function readStdin() {
-  const CHUNK = 65536;
-  const buf = Buffer.allocUnsafe(CHUNK);
-  const out = [];
-  let total = 0;
-  let guard = 0;
-  while (total < MAX_STDIN_BYTES && guard < 100000) {
-    guard++;
-    let n;
-    try {
-      n = fs.readSync(0, buf, 0, Math.min(CHUNK, MAX_STDIN_BYTES - total), null);
-    } catch (e) {
-      if (e && e.code === 'EAGAIN') continue; // not ready yet; bounded by guard
-      break; // EOF (some platforms throw) or unreadable -> stop
-    }
-    if (n === 0) break;
-    out.push(Buffer.from(buf.subarray(0, n)));
-    total += n;
-  }
-  return Buffer.concat(out).toString('utf8');
-}
+// (The bounded stdin read - IPC-001, a defensive ceiling so a pathological stream cannot hang
+// the prompt path - is hook-root.cjs's readStdinBounded since M32.A; one copy, every hook.)
 
-function getPrompt(raw) {
+function getPrompt(raw, payload) {
   // UserPromptSubmit delivers a JSON payload with a `prompt` field. If parsing
-  // fails for any reason, fall back to treating the raw input as the prompt.
-  try {
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj.prompt === 'string') return obj.prompt;
-  } catch (_) { /* not JSON -> use raw */ }
+  // failed for any reason, fall back to treating the raw input as the prompt.
+  if (payload && typeof payload.prompt === 'string') return payload.prompt;
   return raw;
 }
 
@@ -156,16 +139,11 @@ function lockstepBreak() {
   return want === have ? null : `ROOT_TO_MODE [${have}] != STAGE_ROOTS [${want}]`;
 }
 
-// Decode a tiny mode file across encodings. PowerShell `>` writes UTF-16LE+BOM;
-// Set-Content may add a UTF-8 BOM; Unix writes plain UTF-8. This BOM-decode +
-// the NUL-strip in strictToken are the REAL ERR-002 root (a UTF-16/BOM file read
-// as naive utf8 never matched the literal word, so Windows silently fell back to
-// `work`). Keep them — the P#29 regression tests are the wall.
-function decodeBytes(buf) {
-  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.toString('utf16le', 2);
-  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.toString('utf8', 3);
-  return buf.toString('utf8');
-}
+// The mode file is decoded across encodings by hook-root.cjs's decodeBytes (PowerShell `>`
+// writes UTF-16LE+BOM; Set-Content may add a UTF-8 BOM; Unix writes plain UTF-8). That
+// BOM-decode + the NUL-strip in strictToken are the REAL ERR-002 root (a UTF-16/BOM file read
+// as naive utf8 never matched the literal word, so Windows silently fell back to `work`).
+// Keep them — the P#29 regression tests are the wall.
 
 // STRICT resolution: `.claude/role` is canonical BARE-TOKEN state, written
 // only by scripts/set-mode.cjs (atomic). Decode, strip NULs (no-BOM UTF-16 tail),
@@ -213,12 +191,12 @@ function readActiveMode(claudeDir) {
 // project without the receipts contract (pre-M20.6 install) cannot be checked - one stderr
 // note, no block; and if this hook itself is unwired nothing fires - the installer (M30.C)
 // and the commit-time self-integrity hook own that gap.
-function stampPresent(cwd, sessionId) {
+function stampPresent(root, sessionId) {
   let receipts;
   try { receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs')); }
   catch (_) { return 'unchecked'; }
   if (typeof sessionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sessionId)) return 'unchecked';
-  const dir = path.join(cwd, '.claude', 'receipts');
+  const dir = path.join(root, '.claude', 'receipts');
   const files = [path.join(dir, `events-${sessionId}.jsonl`), path.join(dir, `events-script-${new Date().toISOString().slice(0, 10)}.jsonl`)];
   let started = null;
   for (const f of files) {
@@ -238,26 +216,102 @@ function stampPresent(cwd, sessionId) {
       const hookAt = fs.statSync(__filename).mtime.getTime();
       if (new Date(started).getTime() < hookAt) return 'pre-upgrade';
     } catch (_) { /* fall through to missing - fail toward the check, not past it */ }
+    return 'missing';
   }
-  return 'missing';
+  // M32.I (KF-62): NO session_started for this session in either file. When the project's
+  // settings register the read-first hook on SessionStart, the session can only have missed it by
+  // starting before the hooks existed - the fresh-install session, whose SessionStart ran before
+  // the installer wrote them - so it could never have been stamped: exempt with the note. With
+  // SessionStart unwired it is the row-2 case (the hook layer is not wired) and still blocks.
+  return sessionStartWired(root) ? 'pre-upgrade' : 'missing';
+}
+
+// M32.1.B (drive note 8b; gate-1 Q3): a session that STARTED with no role in a bootstrapped
+// project is refused, every prompt, with the set-mode line its SessionStart stamp printed. All
+// three must hold: .claude/role is absent; project-config.md is present; this session's own
+// orientation stamps exist and none carries a resolved role. The stamps are the discriminator,
+// never the directory alone - the bootstrap session writes project-config.md at Phase 1 and runs
+// on role-less (its stamp says work), the KF-62 installer session has no stamp at all, and a
+// session with no id or no receipts contract cannot be read: all three keep the work default.
+// M32.1.C (V-14, R-40; clarification 1, orchestrator seq 123): the fourth condition - the bootstrap
+// has ENDED - is decided ONCE, by the SessionStart hook's probe, and reaches this hook through the
+// stamp it records: a new window mid-bootstrap is stamped role=work, so it is never refused here.
+// One decision with one record: the stamp and the prompt agree by construction (CFI-05).
+// V-29: the line opens with a deliberate-stop phrase (drive note 13).
+const NO_ROLE_LINE = 'Stopped on purpose: this window has no role yet. Run node scripts/set-mode.cjs <orchestrator|work> and reopen this window.';
+function startedWithoutRole(root, claudeDir, sessionId) {
+  if (readActiveMode(claudeDir).state !== 'absent') return false;
+  if (!fs.existsSync(path.join(root, 'project-config.md'))) return false;
+  if (typeof sessionId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sessionId)) return false;
+  let receipts;
+  try { receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs')); } catch (_) { return false; }
+  const f = path.join(root, '.claude', 'receipts', `events-${sessionId}.jsonl`);
+  if (!fs.existsSync(f)) return false;
+  const stamps = receipts.readLedger(f, { maxBytes: 1 << 20 }).events.filter((e) => e.event === 'orientation_stamped');
+  return stamps.length > 0 && !stamps.some((e) => VALID_MODES.includes(e.role));
+}
+
+// M32.1.B (V-2, MC-3; R-36 and gate-1 Q2): this hook stays cwd-first - a prompt has no path to
+// anchor on - and cross-checks the repo the session STARTED in (CLAUDE_PROJECT_DIR, "the project
+// root where the session started"). When the two roots disagree on the role, a stage prompt is
+// refused naming both: a verifier session whose shell sits in a sibling work tree must not run a
+// work stage there. Prose is never refused for it - the shell's cwd persists across Bash calls,
+// so a session that wandered into a sibling worktree has to be able to talk its way back.
+function sameDir(a, b) {
+  const x = path.resolve(a); const y = path.resolve(b);
+  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+function roleOf(claudeDir) {
+  const r = readActiveMode(claudeDir);
+  return r.state === 'absent' ? 'work' : (r.state === 'unresolved' ? 'unresolved' : r.mode);
+}
+function startRootConflict(root, claudeDir) {
+  const env = process.env.CLAUDE_PROJECT_DIR;
+  if (typeof env !== 'string' || !env) return null;
+  try { if (!fs.statSync(env).isDirectory()) return null; } catch (_) { return null; }
+  const startRoot = hookRoot.repoRoot({ cwd: env });
+  if (sameDir(startRoot, root)) return null;
+  const here = roleOf(claudeDir);
+  const there = roleOf(path.join(startRoot, '.claude'));
+  return here === there ? null : { here, there, startRoot };
+}
+
+// The project-scope settings files register the read-first hook on SessionStart (parsed
+// registrations, never a string search over the file - a metadata mention counts for nothing).
+function sessionStartWired(root) {
+  for (const name of ['settings.json', 'settings.local.json']) {
+    let parsed;
+    try { parsed = JSON.parse(fs.readFileSync(path.join(root, '.claude', name), 'utf8')); } catch (_) { continue; }
+    const groups = parsed && parsed.hooks && Array.isArray(parsed.hooks.SessionStart) ? parsed.hooks.SessionStart : [];
+    for (const g of groups) {
+      for (const h of (g && Array.isArray(g.hooks) ? g.hooks : [])) {
+        if (h && h.type === 'command' && typeof h.command === 'string' && /session-start-read-first\.cjs/.test(h.command)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function main() {
-  const raw = readStdin();
-  const prompt = getPrompt(raw);
-  let payload = null;
-  try { payload = JSON.parse(raw); } catch (_) { payload = null; }
-  const cwd = (payload && typeof payload.cwd === 'string' && payload.cwd) ? payload.cwd : process.cwd();
-  const stamp = stampPresent(cwd, payload && payload.session_id);
+  // M32.A: ONE anchor for the whole hook - the repo root hook-root.cjs resolves from the payload
+  // cwd (walk-up to `.git`), never the session cwd a Bash `cd` has moved. Both the stamp/send
+  // paths below and the role read that decides the mismatch use this `root`.
+  const { raw, payload, root, claudeDir } = hookRoot.readHookInput();
+  const prompt = getPrompt(raw, payload);
+  const stamp = stampPresent(root, payload && payload.session_id);
   if (stamp === 'missing') {
     process.stderr.write('[read-first stamp] missing - the SessionStart hook did not run here; start a new session (it stamps itself), or run node scripts/kit-update.cjs --adopt first if the hook layer was never installed.\n');
     process.exit(2);
   }
   if (stamp === 'pre-upgrade') {
-    process.stderr.write('[read-first stamp] n/a - this session started before the stamp hook existed (pre-upgrade session); a new session will stamp itself.\n');
+    process.stderr.write('[read-first stamp] n/a - this session started before the stamp hook existed (a pre-upgrade or fresh-install session); a new session will stamp normally.\n');
   }
   if (stamp === 'unchecked') {
     process.stderr.write('[read-first stamp] not checked - the receipts contract (scripts/lib/receipts.cjs) or a session id is absent here.\n');
+  }
+  if (startedWithoutRole(root, claudeDir, payload && payload.session_id)) {
+    process.stderr.write(NO_ROLE_LINE + '\n');
+    process.exit(2);
   }
 
   // THE /send KEYSTROKE (M30.H, the terminal channel). The human typed /send in this terminal:
@@ -267,14 +321,14 @@ function main() {
   // packets publish automatically. (The fence's ask rule on the send command is the other gate;
   // this token is the zero-click one when the raw line reaches the hook.)
   if (/^\s*\/send\b/.test(prompt)) {
-    const sres = readActiveMode(path.join(cwd, '.claude'));
+    const sres = readActiveMode(claudeDir);
     const srole = sres.state === 'absent' ? 'work' : (sres.state === 'unresolved' ? 'unresolved' : sres.mode);
     if (srole !== 'orchestrator') {
       process.stderr.write(`channel: /send is the orchestrator's keystroke (this session's role is ${srole}) - only the orchestrator sends; builder packets publish automatically at surface time.\n`);
       process.exit(2);
     }
     try {
-      const dir = path.join(cwd, '.claude', 'channel');
+      const dir = path.join(claudeDir, 'channel');
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, 'send-token'), JSON.stringify({ at: new Date().toISOString(), session: payload && payload.session_id ? payload.session_id : null }) + '\n');
     } catch (_) { /* the fence's ask rule remains the other gate */ }
@@ -324,7 +378,18 @@ function main() {
   const declared = ROOT_TO_MODE[structure.root];
   if (!declared) process.exit(0); // unreachable while the lockstep holds; never guess a role
 
-  const claudeDir = path.join(process.cwd(), '.claude');
+  // M32.1.B (MC-3): the shell's repo and the session's start repo disagree on the role - refuse
+  // the stage prompt, naming both (fail closed, R-36).
+  const conflict = startRootConflict(root, claudeDir);
+  if (conflict) {
+    process.stderr.write(
+      `Role conflict - this is a ${declared} stage prompt, but this session's shell is in ${root} (role ${conflict.here}) and the session started in ${conflict.startRoot} (role ${conflict.there}); fix: run the stage from a session opened in its own worktree, then re-paste.\n`
+    );
+    process.exit(2);
+  }
+
+  // (claudeDir is the resolved root's .claude - the second cwd anchor this hook carried until
+  //  M32.A read process.cwd() here, so a cd'd verifier session resolved to `work` and passed.)
   const res = readActiveMode(claudeDir);
 
   // FAIL CLOSED (ERR-002): a present-but-unresolvable role marker must block,

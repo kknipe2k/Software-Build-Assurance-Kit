@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/lib/settings-merge.cjs
 //
 // The VERIFIED .claude/settings.json merge (M27.B, KF-56; rider §4 + owner
@@ -98,12 +98,50 @@ const KIT_VERSION = (function () {
 
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 const normalizeCommand = (c) => String(c).trim().replace(/\s+/g, ' ');
+// M32.A: the kit's canonical hook command gained the `"${CLAUDE_PROJECT_DIR}/"` prefix (the hooks
+// anchor on the project root, not the session cwd). A project adopted before M32.A registers
+// the pre-M32.A canonical form, `node .claude/hooks/<hook>.cjs` - the SAME kit registration, not
+// a user modification: for dedupe identity the two forms are equal, so a re-adopt reports it
+// wired rather than a class-(i) conflict, and never double-registers. The bytes WRITTEN for a
+// new registration stay the canonical prefixed form (normalizeCommand, not this). Rewriting
+// an existing bare registration to the prefixed form is kit-update --migrate's job (M33 §4.1).
+const commandIdentity = (c) => normalizeCommand(c)
+  .replace(/^node "\$\{CLAUDE_PROJECT_DIR\}\/(\.claude\/hooks\/[A-Za-z0-9._-]+\.cjs)"$/, 'node $1');
 // The ownership identity for class-(i) detection: the kit-owned script path
 // inside a command. Exact commands stay the allowlist; the script path is only
 // used to RECOGNIZE a user-modified variant of a kit command.
 function kitScriptPath(command) {
   const m = /\.claude\/hooks\/[A-Za-z0-9._-]+\.cjs/.exec(command);
   return m ? m[0] : null;
+}
+// M32.I: the kit's SessionStart registration collapsed from four per-source groups
+// (startup / resume / clear / compact) to ONE group with no matcher, which fires on every source.
+// Two consequences for identity. (a) A project adopted before M32.I carries the four-group form -
+// the SAME kit registration: when every one of the four sources carries all of the kit's
+// SessionStart commands (by commandIdentity, order-insensitive, user extras ignored) the
+// matcher-less registration counts as present, so a re-adopt reports it wired and adds nothing.
+// Rewriting the four into one is kit-update --migrate's job (M33 §4.1). (b) Because the matcher-less
+// group reaches every source, a kit script already registered in ANY SessionStart group (a partial
+// per-source registration, or a user-modified variant) would run twice if the canonical were added:
+// that is class (i) - reported, never added. A user's own SessionStart group stays theirs.
+const LEGACY_SESSION_START_SOURCES = Object.freeze(['startup', 'resume', 'clear', 'compact']);
+function sessionStartCommands(hooksObj) {
+  const out = [];
+  for (const g of Array.isArray(hooksObj.SessionStart) ? hooksObj.SessionStart : []) {
+    if (!g || typeof g !== 'object') continue;
+    for (const h of Array.isArray(g.hooks) ? g.hooks : []) {
+      if (h && h.type === 'command' && typeof h.command === 'string') {
+        out.push({ matcher: typeof g.matcher === 'string' ? g.matcher : null, command: normalizeCommand(h.command) });
+      }
+    }
+  }
+  return out;
+}
+function legacySessionStartWired(hooksObj, kitCommands) {
+  if (kitCommands.length === 0) return false;
+  const regs = sessionStartCommands(hooksObj);
+  return LEGACY_SESSION_START_SOURCES.every((src) => kitCommands.every((k) =>
+    regs.some((r) => r.matcher === src && commandIdentity(r.command) === commandIdentity(k))));
 }
 
 // Flatten a parsed settings object's hooks into [{event, matcher, command}]
@@ -194,6 +232,9 @@ function mergeSettings(opts) {
   // groups (existing registrations run alongside kit registrations, rider §4.4).
   if (!merged.hooks || typeof merged.hooks !== 'object' || Array.isArray(merged.hooks)) merged.hooks = {};
   const hooksObj = merged.hooks;
+  // M32.I (a): decided once, on the file as found, before any kit group is added.
+  const ssKitCommands = kit.registrations.filter((r) => r.event === 'SessionStart' && r.matcher === null).map((r) => r.command);
+  const ssLegacy = legacySessionStartWired(hooksObj, ssKitCommands);
   for (const reg of kit.registrations) {
     const groups = (Array.isArray(hooksObj[reg.event]) ? hooksObj[reg.event] : []).filter((g) =>
       g && typeof g === 'object'
@@ -204,13 +245,19 @@ function mergeSettings(opts) {
         if (h && h.type === 'command' && typeof h.command === 'string') existing.push(normalizeCommand(h.command));
       }
     }
-    if (existing.indexOf(reg.command) !== -1) { res.dedupedRegs.push(reg); continue; }
+    if (existing.some((c) => commandIdentity(c) === commandIdentity(reg.command))) { res.dedupedRegs.push(reg); continue; }
+    const everySource = reg.event === 'SessionStart' && reg.matcher === null;
+    if (everySource && ssLegacy) { res.dedupedRegs.push(reg); continue; } // M32.I (a): old four == new one
     const script = kitScriptPath(reg.command);
-    const clash = script ? existing.find((c) => c.indexOf(script) !== -1) : undefined;
-    if (clash !== undefined) {
+    // M32.I (b): a matcher-less SessionStart group reaches every SessionStart group's source.
+    const pool = everySource ? sessionStartCommands(hooksObj) : existing.map((c) => ({ matcher: reg.matcher, command: c }));
+    const hit = script ? pool.find((r) => r.command.indexOf(script) !== -1) : undefined;
+    if (hit !== undefined) {
       // class (i): user-modified kit command — reported, never replaced, the
       // canonical form NOT force-added alongside (it would double-run).
-      res.conflicts.hooks.push({ event: reg.event, matcher: reg.matcher, userCommand: clash, kitCommand: reg.command });
+      const c = { event: reg.event, matcher: reg.matcher, userCommand: hit.command, kitCommand: reg.command };
+      if (everySource) c.userMatcher = hit.matcher;
+      res.conflicts.hooks.push(c);
       continue;
     }
     let g = groups[0];
@@ -329,7 +376,16 @@ function applySettingsMerge(opts) {
   const m = mergeSettings({ live: original, kit });
   const conflictCount = m.conflicts.hooks.length + m.conflicts.permissions.length;
   for (const c of m.conflicts.hooks) {
-    log('conflict   ' + c.event + '/' + (c.matcher === null ? '-' : c.matcher) + ' — your command "' + c.userCommand
+    if (c.userMatcher !== undefined && commandIdentity(c.userCommand) === commandIdentity(c.kitCommand)) {
+      // M32.I (b): the exact kit command, registered for one source only.
+      log('conflict   ' + c.event + '/' + (c.userMatcher === null ? '-' : c.userMatcher) + ' — the kit command "' + c.userCommand
+        + '" is registered for that source only; the kit now registers it once in a SessionStart group with no matcher (every source), '
+        + 'and adding that beside yours would run it twice: kept as-is, the kit\'s registration was NOT added. '
+        + 'Resolve by hand: move it into one SessionStart group with no matcher.');
+      continue;
+    }
+    const where = c.userMatcher !== undefined ? c.userMatcher : c.matcher;
+    log('conflict   ' + c.event + '/' + (where === null ? '-' : where) + ' — your command "' + c.userCommand
       + '" is a user-modified kit command: kept as-is, never replaced, and the kit\'s canonical registration was NOT added alongside it (it would double-run). '
       + 'Resolve by hand: keep your variant, or restore the canonical "' + c.kitCommand + '".');
   }
@@ -423,6 +479,7 @@ module.exports = {
   SETTINGS_REL,
   ARCHIVE_REL,
   normalizeCommand,
+  commandIdentity,
   flattenRegistrations,
   deriveKitSettings,
   archiveStamp,

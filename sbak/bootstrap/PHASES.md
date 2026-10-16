@@ -11,7 +11,7 @@
 
 Read these seven files in order before engaging with the user beyond the greeting:
 
-1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — **read first**. The Custom-path authority: the verbatim 3 asks (each with its option table) + the confirmation turn, presented only when the user answers `Custom` to the one question. Its mode table also drives the Full path's mode inference. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
+1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — **read first**. The Custom-path authority: the verbatim 3 asks (each with its option table) + the confirmation turn, presented only when the person types `custom` before the spec lands. Its mode table also drives the Full path's mode inference. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
 2. **`sbak/BUILD-PLAYBOOK.md`** — the methodology. Defines the four layers (Project / Milestone / Stage / Step), the three load-bearing constraints, the per-stage loop, the closeout protocol, the gates, the retrospective protocol, the gap-analysis protocol. **Part 0** defines the tier model.
 3. **`sbak/FRAMEWORK-CONFIG.md`** — the tier and toggle reference. Two tiers (Full the default / Lite the low-ceremony escape; the third tier retired at M26.D), the machine-readable calibration core (`calibration-core.json` — the asks, per-tier toggles, severity, and derivation rules), and the toggle schema (retrospective depth, ledger discipline, web-verify, read-first cap, research mode, escalation, hook enforcement, explanation mode). This file is what you'll read most carefully — bootstrap is largely a calibration exercise.
 4. **`sbak/persistence-architecture.md`** — the layer model. Where each artifact lives (Layers 1–5), who reads/writes when, the mutability matrix, the audit trail.
@@ -25,11 +25,13 @@ Once you've read these, you understand the framework. The bootstrap workflow bel
 
 ## Phase 0 — the moved detail
 
-Location consent is the installer's job now: `sbak-install` disclosed the footprint and asked before a byte landed, so the bootstrap does not re-ask where it is. The bootstrap's first response is the stamp echo plus the ONE question — **Full or Custom?** — and nothing else before it.
+Location consent is the installer's job now: `sbak-install` disclosed the footprint and asked before a byte landed, so the bootstrap does not re-ask where it is. The bootstrap's first response is the stamp echo plus the ONE question — *"What do you want to build?"* — and nothing else before it. That is the Full path, the only path offered. Custom is reachable by typing `custom` at any point before the spec lands; it is never offered.
 
-**Full** (the default): the user gets no further choices. Ask *"What do you want to build?"*, infer the operating mode from that first substantive answer, run discovery + Phase 1, and put the whole derived calibration in front of one human eyeball as the acceptance glance — one script-produced line after the spec lands. The user answers directly, describes, or punts; every derived value still reaches `project-config.md`, just without a quiz.
+Mode: auto is fine until the scaffold consent line in Phase 3 asks for Manual.
 
-**Custom**: present the **calibration interview** from `sbak/templates/CALIBRATION-INTERVIEW.md` verbatim — the 3 asks (operating mode, tier, risk triggers), each with its option table, and the confirmation turn that surfaces every derived value — plus the smell-flagging rules. Don't paraphrase the option tables — the trade-offs only land if the user sees them side by side. The interview maps to `project-config.md` toggles via the table at the bottom of `CALIBRATION-INTERVIEW.md`.
+**Full** (the default, and the only path offered): the user gets no further choices. From the answer to *"What do you want to build?"*, infer the operating mode from that first substantive answer, run discovery + Phase 1, and put the whole derived calibration in front of one human eyeball as the acceptance glance — one script-produced line after the spec lands. The user answers directly, describes, or punts; every derived value still reaches `project-config.md`, just without a quiz.
+
+**Custom** (only when the person types `custom` before the spec lands): present the **calibration interview** from `sbak/templates/CALIBRATION-INTERVIEW.md` verbatim — the 3 asks (operating mode, tier, risk triggers), each with its option table, and the confirmation turn that surfaces every derived value — plus the smell-flagging rules. Don't paraphrase the option tables — the trade-offs only land if the user sees them side by side. The interview maps to `project-config.md` toggles via the table at the bottom of `CALIBRATION-INTERVIEW.md`.
 
 Either way, proceed to Phase 0 Step 0.2 below — the tier-conditional discovery questions. Don't lock the calibration to `project-config.md` yet; Phase 1 may surface complexity that bumps tier upward (Custom) and the Full path's glance runs after the spec lands.
 
@@ -39,15 +41,17 @@ Either way, proceed to Phase 0 Step 0.2 below — the tier-conditional discovery
 
 **Step 0.1 — Calibration.**
 
-**Full path:** nothing is asked. Tier = Full; `operating_mode` = the inference from the first substantive answer (the mode table, default `greenfield` — state it in one clause so a typed mode word corrects it); risk triggers + a toggle smell (only when one fires) derive from the spec at the glance, `node sbak/scripts/calibration-derive.cjs --from-spec` (keyword tables as data in `sbak/calibration-core.json`; authority for everything else: the same core). The glance is a GLANCE, not a menu — one line, one enter; a typed mode word or trigger token corrects it. An under-derived trigger is exactly what the human eyeball on that line exists to catch (a silent miss would disarm G11 by construction).
+**Full path:** nothing is asked. Tier = Full; `operating_mode` = the inference from the first substantive answer (the mode table, default `greenfield` — state it in one clause so a typed mode word corrects it); risk triggers + a toggle smell (only when one fires) derive from the spec at the glance, `node sbak/scripts/calibration-derive.cjs --from-spec` (keyword tables as data in `sbak/calibration-core.json`; authority for everything else: the same core). The glance is a GLANCE, not a menu — one line, one typed word (`accept`); a typed mode word or trigger token corrects it. An under-derived trigger is exactly what the human eyeball on that line exists to catch (a silent miss would disarm G11 by construction).
 
 **Custom path:** present the canonical interview from `sbak/templates/CALIBRATION-INTERVIEW.md`. **3 asks + 1 confirmation turn** (M26.D — the ratified shape; authority: `calibration-core.json`): mode (Step 0.0's leading ask), tier (per `sbak/FRAMEWORK-CONFIG.md` §3), risk triggers (the six surfaces, `sbak/FRAMEWORK-CONFIG.md` §4.19; `[]` is fine and common — risk overrides tier, and at Full a declared trigger arms the append-only-ledger CI workflow), then run `node sbak/scripts/calibration-derive.cjs --answers` and surface EVERY derived value in plain English with its one-line why (deliverable type from the description; verification locus from repo visibility + ship targets, never tier — KF-28; the per-stage cadence disclosure + fence; validator severity; the tier toggle set; the derived scaffold count), inviting correction. Present the ask tables verbatim — don't paraphrase or compress them. Nothing is locked until the user nods.
 
 **Pacing + menu discipline (every asked exchange — the one question, the Custom interview, and discovery alike).** Ask **one question per turn**, then WAIT for the answer before asking the next — never batch questions into a wall. Lead each question with **numbered recommendations** inferred from the repo and the user's description, so the user can answer **accept-by-number** or override in their own words. Numbered options draw ONLY from documented dials (mode, tier, risk triggers, the file list, defer) — **never offer to disable a named control** (a hook, a validator, a gate, the fence). Skips are user-initiated only and carry their stated cost — when the user asks to skip, state that cost in one line before honoring the skip.
 
+**Every bootstrap turn holds its shape.** Four rules, each one earned on a drive: (a) every turn ends with one direct question or choice as its last line - a turn that lists options with no closing ask leaves the person guessing what to type; (b) one numbered list per turn - in the owner's words, "separate the decisions from the questions": two numbered lists run together render as one list, and a number typed against it lands on the wrong item; (c) when the person answers with a number, echo the option's text back before acting on it (for example "4 - local only, no hosting"), so a mis-mapped number is caught before anything moves; (d) the Phase 3 consent is the consent line from `SCAFFOLD-TABLES.md`, quoted verbatim, never paraphrased into paragraphs: *"I'll create ~N files and modify M, across `.claude/`, `.githooks/`, `scripts/`, `docs/`, `prompts/`, `spec/`, `.github/`, plus root files (`CLAUDE.md`, `project-config.md`, `.gitattributes`, …). This writes .claude/ and .git, which Claude Code never auto-approves - if this session is in auto mode, Shift+Tab until Manual, then y. Want the itemized list first?"*
+
 On the Custom path, after the user answers, **flag any toggle smells** per `CALIBRATION-INTERVIEW.md`'s smells section (Lite + audit need; Full + throwaway prototype; `bug_fix` + multi-week horizon), and confirm the calibration in plain English via the confirmation turn. On the Full path the smell rides the glance line, only when one exists.
 
-**Don't lock the calibration to `project-config.md` yet** — that happens at end of Phase 1 (after the spec lands; on the Full path, at the glance's enter). The spec may surface complexity that bumps the project upward; bumping tier *before* generating scaffolds is cheap.
+**Don't lock the calibration to `project-config.md` yet** — that happens at end of Phase 1 (after the spec lands; on the Full path, when the person types `accept` at the glance). The spec may surface complexity that bumps the project upward; bumping tier *before* generating scaffolds is cheap.
 
 ## Mode detection — the stripped-state detail
 
@@ -89,7 +93,7 @@ After the spec lands, **revisit tier**: did the spec surface complexity that pus
 
 Surface for review. Iterate until accepted.
 
-**Full path: the acceptance glance (after the spec is accepted).** Run `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]` and print its ONE line verbatim: `Full / <mode> / risk triggers: <list> [enter to accept]`. Enter locks the calibration and writes `project-config.md`; a typed mode word or trigger token corrects the line and re-prints it. The line is script-produced — mode and triggers from the core's keyword tables — so an under-derived trigger is visible on it, never composed away (the one human eyeball that keeps G11 armed).
+**Full path: the acceptance glance (after the spec is accepted).** Run `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]` and print its output verbatim: the ONE glance line, `Full / <mode> / risk triggers: <list> [type accept; a mode word or trigger token corrects it]`, and under it any `mentioned only in negation: <trigger> ("<fragment>")` line - a keyword that sat only in a negated sentence or in an Out / Not / No / Deferred table column, so it did not arm; the person types its trigger token if it should. Typing `accept` locks the calibration and writes `project-config.md`; a typed mode word or trigger token corrects the line and re-prints it. The line is script-produced — mode and triggers from the core's keyword tables — so an under-derived trigger is visible on it, never composed away (the one human eyeball that keeps G11 armed).
 
 ## Phases 1.5 / 1.6 — Design discovery + design.md (web/UI only)
 
@@ -148,62 +152,70 @@ Generate the first milestone Phase doc. Depth and shape are tier-conditional:
 
 **Brownfield Stage-A shape (single-feature calibration).** When the project came through the existing-repo, single-feature path (Phase 0.2), the M01 Phase doc's Stage A carries a `<fan_out_grep>` block over the feature's named surface (the "where does it live" answer) and an **impact-analysis step**: record the existing tests that cover the "must not change" behaviors in the Phase doc, and re-run that list at stage end alongside the stage's own gates. This is authoring discipline on an existing optional prompt slot — no new schema, no new mode, no new gate.
 
+**The spec examples land with the first test file.** `validators/validate-spec-examples.cjs` arms on the first commit that adds a test file and demands every spec example at once, so the first stage that adds a test file also lands each spec example verbatim under `tests/fixtures/` (the test that runs it may come in a later stage). A plan that harvests the examples in a later stage blocks its own first commit.
+
 Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Full) must validate against `sbak/STAGE-PROMPT-PROTOCOL.md`.
 
 ## Phase 5 — Handoff (full text)
 
-### Phase 5: Handoff to Stage M01.A
+### Phase 5: Commit and hand off to the orchestrator
 
-The bootstrap is complete. Surface the final state:
+The bootstrap is complete. First surface the final state - it is what the bootstrap commit carries:
 
-- All scaffold files generated and listed (with realistic counts: ~52 for Lite, ~119 for Full (the unarmed reference; +2 files when a risk trigger arms the ledger workflow, the manifest row set's 2 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
+- All scaffold files generated and listed (with realistic counts: ~53 for Lite, ~120 for Full (the unarmed reference; +3 files when a risk trigger arms the ledger workflow, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
 - The project's `CLAUDE.md` placed via `node scripts/kit-update.cjs --place-project-claude` — the bootstrap root replaced, or, on a combined root (the installer's import line), merged: the person's file kept byte-for-byte, the project rules at `CLAUDE.sbak.md`
 - `project-config.md` written with the agreed tier and toggles
 - `.claude/` hooks installed; the SessionStart hook prints the stamp + orientation manifest on the next session (session-start entries inlined, the rest read at their `when:` and checked at the gate)
 - **Read-first lists resolve:** run `node .claude/hooks/session-start-read-first.cjs --check` — exit 0, or it names the list and the dead entry (a Phase-4 rename the list never followed is the classic; fix the entry before handoff)
 - **Template↔live divergence check:** run the read-only `node scripts/kit-update.cjs` and surface its report as part of the handoff — template↔live divergence is visible before the first work session, instead of surfacing mid-milestone as mystery drift.
 - M01 Phase doc ready at `docs/build-prompts/M01-<title>.md`
-- **Git remote check (do this before any push).** Route by how the kit arrived. **From the release ZIP (the standard path):** a fresh `git init` repo has no remote at all — nothing to reset; an existing repo keeps its own `origin` untouched. **From a clone (contributor/evaluator path):** `origin` still points at the kit's repo — pushing now would target the kit, not the user's project; run `git remote remove origin` as the final scaffold action. Either way, surface the three options so the user picks where their project actually lives:
+- **Git remote check (do this before any push).** Route by how the kit arrived. **From the release ZIP (the standard path):** a fresh `git init` repo has no remote at all — nothing to reset; an existing repo keeps its own `origin` untouched. **From a clone (the alternate path):** `origin` still points at the kit's repo — pushing now would target the kit, not the user's project; run `git remote remove origin` as the final scaffold action. Either way, surface the three options so the user picks where their project actually lives:
   - **Local-only (no GitHub):** nothing more to do — commits stay local.
-  - **Existing empty GitHub repo:** `git remote add origin https://github.com/<user>/<repo>.git` then `git push -u origin <branch>`.
-  - **Create a new GitHub repo (needs `gh` authenticated):** `gh repo create <name> --private --source=. --remote=origin --push`.
-  Don't guess the user's choice — ask. If the user defers, leaving `origin` unset is the safe state (a later push errors clearly instead of silently targeting the kit).
-- **Next action:** open a fresh Claude Code session in this directory; the new `CLAUDE.md` will take over as the auto-loaded entry point, and the SessionStart hook will print the read-first stamp + manifest. For Lite, just say "let's start M01"; for Full, begin Stage A with `/stage M01 A` in the builder session (pasting the M01.A stage prompt from the Phase doc is the fallback).
-- **Opening the build terminals — walk the user through it, one step at a time (Full).** This is the single most confusing moment for a new user: three sessions are in play (this ending bootstrap session plus two new ones), and both new sessions read ONE role file until the worktree split. Do not deliver the topology as prose - give the numbered steps below one at a time, and quote each step's verification line. Say plainly first: **this is the moment to open the two new terminal windows - this bootstrap session is retired and is NEITHER of them; the user closes it at step 4.**
+  - **Existing empty GitHub repo:** `git remote add origin https://github.com/<user>/<repo>.git` now; `git push -u origin <branch>` after the bootstrap commit.
+  - **Create a new GitHub repo (needs `gh` authenticated):** `gh repo create <name> --private --source=. --remote=origin` now; `git push -u origin <branch>` after the bootstrap commit.
+  Don't guess the user's choice — ask. If the user defers, leaving `origin` unset is the safe state (a later push errors clearly instead of silently targeting the kit). Nothing is pushed during bootstrap: the first push waits for the bootstrap commit and the owner's `push` word.
 
-  Before step 1, run the unborn-HEAD check yourself (don't let the user discover it): `git rev-parse --verify HEAD`. **Non-zero exit** (ZIP into a fresh `git init` - zero commits yet, an unborn HEAD that `git worktree add` cannot resolve; G1 holds through bootstrap, so the project's first commit is M01.A's): both new sessions run in THIS directory until M01.A's first commit lands; after that commit, `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed and prints the launch block) and the builder moves there, the orchestrator keeps the main checkout - and from that split on, the terminal channel carries every packet between the two sessions. **Exit 0** (a commit exists - e.g. the clone path): the worktree split is available immediately. (Found the hard way in a live trial - the handoff instructed the worktree topology unconditionally, the repo was empty, and the operator had to invent an undocumented interim mid-milestone. The interim is legitimate; leaving it unwritten is not.)
+Then three steps, in this order, and nothing else:
 
-  The steps, given to the user one at a time. Each step's command block is **pasted into a terminal, not into a Claude session** - say that explicitly every time, and substitute `<project-path>` with the project's REAL directory (you know it - this directory). **First ask (or detect) which shell that terminal runs — cmd, PowerShell, or a POSIX shell — once, and emit every block in that ONE shell's form, never both:** cmd needs `cd /d` plus the full path (the `/d` matters across drives); PowerShell and macOS/Linux use plain `cd` with the path (tilde form on POSIX).
+1. **The bootstrap commit.** Surface the commit - the final state above and a one-line commit message; on the owner's `commit` word, commit the scaffold. G1 holds: no other word commits, and the bootstrap commit is the project's first commit, so the worktree split is available immediately after it - there is no zero-commit interim to work around.
+2. **The READY line.** Run `node scripts/kit-update.cjs --ready` and quote its output verbatim. A passing run prints exactly one line - `READY. Project committed at <short sha>. Next: open a fresh terminal as the orchestrator.` - and nothing else. Any `NOT READY:` line means there is no READY line: stop with the STOPPED block (§If something goes wrong), and never print step 3 over a failed check.
+3. **The leaving-bootstrap block.** Print this block verbatim - the Full block - and nothing after it:
 
-  1. **Open a NEW terminal window - Terminal 1 = orchestrator.** It adjudicates and routes; it never edits code. Say: *"Open a new terminal window and paste this whole block into it:"*
+   ```
+   Bootstrap is done. Five steps:
+   1. Open a NEW terminal window.
+   2. Paste these lines, one at a time, to start the orchestrator (cmd):
+        cd /d <project path>
+        set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+        node scripts/set-mode.cjs orchestrator
+        claude --model <model>
+      (PowerShell: cd "<project path>" and $env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; POSIX: cd "<project path>" and export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1; then the same two commands)
+   3. In the new window, type start - the orchestrator's stamp appears in its reply, and it tells you when and how to open the build terminal.
+   4. If anything here is unclear, ask Claude in THIS window before closing it.
+   5. Then close this window. Bootstrap is over.
+   ```
 
-     ```
-     cd <project-path>
-     node scripts/set-mode.cjs orchestrator
-     claude
-     ```
+   Fill `<model>` before printing: the model setting in `project-config.md` if one exists, else the model this bootstrap session runs on; if neither can be determined, ask the person one plain question for the model first (hard rule #7: ask, never guess); the literal `<model>` never reaches the printed block - `<` is an input redirection in cmd, PowerShell and POSIX shells, so a pasted placeholder fails. Fill `<project path>` the same way: the absolute path of this session's working directory, the project root the new window must open in; the literal `<project path>` never reaches the printed block. The variable line stays on its own line, never chained with `&&` (in cmd that stores the value with a trailing space): Claude Code reads it only at launch, and it keeps the host from killing the session's background channel watcher when memory runs low.
 
-     **Then confirm together:** the session's first response must echo a read-first stamp saying `role=orchestrator`. If it says `role=work` or shows no stamp, close that window and redo this step. Do not continue until this is confirmed.
+   **The block renders in the person's shell.** Use the `shell:` row of `project-config.md` (cmd, powershell or bash); when it is unset, use cmd on a win32 host and bash elsewhere, and say which default you used in one line above the block. Only two lines change per shell - the `cd` line (cmd `cd /d <project path>`, PowerShell `cd "<project path>"`, bash `cd "<project path>"`) and the variable line (cmd `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`, PowerShell `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"`, bash `export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`) - plus the shell named in step 2's label; the parenthetical then names the other two shells' forms. Each line stays on its own.
 
-  2. **Only after Terminal 1 is confirmed**, say: *"Open a second new terminal window - this one is the BUILDER - and paste this whole block into it:"*
+   **At Lite tier** there is no orchestrator - the roles collapse into one session, and Lite ships no `ORCHESTRATOR.md` and no `/stage` - so print the same five steps with two changes: step 2 reads "Paste these lines, one at a time, to start the build session (cmd):" with `node scripts/set-mode.cjs work` as its third line, and step 3 reads "In the new session, type `let's start M01` - the stamp appears in its reply."
 
-     ```
-     cd <project-path>
-     node scripts/set-mode.cjs work
-     claude
-     ```
-
-     **Then confirm:** the stamp says `role=work`. The order is load-bearing: both sessions read the same `.claude/role` file until the worktree split, so it is always cd → set-mode → launch → confirm, one terminal at a time - never both set-modes first.
-
-  3. **In Terminal 2 (the builder session) only**, the user starts Stage A with `/stage M01 A` (pasting the M01.A stage prompt from `docs/build-prompts/M01-<title>.md` is the fallback) - either goes into the **Claude session**, not the shell. If a stage prompt lands in the wrong session, the mode-check hook blocks it; that block is protection working, not an error.
-
-  4. **Close this bootstrap window.** Everything decided here is persisted in the docs, not in this conversation. Until the worktree split the user carries every surface - gate packets, RED summaries, stage-end packets - to Terminal 1 (the orchestrator) by hand; from the split on, the terminal channel carries them: `/listen <stage>` once in Terminal 1, `/send` for every reply, and only RED approval and the friction stamp are still typed. Only one role acts at a time. Adjudication belongs inside the fenced orchestrator session, not with whatever capable agent sits nearby; repeat this reminder at every stage boundary.
+   At Full, the build terminal is not opened here. The orchestrator's first turn opens it (the project's `ORCHESTRATOR.md`, "First turn of a new project"): it runs the worktree split first (`node scripts/set-mode.cjs --split <milestone-branch>` creates `../<project>-build-wt`), so the builder gets its own working tree and the two sessions never share one role file, and from the split on the terminal channel carries every packet between them.
 
 After handoff, this bootstrap CLAUDE.md no longer exists — the project's own CLAUDE.md is the entry point.
 
 ---
 
 ## If something goes wrong — the accommodations
+
+**Hard stop on any error - the STOPPED block.** On any bootstrap error (a failed command, a refused write, a `NOT READY:` line) or an abort, stop and print, in this order: `STOPPED at Phase <n>: <one-line cause>`; the list of files written so far (they stay where they are - never roll back unilaterally); the ONE command or step that resumes from here, offered and never run; then this line on its own:
+
+```
+Before doing anything else, ask Claude in this window to review this error and advise.
+```
+
+Then END THE TURN and wait. Bootstrap never continues past an error on its own. When the person asks for that review, surface the partial state and the original calibration and offer the three ways forward: (a) finish the phase together, (b) re-tier downward and continue, (c) a fresh session with the partial state intact - a re-run detects partial state (spec exists, no scaffold) and offers to resume from the right phase.
 
 If the user seems lost, is new to the framework, or asks "how does this work / how do I use this," point them at `sbak/QUICKSTART.md` (the shortest path to a running build loop, with prerequisites, the clone gotcha, the per-stage loop mechanics, and a full file map) and `sbak/HOW-IT-WORKS.html` (a visual overview they can open in a browser). Don't make them reverse-engineer the framework from the methodology files.
 
@@ -226,7 +238,7 @@ Each mode's summary + full Phase-0 playbook lives in its `sbak/bootstrap/MODE-<n
 - This is the bootstrap version of `CLAUDE.md`. After bootstrap completes, this file gets replaced by a project-specific `CLAUDE.md` (generated from `sbak/templates/PROJECT-CLAUDE.md`) calibrated to the tier the user selects.
 - Mode detection — do this first, every session
 - Before anything else, check whether
-- If you see this bootstrap CLAUDE.md in project mode, surface as an error: *"This is the bootstrap CLAUDE.md but the project appears initialized. The bootstrap likely failed to replace this file. Check `sbak/templates/PROJECT-CLAUDE.md` and copy it over manually as `CLAUDE.md`, then start a fresh session."*
+- If you see this bootstrap CLAUDE.md in project mode, first rule out a bootstrap in progress: when `project-config.md` is not tracked at HEAD (`git cat-file -e HEAD:./project-config.md` fails), the bootstrap has not ended, so it is resuming, not failed - say so with the stamp's resume line (`Bootstrap in progress: project-config.md is not committed yet. Say "resume the bootstrap" and Claude picks it up from the last finished phase (<path>).`), resume from the last finished phase, and never show the error below. Only when `project-config.md` is tracked at HEAD, surface as an error: *"This is the bootstrap CLAUDE.md but the project appears initialized. The bootstrap likely failed to replace this file. Check `sbak/templates/PROJECT-CLAUDE.md` and copy it over manually as `CLAUDE.md`, then start a fresh session."*
 - — idempotent, and it reports exactly what it installed, verified, or left alone (new repo: run `git init` first, or the hooks path can't be set)
 - — the agent reads this so you don't have to
 - , so the user can stop you if they're in the wrong place

@@ -75,7 +75,7 @@ The role split is the same regardless of hosting. Only cross-machine state handl
 
 **Topology A setup:** from the repo root, `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed and prints the launch block) then run the build with `claude` inside `../<project>-build-wt`; run the orchestrator with `claude` in the main checkout. Both share `.git`, so the orchestrator sees the build's commits the instant they land and can read the build worktree's uncommitted files by path.
 
-**`worktree-after-first-commit` — Topology A may not exist yet on day one.** G1 holds through bootstrap, so the project's first commit is M01.A's. A project that arrived as a ZIP into a fresh `git init` therefore has **zero commits**, and `git worktree add` cannot resolve an **unborn HEAD** (a kit clone inherits history and is unaffected). Check with `git rev-parse --verify HEAD`; if it exits non-zero, run **Topology C** (two terminals, one directory, `set-mode` before each session's first prompt) until M01.A's first commit lands, then create the worktree and move the build session into it.
+**`worktree-after-first-commit` — the split is available from day one.** Bootstrap ends with its own commit: the bootstrap commit is the project's first commit, so a freshly bootstrapped project already has the commit `git worktree add` needs, and your first turn runs the split ("First turn of a new project", below). Only a repo that was never committed (an adopt into a fresh `git init` with no bootstrap) still has an unborn HEAD: there `--split` refuses with a plain message, and **Topology C** (two terminals, one directory, `set-mode` before each session's first prompt) carries the work until its first commit lands.
 
 **Deliver the split at the moment, not as a memory — and present it as RECOMMENDED, never "optional."** One working tree per live session is the standing rule (A-06 was a real incident); the shared-directory interim exists only because the worktree could not exist yet, and it ends at the first commit. When that commit lands (the stage-end packet confirms it), if the sessions still share one directory, walk the user through the split BEFORE couriering the next stage — paste-into-terminal blocks with the real path substituted in the user's OS form, one step at a time:
 
@@ -86,7 +86,7 @@ The role split is the same regardless of hosting. Only cross-machine state handl
    node scripts/set-mode.cjs --split <milestone-branch>
    ```
 
-   The script creates `../<project>-build-wt` (refusing a directory that already exists), writes `role = work` there, and prints the second block to paste - `cd` into the new tree, then `node scripts/set-mode.cjs work --expect <that path> && claude`. The `--expect` guard refuses to write the role from the wrong tree, so `claude` never launches in someone else's checkout.
+   The script creates `../<project>-build-wt` (refusing a directory that already exists), writes `role = work` there, and prints a second block in the person's shell (the `shell` row of `project-config.md`): `cd` into the new tree, the reap-variable line, the guarded set-mode line and the launch, each on its own line. Give the person the block from "First turn of a new project" below instead - it adds `--model <model>` to the launch line. The `--expect` guard refuses to write the role from the wrong tree, so `claude` never launches in someone else's checkout.
 
    **Confirm before continuing:** the new session's stamp says `role=work`. The worktree carries its own `.claude/role`, so the two windows stop sharing the role file from this moment — the set-mode ordering rule retires here.
 
@@ -165,7 +165,17 @@ Per milestone M[NN]:
 
 Every block for the builder travels on the terminal channel, never by copy-paste: adjudicate with the user in plain prose, surface the ONE block the builder needs (the build prompt, an answer, the verdict packet) verbatim, and stop. The user types `/send` (or `/send --approval` for the RED verdict) - that keystroke is the adjudication record; the script stamps this session's role, sequence-numbers and hashes the block, and the builder's pickup surfaces the same bytes with the same hash. Builder packets (stage-open, gate-1, red-stop, stage-end, clarification questions) arrive on their own: this session ends every turn while a stage is open by arming the watcher (`node scripts/channel.cjs watch`, in the background) and wakes when the inbox grows. Shell commands for the user still go in one fenced block in the user's shell form. Before the worktree split the channel does not exist and the user carries blocks by hand - say so once, then move on.
 
-**Every channel turn ends with the channel status, two lines - this session's and the builder's alike.** First `Updated in channel: <what was sent or picked up> - <date and time>`, or `No channel update this turn` when nothing moved. Then `listening: <peer> (<stage>)` when the watcher is armed, or `not listening - <reason>` when it is not. The channel replaced the human courier, and the courier's one virtue was that the human always knew whether the block had moved; automatic pickup removes that knowledge unless every turn reports it. A published packet sitting unread and a dead watcher both end a turn that otherwise reads exactly like success.
+**Every channel turn ends with the channel status, two lines - this session's and the builder's alike.** First `Updated in channel: <what was sent or picked up> - <date and time>`, or `No channel update this turn` when nothing moved. Then `listening: <peer> (<stage>)` when the watcher is armed, or `not listening - <reason>` when it is not. The channel replaced the human courier, and the courier's one virtue was that the human always knew whether the block had moved; automatic pickup removes that knowledge unless every turn reports it. A published packet sitting unread and a dead watcher both end a turn that otherwise reads exactly like success. Then a third line, in bold: `YOU: <the exact thing to type or do>` when the person is needed, or `YOU: nothing - waiting on <what>` when they are not. The person must never have to read the turn to find out whether they are needed.
+
+### Efficiency - a standing line, fenced
+
+Trim what does not serve the work, never the context the work stands on. Three tiers:
+
+- **Never cut:** communication between terminals, the status lines, any word to or from the owner.
+- **Strategic, never reflexive:** reading and context. Read what the ruling or report depends on, in full; skip what it does not depend on, and say what was skipped. The failure mode is reading a 2 KB preview and calling it loaded, not choosing to skip an unrelated file.
+- **Cut freely:** serial runs that could be parallel, re-runs of green work, idle waits with no watcher, decision-free round-trips, re-surfacing a long artifact the owner already read.
+
+The stage-end line asks for specifics: what I cut this stage, what I would cut next, what I kept whole and why. A builder that writes "read less" there has failed the line. Every stage retro carries it as the handoff note's `efficiency:` field.
 
 ### To the build CLI
 
@@ -180,8 +190,10 @@ A red-review adjudication goes back to the builder as a **verdict packet**, sent
 "release the red-gate," the packet **ends with this exact line**:
 
 ```
-RED-RELEASE: approved — builder, run node scripts/approve-red.cjs
+RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>
 ```
+
+Fill both before sending: `<id>` is the stage under review, `<n>` is the seq this approval-request will carry on the channel - one more than your last orch-to-builder seq (your last send line printed it). The release script refuses any other stage or seq, and the red-gate refuses any other form of the command, so the permission prompt the human clicks names the stage and the seq it releases.
 
 The builder may run that command **only in response to that explicit line** — the fence's `ask`
 prompt on the command is the human's release click. Approval language **without** the
@@ -242,6 +254,26 @@ A consultation that turns into a real decision (changes scope, tier, or a contra
 | A new instruction issued while the build is mid-execution of the prior one | One instruction in flight; reconcile first |
 | Relays that restate what the build already surfaced | Relay only what the build doesn't know |
 | Walls of reasoning sent to the user | Brief narrative + option + prompt |
+
+---
+
+## First turn of a new project
+
+Bootstrap ended with its own commit and one READY line, and its last block sent the person to this session. Your first job is to open the build terminal for them, one step at a time, in the same paste-ready shape. The bootstrap commit is the project's first commit, so the split exists now: run it first, so the builder gets its own working tree and never shares this checkout's role file. Never run `set-mode work` in this checkout - it would flip your own role.
+
+1. Run the split yourself, from this checkout: `node scripts/set-mode.cjs --split <milestone-branch>` (the branch the M01 Phase doc names). It creates `../<project>-build-wt` fail-closed and writes `role = work` there.
+2. Go on listen here, before the build window opens: `/listen M01.A`. A stage open is refused while no orchestrator listens, so this comes first. From the split on, the terminal channel carries every packet between the two sessions; the person types decisions here, and `/approve-red` and the commit word in the build window.
+3. Say: *"Open a NEW terminal window and paste these lines, one at a time:"* - with the real worktree path and the model filled in:
+
+   ```
+   cd /d <build-worktree-path>
+   set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
+   node scripts/set-mode.cjs work --expect <build-worktree-path>
+   claude --model <model>
+   ```
+
+   That is the cmd form. Render it in the shell recorded as `shell:` in `project-config.md` (unset: cmd on a win32 host, bash elsewhere - say which default you used). Only two lines change per shell - the `cd` line (cmd `cd /d <build-worktree-path>`, PowerShell `cd "<build-worktree-path>"`, bash `cd "<build-worktree-path>"`) and the variable line (cmd `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`, PowerShell `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"`, bash `export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`) - and one sentence under the block names the other two shells' forms. The variable stays on its own line, never chained with `&&`. Fill `<model>` the way bootstrap did - the model setting in `project-config.md`, else the model you run on, else ask one plain question - and never print the literal.
+4. **The first thing to type:** in that window, type `/stage M01 A` - into the Claude session, not the shell (pasting the M01.A stage prompt from the Phase doc is the fallback); the stamp appears in its reply. Confirm together it says `role=work`; if it says anything else, close that window and redo step 3.
 
 ---
 

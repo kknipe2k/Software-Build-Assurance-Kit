@@ -2,9 +2,239 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.7 - 2026-10-16
+
+**The current release** - the field-repair hotfix on v1.0.6: the gates that passed where they should have failed now fail, proven on the gates a generated project runs on itself; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop.
+
+- **Capabilities.** Everything in v1.0.6. On Windows a project's own test lanes now run its tests: the test command reaches `cmd` intact, and a `node --test` run that finds no test file fails the step - while the project has no test file at all, the step is a named skip, which the release lane still fails. The red gate judges the repository of the file it guards, from any folder, and accepts the release command only in its one approved form. The bootstrap ends with its own commit and one READY line. The installer makes the trunk `main`. `docker_leg: false` gives a native-only release lane. A fresh App-Map passes its own check, and the spec examples land where the examples gate looks.
+- **Upgrading a v1.0.6 project.** The upgrade refreshes the kit and leaves the project's own `scripts/verify-local.cjs` at v1.0.6 by design, so the Windows test-lane fix is a manual change: see "Manual change for a v1.0.6 project" below.
+- **Limitations.** Unchanged from v1.0.6: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Four independent verifier rounds with the calibration self-test at zero false negatives in each; three hands-on first-run drives; the last round's fixes proven on a real project's own tests (none ran before the fix, all of them after, a planted failure failing every lane and the push) and on a fresh install from the release candidate; every new check mutation-tested; the release verification lane green once on the cut's head.
+
+### Manual change for a v1.0.6 project
+
+**First, upgrade the kit folder.** The edits below assume the new kit is in `sbak/`. Download the new release's `sbak-install.cjs` into your project folder, start `claude` there, type `sbak-install`, and answer `upgrade` (the same command as the install). The upgrade refreshes `sbak/` and the kit-managed scripts, `scripts/kit-update.cjs` and `scripts/lib/read-ledger.cjs` among them. It leaves `scripts/verify-local.cjs` at v1.0.6 by design. Then make edits 1 to 5 by hand. With the new kit in place, the `--apply` step for edits 6 to 8 takes the new reader.
+
+A project bootstrapped from v1.0.6 runs its own copy of `scripts/verify-local.cjs`, filled with the project's test commands at bootstrap. `kit-update --apply` refuses that file by design, because restoring it from the template would wipe those fills, so the fix below is made by hand.
+
+- **What it fixes.** On Windows the copy's test lanes ran no tests and still passed. `cmd` received the quoted test pattern with its quotes escaped, so `node --test` matched no test file and exited 0. The pre-push hook, the stage lane, the release lane's native leg and the always-tagged leg all passed with a failing test in the tree. Linux and macOS are not affected, and neither is CI.
+- **What changes.** The command reaches `cmd` intact, in Node's own shell form. A `node --test` run that reports `tests 0` now fails the step, saying the runner found no test file. A project with no test file yet - the bootstrap commit, before the first test stage - is not failed: when git tracks no test-shaped file, the step is a skip with one line, and the release lane fails it as a required skip.
+- **How.** Make the edits below in your project's `scripts/verify-local.cjs`. Each Find block appears exactly once in the v1.0.6 file. Edits 1 to 5 fix the test lanes. Edits 6 to 8 are optional: they let a project with no Linux ship target skip the Docker leg of the release lane.
+
+**Edit 1 (required): the child_process require.** Find this line:
+
+```js
+const { spawnSync, execFileSync } = require('child_process');
+```
+
+Replace it with:
+
+```js
+const { spawn, spawnSync, execFileSync } = require('child_process');
+```
+
+**Edit 2 (required): the step runner.** Find the whole `runStep` function:
+
+```js
+function runStep(step, root, quiet) {
+  const t0 = Date.now();
+  let r;
+  if (step.file) r = spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root });
+  else {
+    const [sh, args] = process.platform === 'win32' ? ['cmd', ['/c', step.shell]] : ['sh', ['-lc', step.shell]];
+    r = spawnSync(sh, args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root });
+  }
+  return { name: step.name, cmd: step.cmd, exitCode: r.status === null ? 1 : r.status, durationMs: Date.now() - t0 };
+}
+```
+
+Replace it with:
+
+```js
+// node --test exits 0 when its pattern matches no file, so a step whose command is the kit's
+// default runner is judged on the runner's OWN summary: `tests 0` fails the step. Other runners
+// already fail on no tests (pytest exits 5; vitest and jest print "No test files found" and exit
+// 1) and are not judged. The judged step pipes stdout and writes every chunk straight through as
+// it arrives, so the run stays live on screen; only a bounded tail is kept to read the summary
+// (spec `\u2139 tests N`, or tap `# tests N`: Node 20 and 22 print tap when stdout is a pipe).
+// A project with no test file yet (the bootstrap commit, before its first test stage) reports
+// `tests 0` honestly: when git tracks no test-shaped file, the step is a skip - never a pass - and
+// the release lane fails it as a required skip; the guard bites once the first test file exists.
+const NODE_TEST = /\bnode(?:\.exe)?"?\s+(?:\S+\s+)*?--test(?=\s|$)/;
+function testsRun(tail) {
+  let n = null;
+  const rx = /^[^\S\n]*(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)[^\S\n]*$/gm;
+  const t = tail.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r\n/g, '\n');
+  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1]);
+  return n;
+}
+// Read only on the tests-0 path, so a normal run pays nothing. git failing, or no repository, is
+// "unknown", never "none": the FAIL stands.
+const NO_TEST_YET = 'no test file in this project yet (git ls-files finds none) - the step is judged once the first test file is committed';
+const TEST_SHAPED = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[^/]+$/;
+function noTestFiles(root) {
+  const r = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0 || typeof r.stdout !== 'string') return false;
+  return !r.stdout.split('\0').some((f) => f && TEST_SHAPED.test(f));
+}
+function runStep(step, root, quiet) {
+  const t0 = Date.now();
+  const done = (status) => ({ name: step.name, cmd: step.cmd, exitCode: status === null ? 1 : status, durationMs: Date.now() - t0 });
+  if (step.file) return done(spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root }).status);
+  // On Windows the command reaches cmd intact, in Node's own shell form (cmd /d /s /c "<command>",
+  // arguments verbatim). cmd /c under Node's default argument quoting turned every inner " into \",
+  // which cmd passes through, so a quoted test glob matched no file. The POSIX branch is unchanged.
+  const win = process.platform === 'win32';
+  const [sh, args] = win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
+  const opts = { cwd: root, windowsVerbatimArguments: win };
+  const io = quiet ? 'ignore' : 'inherit';
+  if (!NODE_TEST.test(step.shell)) return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  return new Promise((resolve) => {
+    let tail = '';
+    const child = spawn(sh, args, Object.assign({ stdio: [io, 'pipe', io] }, opts));
+    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + b.toString('utf8')).slice(-65536); });
+    child.on('error', () => resolve(done(1)));
+    child.on('close', (code) => { // a signal leaves code null, which fails like the sync path
+      if (code !== 0 || testsRun(tail) !== 0) return resolve(done(code));
+      if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
+      if (!quiet) process.stdout.write(`${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
+      return resolve(done(1));
+    });
+  });
+}
+```
+
+**Edit 3 (required): the step call and its verdict in the task loop.** Find these lines, from the step call through the task's stop-on-first-failure line:
+
+```js
+      const r = runStep(s, root, quiet);
+      ran.push(r);
+      if (r.exitCode !== 0) { code = r.exitCode; break; }
+    }
+    const durationMs = Date.now() - t0;
+    if (code !== 0) failed = true;
+    if (!quiet) process.stdout.write(code === 0 ? `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n` : `${RED}FAIL ${t.label} (exit ${code}, ${(durationMs / 1000).toFixed(1)}s)${RESET}\n`);
+    results.push({ id: t.id, label: t.label, lanes: t.lanes.slice(), requires: (t.requires || []).slice(), verdict: code === 0 ? 'pass' : 'fail', skipReason: null, durationMs, exitCode: code, steps: ran });
+    if (code !== 0) break; // stop on first failure, as before
+```
+
+Replace them with:
+
+```js
+      const r = await runStep(s, root, quiet);
+      ran.push(r);
+      if (r.skip) continue; // no test file yet: judged below, never a pass
+      if (r.exitCode !== 0) { code = r.exitCode; break; }
+    }
+    const durationMs = Date.now() - t0;
+    // A step skipped for "no test file yet" makes the task a skip; in the release lane it is a
+    // required check that did not run, which fails it - the same rule as an unmet requirement.
+    const skipped = code === 0 ? ran.find((x) => x.skip) || null : null;
+    verdict = code !== 0 ? 'fail' : !skipped ? 'pass' : requiredSkipIsFailure(lane) ? 'fail' : ran.every((x) => x.skip) ? 'skip' : 'pass';
+    if (verdict === 'fail') failed = true;
+    if (!quiet) process.stdout.write(code !== 0 ? `${RED}FAIL ${t.label} (exit ${code}, ${(durationMs / 1000).toFixed(1)}s)${RESET}\n`
+      : verdict === 'fail' ? `${RED}FAIL required check did not run: ${skipped.skip}${RESET}\n`
+      : skipped ? `${DIM}SKIP [${skipped.name}] ${skipped.skip}${RESET}\n${verdict === 'pass' ? `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n` : ''}`
+      : `${GREEN}OK ${t.label} (${(durationMs / 1000).toFixed(1)}s)${RESET}\n`);
+    results.push({ id: t.id, label: t.label, lanes: t.lanes.slice(), requires: (t.requires || []).slice(), verdict, skipReason: skipped ? skipped.skip : null, durationMs, exitCode: verdict === 'fail' && code === 0 ? 1 : code, steps: ran });
+    if (verdict === 'fail') break; // stop on first failure, as before
+```
+
+**Edit 4 (required): the start of the command-line block.** Find this line:
+
+```js
+if (require.main === module) {
+```
+
+Replace it with:
+
+```js
+if (require.main === module) (async () => {
+```
+
+**Edit 5 (required): the end of the command-line block.** Find these lines, just above `module.exports`:
+
+```js
+  process.exit(failed ? 1 : 0);
+}
+
+module.exports = {
+```
+
+Replace it with:
+
+```js
+  process.exit(failed ? 1 : 0);
+})().catch((e) => { process.stderr.write(`verify-local: failed closed - ${e && e.message ? e.message : e}\n`); process.exit(1); });
+
+module.exports = {
+```
+
+**Edit 6 (optional): the docker_leg reader.** Find this line:
+
+```js
+function atomicWrite(p, text) {
+```
+
+Replace it with:
+
+```js
+// docker_leg is derived at calibration from the ship targets (calibration-core.json) and recorded
+// in project-config.md; it is read here at run time through the read ledger's config reader - one
+// reader, never a second parser. false: the release lane is native-only. Absent, unfilled or
+// unreadable: the Linux leg runs as before, and the lane says so once.
+function dockerLeg(root) {
+  let text;
+  try { text = fs.readFileSync(path.join(root, 'project-config.md'), 'utf8'); } catch (_) { return { value: null, why: 'project-config.md is unreadable' }; }
+  let read = null;
+  try { read = require(path.join(__dirname, 'lib', 'read-ledger.cjs')).readConfigValue; } catch (_) { read = null; }
+  if (typeof read !== 'function') return { value: null, why: 'scripts/lib/read-ledger.cjs has no config reader' };
+  const v = read(text, 'docker_leg');
+  if (v === 'true' || v === 'false') return { value: v === 'true', why: null };
+  return { value: null, why: v === null ? 'no docker_leg value in project-config.md' : `docker_leg "${v}" is neither true nor false` };
+}
+
+function atomicWrite(p, text) {
+```
+
+**Edit 7 (optional): reading docker_leg once per run.** Find this line:
+
+```js
+  const availability = {};
+```
+
+Replace it with:
+
+```js
+  const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
+  if (!quiet && docker && docker.value === null) process.stdout.write(`${DIM}note docker_leg not read (${docker.why}) - the Linux leg runs as before${RESET}\n`);
+  const availability = {};
+```
+
+**Edit 8 (optional): the Linux leg skipped on docker_leg false.** Find this line:
+
+```js
+    if (t.id === 'linux' && process.env.VERIFY_SKIP_LINUX === '1') { skip = 'VERIFY_SKIP_LINUX=1 - the emergency skip, logged here; never routine'; verdict = 'skip'; }
+```
+
+Replace it with:
+
+```js
+    if (t.id === 'linux' && docker && docker.value === false) { skip = 'docker_leg: false in project-config.md - this project ships to no Linux target, so the release lane is native-only'; verdict = 'skip'; }
+    else if (t.id === 'linux' && process.env.VERIFY_SKIP_LINUX === '1') { skip = 'VERIFY_SKIP_LINUX=1 - the emergency skip, logged here; never routine'; verdict = 'skip'; }
+```
+
+After the edits:
+
+- Change the file's `// @kit-version 1.0.6` line to the new release's version, so the drift report stops naming the file.
+- `.githooks/pre-commit`, the other bootstrap-filled file, needs only its version line raised; nothing else in it changed.
+- On Node 20 and 22 the lanes now print the runner's TAP output instead of its spec output, because the runner's stdout is now a pipe that `verify-local` reads for the test count. Node 23 and later print spec either way.
+- For edits 6 to 8 (optional), also run `node scripts/kit-update.cjs --apply scripts/lib/read-ledger.cjs` (a kit-managed copy, which `--apply` restores), and add the row `| docker_leg | false | true when a ship target is linux or server-class, false otherwise |` to the Active toggles table in `project-config.md`. Without the row, the Linux leg runs as before and the release lane says so once.
+- Check it: `node scripts/verify-local.cjs --lane stage` prints `tests <N>` with your real count, and a planted failing test makes it exit non-zero.
+
 ## v1.0.6 - 2026-09-07
 
-**The current release** - the documentation realignment on the cold-start patch; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No code or interface changes.
+The documentation realignment on the cold-start patch, superseded by v1.0.7. No code or interface changes.
 
 - **Capabilities.** Everything in v1.0.5. Every user-facing document re-run against v1.0.5 as shipped, describing the Full path only, with every count on a shipped surface pinned to its machine source; two lines of substance moved (the `.claude/` template README's playbook path per layout, QUICKSTART's troubleshooting pointer); the doc check restored as mechanism - a ritual change names the documents it touches, the cut waits on a derived doc-loop record, and the documentation checklist ships in the tree.
 - **Limitations.** Unchanged from v1.0.5: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).

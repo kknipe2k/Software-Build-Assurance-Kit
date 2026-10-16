@@ -41,10 +41,35 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0  (adjust or remove for non-Node stacks)
+        # `id: setup` travels with the setup step: every gate step below guards on
+        # steps.setup.outcome, so a non-Node stack that replaces setup-node moves this id to
+        # its own setup step (or to the checkout step) rather than dropping it.
+        id: setup
         with:
           node-version: '24'
       - name: Full test suite
         # fill {{CI_TEST_COMMAND}} — e.g. npm ci && npm test
+        #
+        # ONE GATE PER STEP (M32.C). A red command ends a `run:` block, so every verdict after it
+        # never prints (the field: a lint red hid the test suite in 19 of 21 red runs). Chain an
+        # install with its own test (`npm ci && npm test` is one gate) but never two gates in one
+        # step: a second gate is its own step, carrying the same guard. A three-gate project
+        # renders as three guarded steps:
+        #   - name: Lint
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm run lint
+        #   - name: Tests
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm ci && npm test
+        #   - name: Typecheck
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm run typecheck
+        # The guard keeps every gate step running after another gate goes red: once an `if:`
+        # names a status function GitHub drops its implicit success(), so the setup outcome is
+        # stated explicitly. validators/validate-gate-manifest.cjs refuses a gate step without
+        # it. The upgrade for a project that wants parallel gates and one required check per
+        # gate is the matrix form, one job per gate, at the cost of more runner minutes (this
+        # file's OS matrix is a different axis: the same gates on three runners).
         #
         # PATH-SCOPE THE TEST INVOCATION (KF-48 instance 3, M27.D). If this project's test
         # script is Node's built-in runner, scope it to the project's OWN tests — a BARE
@@ -56,6 +81,7 @@ jobs:
         # A directory positional (`node --test tests`) is NOT a scoped run — current Node
         # resolves it as a module path and the command fails outright. The same rule applies
         # to every other test-command token in this scaffold.
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |
           {{CI_TEST_COMMAND}}
 
@@ -76,7 +102,7 @@ jobs:
       # entry. The guard is belt-and-suspenders to the bootstrap's omission: even
       # if the step is left in, no map means no failure.
       - name: App-Map currency check
-        if: ${{ matrix.os == 'ubuntu-latest' && hashFiles('docs/app-map.md') != '' }}   # one OS suffices; the map is OS-agnostic; skip if no map
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.os == 'ubuntu-latest' && hashFiles('docs/app-map.md') != '' }}   # runs after a red suite (M32.C); one OS suffices; the map is OS-agnostic; skip if no map
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}   # PKG-005 — bind base_ref via env; never interpolate ${{ }} into the run: shell line
         run: node validators/validate-app-map.cjs --base "origin/$BASE_REF" --tests '{{APP_MAP_TEST_GLOBS}}' --surface '{{APP_MAP_SURFACE_GLOBS}}' docs/app-map.md
@@ -94,12 +120,12 @@ jobs:
       # registry, so the guard prevents an off-path red. Same hashFiles lesson the
       # App-Map step above applies (M04). One OS suffices; the check is OS-agnostic.
       - name: Sources-registry binding check (research_publish)
-        if: ${{ matrix.os == 'ubuntu-latest' && hashFiles('docs/paper/**') != '' }}   # skip when no paper (non-research_publish, or pre-Phase-R)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.os == 'ubuntu-latest' && hashFiles('docs/paper/**') != '' }}   # runs after a red suite (M32.C); skip when no paper (non-research_publish, or pre-Phase-R)
         run: node validators/validate-sources.cjs
 
       # Gate-command manifest: the local .githooks/* gate set and this workflow set are
       # derived at check time and reconciled, so local and CI cannot silently diverge
       # (the recorded gate-drift class). One OS suffices; the check is OS-agnostic.
       - name: Gate-command manifest (local vs CI)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.os == 'ubuntu-latest' }}   # runs after a red suite (M32.C)
         run: node validators/validate-gate-manifest.cjs

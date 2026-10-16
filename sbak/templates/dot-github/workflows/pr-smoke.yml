@@ -32,12 +32,37 @@ jobs:
           fetch-depth: 0
           persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0  (adjust or remove for non-Node stacks)
+        # `id: setup` travels with the setup step: every gate step below guards on
+        # steps.setup.outcome, so a non-Node stack that replaces setup-node moves this id to
+        # its own setup step (or to the checkout step) rather than dropping it.
+        id: setup
         with:
           node-version: '24'
       - name: Smoke check (fast suite)
-        # fill {{SMOKE_COMMAND}} with the project's fast suite — e.g. npm ci && npm run lint && npm test
+        # fill {{SMOKE_COMMAND}} with the project's fast suite — e.g. npm ci && npm test
         # PATH-SCOPE it if the suite is Node's built-in runner: `node --test "tests/**/*.test.cjs"`,
         # never a bare `node --test` (it auto-discovers vendored trees like sbak/ — KF-48, M27.D).
+        #
+        # ONE GATE PER STEP (M32.C). A red command ends a `run:` block, so every verdict after it
+        # never prints (the field: a lint red hid the test suite in 19 of 21 red runs). Chain an
+        # install with its own test (`npm ci && npm test` is one gate) but never two gates in one
+        # step: a second gate (the lint, a typecheck) is its own step, carrying the same guard.
+        # A three-gate project renders as three guarded steps:
+        #   - name: Lint
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm run lint
+        #   - name: Tests
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm ci && npm test
+        #   - name: Typecheck
+        #     if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        #     run: npm run typecheck
+        # The guard keeps every gate step running after another gate goes red: once an `if:`
+        # names a status function GitHub drops its implicit success(), so the setup outcome is
+        # stated explicitly. validators/validate-gate-manifest.cjs refuses a gate step without
+        # it. The upgrade for a project that wants parallel gates and one required check per
+        # gate is the matrix form, one job per gate, at the cost of more runner minutes.
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |
           {{SMOKE_COMMAND}}
 
@@ -58,7 +83,7 @@ jobs:
       # entry. The guard is belt-and-suspenders to the bootstrap's omission: even
       # if the step is left in, no map means no failure.
       - name: App-Map currency check
-        if: ${{ hashFiles('docs/app-map.md') != '' }}   # skip if no map (app_map: skip, or no surface shipped yet)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && hashFiles('docs/app-map.md') != '' }}   # runs after a red suite (M32.C); skip if no map (app_map: skip, or no surface shipped yet)
         env:
           BASE_REF: ${{ github.base_ref }}   # PKG-005 — bind base_ref via env; never interpolate ${{ }} into the run: shell line
         run: node validators/validate-app-map.cjs --base "origin/$BASE_REF" --tests '{{APP_MAP_TEST_GLOBS}}' --surface '{{APP_MAP_SURFACE_GLOBS}}' docs/app-map.md
@@ -74,5 +99,5 @@ jobs:
       # on a missing paper/registry, so the guard prevents an off-path red. Same
       # hashFiles lesson as the App-Map step above (M04).
       - name: Sources-registry binding check (research_publish)
-        if: ${{ hashFiles('docs/paper/**') != '' }}   # skip when no paper (non-research_publish, or pre-Phase-R)
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' && hashFiles('docs/paper/**') != '' }}   # runs after a red suite (M32.C); skip when no paper (non-research_publish, or pre-Phase-R)
         run: node validators/validate-sources.cjs

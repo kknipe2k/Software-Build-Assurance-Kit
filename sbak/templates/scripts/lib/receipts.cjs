@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.6
+// @kit-version 1.0.7
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -74,7 +74,12 @@ const DERIVED_ROLES = Object.freeze([...SESSION_ROLES, 'human', 'machine']);
 // SessionEnd's payload has a DIFFERENT source value set — deliberately NOT
 // widened into this enum (red ruling J2); an end-reason, if ever wanted, comes
 // back through the contract as its own bounded field.
-const SOURCES = Object.freeze(['startup', 'resume', 'clear', 'compact']);
+// M32.I: `fork` is the CLI's fifth value (2.1.292's payload schema).
+// A value outside this set is still recorded BY NAME when it is a bounded token
+// (SOURCE_TOKEN_RE - no path, no spaces, no free text), so a sixth source shows
+// up in the ledger; anything else, and an absent source, records as "unknown".
+const SOURCES = Object.freeze(['startup', 'resume', 'clear', 'compact', 'fork']);
+const SOURCE_TOKEN_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 // The marker vocabulary is CLOSED — these are the framework's own marker
 // writes, not free text.
@@ -169,6 +174,7 @@ const ALLOWED_FIELDS = Object.freeze([
   'schema', 'at', 'event', 'session', 'role', 'stage', 'source',
   'emitter', 'tool_category', 'tool_use_id', 'marker', 'release', 'read_ref',
   'seq', 'channel_class', // M30.H: the channel events carry the message seq + its bounded class - never a body, hash or path
+  'approval_seq', 'prompt_at', // M32.1.B (R-35 b): red_approved binds the orchestrator's word (the approval-request seq) to the human's click (the permission prompt's time)
 ]);
 // The channel's class vocabulary (M30.H) - closed, mirrors scripts/lib/channel.cjs CLASSES.
 const CHANNEL_CLASSES = Object.freeze(['stage-open', 'stage-packet', 'clarification', 'courier', 'approval-request']);
@@ -225,9 +231,16 @@ function validateEvent(raw) {
     delete event.stage;
     notes.push('field dropped (format check failed): stage');
   }
-  if ('source' in event && (event.event !== 'session_started' || SOURCES.indexOf(event.source) === -1)) {
+  if ('source' in event && event.event !== 'session_started') {
     delete event.source;
-    notes.push('field dropped (out of enum, or source on a non-session_started event): source');
+    notes.push('field dropped (source on a non-session_started event): source');
+  } else if ('source' in event && SOURCES.indexOf(event.source) === -1 && event.source !== 'unknown') {
+    if (typeof event.source === 'string' && SOURCE_TOKEN_RE.test(event.source)) {
+      notes.push(`field kept by name (a source outside the known set): source=${event.source}`);
+    } else {
+      event.source = 'unknown';
+      notes.push('field coerced: source fails the bounded token check -> unknown (never the raw value)');
+    }
   }
   if ('tool_category' in event && TOOL_CATEGORIES.indexOf(event.tool_category) === -1) {
     delete event.tool_category;
@@ -248,6 +261,14 @@ function validateEvent(raw) {
   if ('read_ref' in event && (event.event !== 'file_read' || typeof event.read_ref !== 'string' || !READ_REF_RE.test(event.read_ref))) {
     delete event.read_ref;
     notes.push('field dropped (format check failed, or read_ref on a non-file_read event): read_ref');
+  }
+  if ('approval_seq' in event && (event.event !== 'red_approved' || !Number.isInteger(event.approval_seq) || event.approval_seq < 1)) {
+    delete event.approval_seq;
+    notes.push('field dropped (not a positive integer, or approval_seq on a non-red_approved event): approval_seq');
+  }
+  if ('prompt_at' in event && (event.event !== 'red_approved' || typeof event.prompt_at !== 'string' || !AT_RE.test(event.prompt_at))) {
+    delete event.prompt_at;
+    notes.push('field dropped (not an ISO-8601 timestamp, or prompt_at on a non-red_approved event): prompt_at');
   }
   if ('seq' in event && (CHANNEL_EVENTS.indexOf(event.event) === -1 || !Number.isInteger(event.seq) || event.seq < 1)) {
     delete event.seq;

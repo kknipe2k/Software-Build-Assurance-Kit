@@ -8,13 +8,15 @@
 
 ## First response — every session
 
-Echo the `[read-first stamp]` line from your context (the SessionStart hook prints it; a missing stamp is caught by the hook layer itself, not by you). Your first response is that echo plus exactly ONE question — nothing else before it:
+Echo the `[read-first stamp]` line from your context (the SessionStart hook prints it; a missing stamp is caught by the hook layer itself, not by you). Your first response is that echo plus exactly ONE question — nothing else before it - and one line after it:
 
-> **Full or Custom?** Full (the default): no further choices — I set everything up and show you one line to accept later. Custom: three short questions first.
+> **What do you want to build?**
+>
+> The project is committed once, at the end of bootstrap, after the scaffold and the M01 Phase doc.
 
-**Full** → ask *"What do you want to build?"*, infer `operating_mode` from that answer (the interview's mode table, default `greenfield`; say it so a mode word corrects it), then discovery → Phase 1. After the spec lands, print the glance — ONE line from `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]`, verbatim, never composed: `Full / <mode> / risk triggers: <list> [enter to accept]`. Enter accepts; a mode word or trigger token corrects it. Then write `project-config.md` (Phase 2 next).
+That is the Full path, the only one offered: infer `operating_mode` from the answer (the interview's mode table, default `greenfield`; say it so a mode word corrects it), then discovery → Phase 1. After the spec lands, print the glance — ONE line from `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]`, verbatim, never composed: `Full / <mode> / risk triggers: <list> [type accept; a mode word or trigger token corrects it]`, plus any smell lines. Then write `project-config.md` (Phase 2 next).
 
-**Custom** → the M26 interview verbatim from `sbak/templates/CALIBRATION-INTERVIEW.md` (3 asks + 1 confirmation turn), then Phase 0.
+**Custom** is reachable by typing `custom` at any point before the spec lands; it is never offered → the M26 interview verbatim from `sbak/templates/CALIBRATION-INTERVIEW.md` (3 asks + 1 confirmation turn), then Phase 0.
 
 ---
 
@@ -45,7 +47,7 @@ Six phases, tier-conditional depth, approval at every phase boundary — the per
 
 ### Phase 0: The one question + discovery
 
-**Step 0.0 — Full or Custom (already asked in your first response).** Full: the mode is inferred from the first substantive answer, corrected by a mode word. Custom: the mode is the interview's leading ask. Either way:
+**Step 0.0 — the one question (already asked in your first response).** Full: the mode is inferred from the first substantive answer, corrected by a mode word. Custom (typed `custom`): the mode is the interview's leading ask. Either way:
 
 **On mode resolution, read exactly ONE mode playbook — `sbak/bootstrap/MODE-<name>.md` — before proceeding (default `greenfield` if the user doesn't pick):**
 
@@ -60,7 +62,7 @@ Six phases, tier-conditional depth, approval at every phase boundary — the per
 
 ### Phase 1: Spec authoring
 
-`spec/project-spec.md` from discovery, tier-scaled; append the `deliverable_type` section AND the mandatory IRL/HITL plan section from `sbak/templates/SPEC-TYPE-SECTIONS.md` (Phase 1 authors it; the validator is the backstop); revisit tier; iterate until accepted. **Full path: after acceptance, the glance** — run `calibration-derive --from-spec`, print its one line, and on enter write `project-config.md`. Detail: `sbak/bootstrap/PHASES.md` §Phase 1.
+`spec/project-spec.md` from discovery, tier-scaled; append the `deliverable_type` section AND the mandatory IRL/HITL plan section from `sbak/templates/SPEC-TYPE-SECTIONS.md` (Phase 1 authors it; the validator is the backstop); revisit tier; iterate until accepted. **Full path: after acceptance, the glance** — run `calibration-derive --from-spec`, print its output, and on `accept` write `project-config.md`. Detail: `sbak/bootstrap/PHASES.md` §Phase 1.
 
 ### Phases 1.5 + 1.6: Design discovery → `docs/design.md` (web/UI only)
 
@@ -82,9 +84,9 @@ The pre-flight disclosure (rule #11: ONE consent line, ask-and-WAIT, carrying th
 
 `docs/build-prompts/M01-<title>.md`, tier-shaped; XML stage prompts validate against `sbak/STAGE-PROMPT-PROTOCOL.md`; iterate until accepted. Detail + the brownfield Stage-A shape: `sbak/bootstrap/PHASES.md` §Phase 4.
 
-### Phase 5: Handoff to Stage M01.A
+### Phase 5: Commit and hand off
 
-Surface the final state, run the read-only kit-update divergence report, settle the git remote — ZIP arrival: nothing to reset; clone: run `git remote remove origin` before any push — then **ask** where the project lives; never guess. Instruct the two-terminal topology. Next: fresh session; Full starts Stage M01.A with `/stage M01 A` (pasting the XML stage prompt from the Phase doc is the fallback). Checklist: `sbak/bootstrap/PHASES.md` §Phase 5.
+Surface the final state, run the read-only kit-update divergence report, settle the git remote — ZIP arrival: nothing to reset; clone: run `git remote remove origin` before any push — then **ask** where the project lives; never guess. Then three steps: on the owner's `commit` word, the bootstrap commit; `node scripts/kit-update.cjs --ready`, quoted; the five-step block, nothing after it. The orchestrator then opens the builder for Stage M01.A with `/stage M01 A` (pasting the XML stage prompt from the Phase doc is the fallback). Checklist: `sbak/bootstrap/PHASES.md` §Phase 5.
 
 ---
 
@@ -92,7 +94,7 @@ Surface the final state, run the read-only kit-update divergence report, settle 
 
 These apply to YOU (Claude) during the bootstrap workflow, before the project's own rules are in place:
 
-1. **Surface artifacts for approval per the `pre_write_surface` toggle (default `spec_and_plan_only` — `calibration-core.json` defaults).** `always` → surface every draft, wait, then write. `spec_and_plan_only` → surface the spec (Phase 1) and milestone plan (Phase 2) pre-write; write the scaffold (Phase 3) and Phase docs (Phase 4) directly, surfaced for *post-write* review. `none` → write-then-review everything. Override in `project-config.md`. The pre-flight footprint disclosure (rule #11) and the do-not-commit-without-approval rule (G1) always hold regardless of this toggle.
+1. **Surface artifacts for approval per the `pre_write_surface` toggle (default `spec_and_plan_only` — `calibration-core.json` defaults).** `always` → surface every draft, wait, then write. `spec_and_plan_only` → surface the spec (Phase 1) and milestone plan (Phase 2) pre-write; write the scaffold (Phase 3) and Phase docs (Phase 4) directly, surfaced for *post-write* review. `none` → write-then-review everything. Override in `project-config.md`. The pre-flight footprint disclosure (rule #11) and the do-not-commit-without-approval rule (G1) always hold regardless of this toggle; under G1 the bootstrap commit is the project's first commit, made on the owner's `commit` word at Phase 5.
 2. **Do not skip phases.** The order matters. Phase 1 needs Phase 0's answers; Phase 4 needs Phase 1–3's outputs.
 3. **Do not invent content the user hasn't confirmed.** When a placeholder needs a value, ask. Don't guess plausible-sounding defaults that the user will have to undo later.
 4. **Do not delete `sbak/BUILD-PLAYBOOK.md`, `sbak/FRAMEWORK-CONFIG.md`, `sbak/STAGE-PROMPT-PROTOCOL.md`, `sbak/PROCESS-VALIDATION.md`, or `sbak/persistence-architecture.md` during bootstrap.** They stay in place under `sbak/` after handoff.
@@ -109,9 +111,9 @@ These apply to YOU (Claude) during the bootstrap workflow, before the project's 
 
 ## If something goes wrong
 
-If the user aborts mid-bootstrap, leave any partial files in place (don't roll back unilaterally) and surface what was generated so far. Re-running the bootstrap should detect partial state (e.g., spec exists but no scaffold) and offer to resume from the appropriate phase rather than restart from scratch.
+On any error or abort, STOP: print `STOPPED at Phase <n>: <one-line cause>`, the files written so far (left in place, never rolled back), the ONE command that resumes (offered, never run), then `Before doing anything else, ask Claude in this window to review this error and advise.` - and END THE TURN. Bootstrap never continues past an error on its own. A re-run detects partial state (e.g., spec exists but no scaffold) and offers to resume from the right phase.
 
-If a phase fails partway and you're unsure of the recovery path, surface the partial state and the original calibration. The user can either: (a) finish the phase manually with your help, (b) re-tier downward to a simpler shape and continue, (c) start a fresh session with the partial state intact.
+When asked for that review, surface the partial state and the original calibration. The user can either: (a) finish the phase manually with your help, (b) re-tier downward to a simpler shape and continue, (c) start a fresh session with the partial state intact.
 
 If you're in bootstrap mode and the user wants to do something other than bootstrap — e.g., they want to read the playbook, ask questions about the framework, or just chat — engage normally. Don't force the bootstrap workflow if it's not what they want.
 
