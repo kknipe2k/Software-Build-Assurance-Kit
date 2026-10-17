@@ -76,7 +76,8 @@ Step-by-step detail is under [The stage loop](#full-documentation) below.
 **Prerequisites, exactly:** **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent - Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim. `gh` only if you want the attestation check. The kit itself is stack-agnostic.
 
 **Recommended:** download **`sbak-install.cjs`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. The script is attested with the release; its `.sha256` is beside it. The signed ZIP stays available as the manual path (below, under "Install and download, in full").
-Recommended Path Video:
+
+## Recommended Path Video:
 
 
 https://github.com/user-attachments/assets/4e4f279b-f0be-4020-ab35-0aa5d90f17ef
