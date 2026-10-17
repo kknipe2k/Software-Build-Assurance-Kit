@@ -32,6 +32,13 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 
 The unit of work is a **stage**. A milestone is a few stages; a project is a few milestones. At the default tier the kit runs as two CLI sessions in two windows. They exchange stage packets over a channel in your repository; every approval waits for your keystroke.
 
+## A Walk: From Boot Through Your First Stage Loop
+
+
+https://github.com/user-attachments/assets/7c0f1bc6-f077-466c-b49e-8e2c593f88ac
+
+
+
 ```
   bootstrap session ─ what you want to build ─ project scaffold ─ retires
                                   │
@@ -61,12 +68,6 @@ The unit of work is a **stage**. A milestone is a few stages; a project is a few
 ```
 
 Not a hosted service and not an agent runner. It is files in your repository, running wherever your agent runs, and **nothing leaves your machine until you explicitly say "push" or "open the PR"** - those are single, separate approvals near the end of a run. Until then, everything is local.
-## A Walk: From Boot Through Your First Stage Loop
-
-
-https://github.com/user-attachments/assets/7c0f1bc6-f077-466c-b49e-8e2c593f88ac
-
-
 
 Step-by-step detail is under [The stage loop](#full-documentation) below.
 
