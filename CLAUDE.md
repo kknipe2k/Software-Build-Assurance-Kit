@@ -37,7 +37,7 @@ Then check whether you're in **bootstrap mode** or **project mode**.
 
 ## What this framework is
 
-Read the seven framework files ordered in `sbak/bootstrap/PHASES.md` §Orientation first. The stage-prompt protocol is currently v1.9 — the authoritative version is the newest entry in `sbak/STAGE-PROMPT-PROTOCOL.md`'s own `### Changelog`; the smoke suite binds this pin to it so it can't silently re-stale.
+Read each file at the phase the stamp names (`sbak/bootstrap/PHASES.md` §Orientation). The stage-prompt protocol is currently v1.9 — the authoritative version is the newest entry in `sbak/STAGE-PROMPT-PROTOCOL.md`'s own `### Changelog`; the smoke suite binds this pin to it so it can't silently re-stale.
 
 ---
 

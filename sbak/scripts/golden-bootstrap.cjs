@@ -445,6 +445,7 @@ function projectWires(rootDir) {
   eat(readIf(path.join(root, 'templates/dot-githooks/pre-commit')));
   walk(path.join(root, 'templates/dot-github'), /\.ya?ml$/);
   walk(path.join(root, 'templates/dot-claude/commands'), /\.md$/);
+  walk(path.join(root, 'templates/dot-claude/skills'), /\.md$/);
   walk(path.join(root, 'templates/scripts'), /\.cjs$/);
   return wired;
 }
@@ -889,6 +890,7 @@ function threeWayDiff() {
         if (!f.rendered || f.content == null) continue;
         const isSource = /\.claude\/settings\.json$/.test(f.file)
           || /^\.claude\/commands\/.+\.md$/.test(f.file)
+          || /^\.claude\/skills\/.+\/SKILL\.md$/.test(f.file)
           || /^\.claude\/hooks\/.+\.cjs$/.test(f.file);
         if (!isSource) continue;
         for (const ref of referentialRefs(f.content)) {

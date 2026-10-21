@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
@@ -198,6 +198,13 @@ const HANDOFF_FIELDS = ['landed', 'open', 'next-agent', 'drive', 'mutation', 'co
 // The M32 retros written before v2 existed are listed by exact path under
 // `contract_v2_files` in the grandfather baseline (the kit's own history only).
 const CONTRACT_V2_FROM_MILESTONE = 32;
+// M33.G: contract v3 adds `measure:` - the stage's minutes, bytes and lane runs, copied from
+// `node scripts/lib/read-ledger.cjs --measure <stage>` (the same line `stage-active --clear`
+// prints). Dated the V-5 way: a stage retro whose filename milestone is >= 33 speaks v3; the M33
+// retros written before it (A..F, measured by hand) are listed under `contract_v3_files`. The
+// shape is checked, never the numbers: the validator runs at commit, after the stage is cleared.
+const CONTRACT_V3_FROM_MILESTONE = 33;
+const MEASURE_RE = /^\d+ min open, \d+ B read, lanes: [a-z][a-z-]* \d+\.\d s x\d+(?:, [a-z][a-z-]* \d+\.\d s x\d+)*$/;
 const EFFICIENCY_SUBFIELDS = ['cut', 'would cut next', 'kept whole'];
 const HANDOFF_STOCK = new Set([
   'as planned', 'none', 'see above', 'done', 'ok', 'all good', 'covered', 'fine',
@@ -238,11 +245,22 @@ function validateEfficiency(file, body, errors, contractGrandfathered) {
   if (contract === null) {
     const m = /^M(\d+)\./.exec(path.basename(file));
     if (m && parseInt(m[1], 10) >= CONTRACT_V2_FROM_MILESTONE && !(contractGrandfathered && contractGrandfathered.has(relKey(file)))) {
-      errors.push(`${file}: handoff note has no \`contract:\` line - a milestone ${m[1]} retro speaks handoff contract v2 (from M${CONTRACT_V2_FROM_MILESTONE}): add \`contract: v2\` and the \`efficiency:\` field.`);
+      errors.push(parseInt(m[1], 10) >= CONTRACT_V3_FROM_MILESTONE
+        ? `${file}: handoff note has no \`contract:\` line - a milestone ${m[1]} retro speaks handoff contract v3 (from M${CONTRACT_V3_FROM_MILESTONE}): add \`contract: v3\`, the \`efficiency:\` field and the \`measure:\` line.`
+        : `${file}: handoff note has no \`contract:\` line - a milestone ${m[1]} retro speaks handoff contract v2 (from M${CONTRACT_V2_FROM_MILESTONE}): add \`contract: v2\` and the \`efficiency:\` field.`);
     }
     return;
   }
   const v = /^v?(\d+)/i.exec(contract.trim());
+  const mm = /^M(\d+)\./.exec(path.basename(file));
+  if (mm && parseInt(mm[1], 10) >= CONTRACT_V3_FROM_MILESTONE && (!v || parseInt(v[1], 10) < 3) && !grandfatheredSet('contract_v3_files').has(relKey(file))) {
+    errors.push(`${file}: handoff note declares contract ${contract.trim()} - a milestone ${mm[1]} retro speaks handoff contract v3 (from M${CONTRACT_V3_FROM_MILESTONE}): declare \`contract: v3\` and add the \`measure:\` line from \`node scripts/lib/read-ledger.cjs --measure <stage>\`.`);
+  }
+  if (v && parseInt(v[1], 10) >= 3) {
+    const ms = fieldInBlock(body, 'measure');
+    if (ms === null) errors.push(`${file}: handoff note (contract ${contract.trim()}) has no \`measure:\` line - copy it from \`node scripts/lib/read-ledger.cjs --measure <stage>\`, never typed.`);
+    else if (!MEASURE_RE.test(String(ms).trim())) errors.push(`${file}: handoff \`measure:\` is not the measure line ("${String(ms).trim()}") - copy \`<m> min open, <b> B read, lanes: fast <s> s x<n>, release <s> s x<n>\` from \`node scripts/lib/read-ledger.cjs --measure <stage>\`.`);
+  }
   if (!v || parseInt(v[1], 10) < 2) return; // pre-v2 note: grandfathered
   if (fieldInBlock(body, 'efficiency') === null) {
     errors.push(`${file}: handoff note (contract ${contract.trim()}) has no \`efficiency:\` field - write what this stage cut, what you would cut next, and what you kept whole and why (\`cut:\` / \`would cut next:\` / \`kept whole:\`).`);

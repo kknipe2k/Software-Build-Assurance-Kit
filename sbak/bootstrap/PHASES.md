@@ -9,9 +9,17 @@
 
 ## What this framework is — orient yourself before bootstrapping
 
-Read these seven files in order before engaging with the user beyond the greeting:
+Read each file at the phase that needs it, never all up front: an install window that read the seven references first ran out of context before Phase 1.5. The stamp's orientation manifest lists the bootstrap's reads with their `when:` (the installed `.claude/read-first-list.txt`, shown while the bootstrap is in progress):
 
-1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — **read first**. The Custom-path authority: the verbatim 3 asks (each with its option table) + the confirmation turn, presented only when the person types `custom` before the spec lands. Its mode table also drives the Full path's mode inference. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
+| Phase | Read |
+|---|---|
+| 0 - the one question, the mode, discovery | this file; Ask 1's mode table in `sbak/templates/CALIBRATION-INTERVIEW.md` (the Full path's mode inference); ONE `sbak/bootstrap/MODE-<mode>.md`, the resolved mode's |
+| 1 - the spec, then 1.5 and 1.6 for web | `sbak/templates/SPEC-TYPE-SECTIONS.md`; `sbak/templates/DESIGN-DISCOVERY-INTERVIEW.md` at the Claude Design gate |
+| 3 - the scaffold, and 4 - the Phase doc | `sbak/bootstrap/SCAFFOLD-TABLES.md`; `sbak/templates/PHASE-DOC-TEMPLATE.md` |
+
+The seven framework references, each read when a step cites it:
+
+1. **`sbak/templates/CALIBRATION-INTERVIEW.md`** — Ask 1's mode table at Phase 0; the whole interview only on the Custom path. The Custom-path authority: the verbatim 3 asks (each with its option table) + the confirmation turn, presented only when the person types `custom` before the spec lands. Its mode table also drives the Full path's mode inference. Without this you'll ad-lib differently each session and the trade-offs won't land consistently.
 2. **`sbak/BUILD-PLAYBOOK.md`** — the methodology. Defines the four layers (Project / Milestone / Stage / Step), the three load-bearing constraints, the per-stage loop, the closeout protocol, the gates, the retrospective protocol, the gap-analysis protocol. **Part 0** defines the tier model.
 3. **`sbak/FRAMEWORK-CONFIG.md`** — the tier and toggle reference. Two tiers (Full the default / Lite the low-ceremony escape; the third tier retired at M26.D), the machine-readable calibration core (`calibration-core.json` — the asks, per-tier toggles, severity, and derivation rules), and the toggle schema (retrospective depth, ledger discipline, web-verify, read-first cap, research mode, escalation, hook enforcement, explanation mode). This file is what you'll read most carefully — bootstrap is largely a calibration exercise.
 4. **`sbak/persistence-architecture.md`** — the layer model. Where each artifact lives (Layers 1–5), who reads/writes when, the mutability matrix, the audit trail.
@@ -19,7 +27,7 @@ Read these seven files in order before engaging with the user beyond the greetin
 6. **`sbak/STAGE-PROMPT-PROTOCOL.md`** — the XML schema for stage CLI prompts that go inside Phase docs (currently v1.9 — the authoritative version is the newest entry in that file's own `### Changelog`; the smoke suite binds this pin to it so it can't silently re-stale).
 7. **`sbak/templates/PROJECT-CLAUDE.md`** — the per-project execution-rules template you'll customize and install as the project's own `CLAUDE.md` at the end of bootstrap.
 
-Once you've read these, you understand the framework. The bootstrap workflow below is the playbook's "One-Time Project Setup" (Part 3.1) executed conversationally with the user, calibrated by tier.
+The bootstrap workflow below is the playbook's "One-Time Project Setup" (Part 3.1) executed conversationally with the user, calibrated by tier.
 
 ---
 
@@ -93,7 +101,7 @@ After the spec lands, **revisit tier**: did the spec surface complexity that pus
 
 Surface for review. Iterate until accepted.
 
-**Full path: the acceptance glance (after the spec is accepted).** Run `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]` and print its output verbatim: the ONE glance line, `Full / <mode> / risk triggers: <list> [type accept; a mode word or trigger token corrects it]`, and under it any `mentioned only in negation: <trigger> ("<fragment>")` line - a keyword that sat only in a negated sentence or in an Out / Not / No / Deferred table column, so it did not arm; the person types its trigger token if it should. Typing `accept` locks the calibration and writes `project-config.md`; a typed mode word or trigger token corrects the line and re-prints it. The line is script-produced — mode and triggers from the core's keyword tables — so an under-derived trigger is visible on it, never composed away (the one human eyeball that keeps G11 armed).
+**Full path: the acceptance glance (after the spec is accepted).** Run `node sbak/scripts/calibration-derive.cjs --from-spec spec/project-spec.md [--mode <inferred>]` and print its output verbatim: the ONE glance line, `Full / <mode> / risk triggers: <list> [type accept; a mode word or trigger token corrects it]`, and under it any `mentioned only in negation: <trigger> ("<fragment>")` line - a keyword that sat only in a negated sentence or in an Out / Not / No / Deferred table column, so it did not arm; the person types its trigger token if it should. Typing `accept` locks the calibration and writes `project-config.md`, filling its `docker_leg` row from `derived.docker_leg` of the same command run with `--json` (the value, and a why naming the spec line it read); a typed mode word or trigger token corrects the line and re-prints it. The line is script-produced — mode and triggers from the core's keyword tables — so an under-derived trigger is visible on it, never composed away (the one human eyeball that keeps G11 armed).
 
 ## Phases 1.5 / 1.6 — Design discovery + design.md (web/UI only)
 
@@ -162,11 +170,11 @@ Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Full) 
 
 The bootstrap is complete. First surface the final state - it is what the bootstrap commit carries:
 
-- All scaffold files generated and listed (with realistic counts: ~53 for Lite, ~120 for Full (the unarmed reference; +3 files when a risk trigger arms the ledger workflow, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
+- All scaffold files generated and listed (with realistic counts: ~54 for Lite, ~121 for Full (the unarmed reference; +3 files when a risk trigger arms the ledger workflow, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
 - The project's `CLAUDE.md` placed via `node scripts/kit-update.cjs --place-project-claude` — the bootstrap root replaced, or, on a combined root (the installer's import line), merged: the person's file kept byte-for-byte, the project rules at `CLAUDE.sbak.md`
 - `project-config.md` written with the agreed tier and toggles
 - `.claude/` hooks installed; the SessionStart hook prints the stamp + orientation manifest on the next session (session-start entries inlined, the rest read at their `when:` and checked at the gate)
-- **Read-first lists resolve:** run `node .claude/hooks/session-start-read-first.cjs --check` — exit 0, or it names the list and the dead entry (a Phase-4 rename the list never followed is the classic; fix the entry before handoff)
+- **Read-first lists resolve:** run `node .claude/hooks/session-start-read-first.cjs --check` — exit 0, or it names the list and the dead entry (fix the entry before handoff; the Phase doc entries name `docs/build-prompts/M01-*.md`, so a Phase 4 title needs no repoint)
 - **Template↔live divergence check:** run the read-only `node scripts/kit-update.cjs` and surface its report as part of the handoff — template↔live divergence is visible before the first work session, instead of surfacing mid-milestone as mystery drift.
 - M01 Phase doc ready at `docs/build-prompts/M01-<title>.md`
 - **Git remote check (do this before any push).** Route by how the kit arrived. **From the release ZIP (the standard path):** a fresh `git init` repo has no remote at all — nothing to reset; an existing repo keeps its own `origin` untouched. **From a clone (the alternate path):** `origin` still points at the kit's repo — pushing now would target the kit, not the user's project; run `git remote remove origin` as the final scaffold action. Either way, surface the three options so the user picks where their project actually lives:
@@ -186,20 +194,19 @@ Then three steps, in this order, and nothing else:
    1. Open a NEW terminal window.
    2. Paste these lines, one at a time, to start the orchestrator (cmd):
         cd /d <project path>
-        set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
         node scripts/set-mode.cjs orchestrator
-        claude --model <model>
-      (PowerShell: cd "<project path>" and $env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; POSIX: cd "<project path>" and export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1; then the same two commands)
+        set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model <model>
+      (PowerShell: cd "<project path>" and $env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model <model> - POSIX: cd "<project path>" and CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model <model> - the set-mode line stays the same)
    3. In the new window, type start - the orchestrator's stamp appears in its reply, and it tells you when and how to open the build terminal.
    4. If anything here is unclear, ask Claude in THIS window before closing it.
    5. Then close this window. Bootstrap is over.
    ```
 
-   Fill `<model>` before printing: the model setting in `project-config.md` if one exists, else the model this bootstrap session runs on; if neither can be determined, ask the person one plain question for the model first (hard rule #7: ask, never guess); the literal `<model>` never reaches the printed block - `<` is an input redirection in cmd, PowerShell and POSIX shells, so a pasted placeholder fails. Fill `<project path>` the same way: the absolute path of this session's working directory, the project root the new window must open in; the literal `<project path>` never reaches the printed block. The variable line stays on its own line, never chained with `&&` (in cmd that stores the value with a trailing space): Claude Code reads it only at launch, and it keeps the host from killing the session's background channel watcher when memory runs low.
+   Fill `<model>` before printing: the model setting in `project-config.md` if one exists, else the model this bootstrap session runs on; if neither can be determined, ask the person one plain question for the model first (hard rule #7: ask, never guess); the literal `<model>` never reaches the printed block - `<` is an input redirection in cmd, PowerShell and POSIX shells, so a pasted placeholder fails. Fill `<project path>` the same way: the absolute path of this session's working directory, the project root the new window must open in; the literal `<project path>` never reaches the printed block. The variable rides the launch line: it works only when set in the shell that launches Claude Code, and it keeps the host from killing the session's background channel watcher when memory runs low (cmd's `&&` leaves a trailing space on the value, which Claude Code and the channel watcher both trim).
 
-   **The block renders in the person's shell.** Use the `shell:` row of `project-config.md` (cmd, powershell or bash); when it is unset, use cmd on a win32 host and bash elsewhere, and say which default you used in one line above the block. Only two lines change per shell - the `cd` line (cmd `cd /d <project path>`, PowerShell `cd "<project path>"`, bash `cd "<project path>"`) and the variable line (cmd `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`, PowerShell `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"`, bash `export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`) - plus the shell named in step 2's label; the parenthetical then names the other two shells' forms. Each line stays on its own.
+   **The block renders in the person's shell.** Use the `shell:` row of `project-config.md` (cmd, powershell or bash); when it is unset, use cmd on a win32 host and bash elsewhere, and say which default you used in one line above the block. Only two lines change per shell - the `cd` line (cmd `cd /d <project path>`, PowerShell `cd "<project path>"`, bash `cd "<project path>"`) and the launch line (cmd `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model <model>`, PowerShell `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model <model>`, bash `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model <model>`) - plus the shell named in step 2's label; the parenthetical then names the other two shells' forms. Each line stays on its own.
 
-   **At Lite tier** there is no orchestrator - the roles collapse into one session, and Lite ships no `ORCHESTRATOR.md` and no `/stage` - so print the same five steps with two changes: step 2 reads "Paste these lines, one at a time, to start the build session (cmd):" with `node scripts/set-mode.cjs work` as its third line, and step 3 reads "In the new session, type `let's start M01` - the stamp appears in its reply."
+   **At Lite tier** there is no orchestrator - the roles collapse into one session, and Lite ships no `ORCHESTRATOR.md` and no `/stage` - so print the same five steps with two changes: step 2 reads "Paste these lines, one at a time, to start the build session (cmd):" with `node scripts/set-mode.cjs work` as its second line, and step 3 reads "In the new session, type `let's start M01` - the stamp appears in its reply."
 
    At Full, the build terminal is not opened here. The orchestrator's first turn opens it (the project's `ORCHESTRATOR.md`, "First turn of a new project"): it runs the worktree split first (`node scripts/set-mode.cjs --split <milestone-branch>` creates `../<project>-build-wt`), so the builder gets its own working tree and the two sessions never share one role file, and from the split on the terminal channel carries every packet between them.
 

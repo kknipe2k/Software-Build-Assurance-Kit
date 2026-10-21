@@ -1,28 +1,35 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit, and a second group with matcher
-// Bash for the ONE release rule below - M32.1.B). The HARD form of
+// Bash|PowerShell for the ONE release rule below - M32.1.B, M33.A). The HARD form of
 // the per-stage TDD red-stop (PROC-001): it blocks an IMPLEMENTATION
 // edit until the human has run /approve-red on the RED tests. It makes the third
 // approval gate (plan -> RED -> stage-end) structural instead of prose a builder
 // can blow past — which is exactly what happened in M09.A.
 //
 // It BLOCKS (exit 2) only when ALL FOUR positively confirm:
-//   1. the session is `work` mode             (.claude/role; absent -> work)
+//   1. the stage was opened in `work` mode     (.claude/stage-role, written by stage-active.cjs
+//                                               at open; absent -> engaged, see judge())
 //   2. a stage is open                         (.claude/stage-active present)
 //   3. the open stage is NOT red-approved      (.claude/red-approved absent or != stage)
 //   4. the target is an IMPLEMENTATION path    (not a test / doc / .claude / allow-listed path)
 //      — OR a path OUTSIDE the repo that is in none of the scratch homes (below)
-//      — OR one of the gate's OWN control files (the self-approval carve), which are denied
-//        even though the rest of .claude/** is allowed: an engaged gate must not be
-//        agent-writable into approving itself.
+//      — OR one of the gate's OWN control files (the self-approval carve: hook-root.cjs
+//        CONTROL_FILES, the one list), which are denied even though the rest of .claude/** is
+//        allowed: an engaged gate must not be agent-writable into approving itself.
 // Anything else -> ALLOW (exit 0). Test paths, docs/, retrospectives/, .claude/
-// (minus the three control files), root-level repo config (.gitignore, .gitattributes,
-// .editorconfig), the scratch homes, a verifier/orchestrator session, or no open stage
-// all proceed — the builder MUST be able to write the failing tests and fill the
+// (minus the control set), root-level repo config (.gitignore, .gitattributes,
+// .editorconfig), the scratch homes, a stage opened by a verifier/orchestrator session, or no
+// open stage all proceed — the builder MUST be able to write the failing tests and fill the
 // retro before approval.
+//
+// THE ROLE IS THE ONE RECORDED AT STAGE OPEN (M33.A, R-50 a): the live .claude/role is a file an
+// edit tool could flip, and a flip to verifier used to stand the gate down. The gate now reads
+// .claude/stage-role, which stage-active.cjs writes beside stage-active; both are in the control
+// set. A tree whose stage opened before stage-role existed has no such file, and then the gate
+// ENGAGES whatever the live role says (fail closed), never stands down.
 //
 // OUTSIDE THE REPO (M32.H, proposals/M32-FIELD-REPAIR.md §3.7, ruling R-15 plus the gate-1
 // refinement): a path that resolves outside the repo root never reaches the allow globs (the
@@ -43,7 +50,9 @@
 // (realOrLexical, V-3) for the carve, the homes and the repo boundary.
 //
 // THE ONE BASH RULE (M32.1.B, R-35 c): a Bash command that names approve-red.cjs runs only as
-// the bare release command, whitespace-normalized and alone -
+// the bare release command, whitespace-normalized and alone (M33.A, V-17: a PowerShell tool call's
+// command string is judged by the same rule, unchanged; Claude Code documents its payload as
+// tool_input.command, the Bash field) -
 //   node scripts/approve-red.cjs --stage <id> --release-seq <n>     (n: digits, or none)
 // - so the permission prompt the human clicks shows the stage and the seq, and nothing rides
 // in front of it or after it (the drive's `; echo "exit=$?"`). It never parses shell; any
@@ -59,7 +68,10 @@
 //     BOUNDED and the hook stays fast; a never-closing / oversized stream cannot
 //     hang the edit path.
 //   * it matches the edit TOOLS, plus the one release-command rule above — a deliberate `Bash` heredoc write
-//     (cat > impl.cjs) bypasses it. It is a bar-raise, not a wall.
+//     (cat > impl.cjs), or the same through the PowerShell tool, bypasses it. It is a bar-raise, not a wall. The control
+//     set's second layer (M33.A) is the Edit(...) deny rules in settings.json: they hold outside a
+//     stage too, and reach recognized Bash file commands and redirect targets, but not a script
+//     that writes a file itself.
 //   * it stops implement-before-red; it does NOT catch test-deletion or
 //     test-weakening (the documented AI-TDD failure mode). It is effective ONLY
 //     paired with the human red-review + mutation-kill. Claim no more.
@@ -86,7 +98,7 @@ const ALLOW = 0; // exit 0 allows it. (Any OTHER non-2 also lets the tool run.)
 // Bash matcher. The install self-integrity check owns the missing-module case.
 let hookRoot = null;
 
-// ---- strict marker reads (mirror the A-stage hooks; absent role marker -> work) ----
+// ---- strict marker reads (mirror the A-stage hooks) ----
 const VALID_MODES = ['work', 'verifier', 'orchestrator', 'refactor'];
 const NUL = String.fromCharCode(0);
 function readMarker(claudeDir, name) {
@@ -97,21 +109,11 @@ function readMarker(claudeDir, name) {
   }
 }
 // Classify a marker's token: a bare valid role -> that role; anything present-but-non-
-// canonical (empty / garbage / unreadable) -> 'unresolved' (which the gate treats as
-// fail-CLOSED = engage, DF-005). Never 'work' here — absent is handled by the caller.
+// canonical (empty / garbage) -> 'unresolved' (which the gate treats as fail-CLOSED =
+// engage, DF-005).
 function classifyRole(t) {
-  if (t === null) return 'unresolved'; // present-but-unreadable
   const low = t.toLowerCase();
   return VALID_MODES.includes(low) ? low : 'unresolved';
-}
-// SINGLE-MARKER resolution (M28.F — the alias-window's fallback is removed).
-// `.claude/role` is the only marker consulted. A present-but-garbage role FAILS CLOSED to
-// 'unresolved' (DF-005) — the gate ENGAGES rather than guessing. ABSENT is the lone
-// legitimate default -> 'work', which is also what a pre-rename project now resolves to:
-// a retired marker can no longer DISENGAGE this gate.
-function readMode(claudeDir) {
-  if (fs.existsSync(path.join(claudeDir, 'role'))) return classifyRole(readMarker(claudeDir, 'role'));
-  return 'work'; // ABSENT -> the lone legitimate default
 }
 
 // ---- allow-list (CONFIG-DRIVEN; the hook hardcodes NO project's test file) ----
@@ -263,16 +265,20 @@ function judge(root, rawPath) {
   const stageActive = readMarker(claudeDir, 'stage-active');
   if (!stageActive) return null;
 
-  // (1) only a work session builds; verifier/orchestrator/refactor never implement -> ALLOW.
-  //     DF-005 (M16.B): an UNRESOLVED (garbage) role value must NOT silently disable
-  //     the gate (the fail-open outlier — the same value blocks/warns in the other two hooks).
-  //     It fails CLOSED by ENGAGING the gate exactly as `work` does (fall through), so an
-  //     implementation edit is blocked while a test/doc path still passes the (4) allow check.
-  //     This adds NO new refusal of its own — the two confirmed refusals below (the
-  //     control-file carve + the implementation-path block) stay the only edit-tool ones.
-  //     ABSENT role marker remains the legitimate work default (readMode returns 'work').
-  const mode = readMode(claudeDir);
-  if (mode !== 'work' && mode !== 'unresolved') return null;
+  // (1) only a stage opened by a work session builds; a verifier/orchestrator/refactor stage
+  //     never implements -> ALLOW. The role judged is .claude/stage-role, the one recorded at
+  //     open (M33.A), never the live .claude/role. DF-005 (M16.B): an UNRESOLVED (garbage)
+  //     value must NOT silently disable the gate: it fails CLOSED by ENGAGING the gate exactly
+  //     as `work` does (fall through), so an implementation edit is blocked while a test/doc
+  //     path still passes the (4) allow check. ABSENT stage-role (a stage opened before M33.A)
+  //     engages too, whatever the live role says. Neither adds a refusal of its own — the
+  //     two confirmed refusals below (the control-file carve + the implementation-path block)
+  //     stay the only edit-tool ones.
+  const stageRole = readMarker(claudeDir, 'stage-role');
+  if (stageRole !== null) {
+    const mode = classifyRole(stageRole);
+    if (mode !== 'work' && mode !== 'unresolved') return null;
+  }
 
   // (3) already red-approved for THIS exact stage -> allow.
   const redApproved = readMarker(claudeDir, 'red-approved');
@@ -290,19 +296,25 @@ function judge(root, rawPath) {
 
   // Self-approval deny-carve: the gate's OWN control files are refused BEFORE the allow
   // globs are consulted — no allow entry (the built-in '.claude/**' included, or any
-  // red-gate-allow.txt line) may let an EDIT-TOOL write approve the agent's own
-  // stage (red-approved), widen the allow list (red-gate-allow.txt), or rewire the
-  // hooks (settings.json). The human path is untouched: /approve-red runs
-  // scripts/approve-red.cjs as a plain process, not an edit tool. The compare is
-  // dot-dot-normalized + lowercased (Windows FS is case-insensitive; over-blocking
-  // an odd-cased path on a case-sensitive FS is the fail-closed direction). Both the
-  // lexical and the real form are checked (M32.1.B: red-approved written through an alias
-  // of .claude/ is the same self-approval). Honest residual: the carve binds only the
-  // ENGAGED gate — outside an open un-approved work stage these files are as editable as
-  // ever, and a Bash write still bypasses the hook entirely (it is a bar-raise, not a wall).
-  const CONTROL_FILES = ['.claude/red-approved', '.claude/red-gate-allow.txt', '.claude/settings.json'];
+  // red-gate-allow.txt line) may let an EDIT-TOOL write approve the agent's own stage
+  // (red-approved), reopen or re-role it (stage-active, stage-role, role), widen the allow
+  // list (red-gate-allow.txt), or rewire or disarm the hooks (settings.json,
+  // settings.local.json, hooks/). The set is hook-root.cjs CONTROL_FILES, the ONE list the
+  // settings deny rules are checked against (M33.A); `hooks` is a directory, matched as a
+  // prefix. The human path is untouched: /approve-red runs scripts/approve-red.cjs as a plain
+  // process, not an edit tool. The compare is dot-dot-normalized + lowercased (Windows FS is
+  // case-insensitive; over-blocking an odd-cased path on a case-sensitive FS is the fail-closed
+  // direction). Both the lexical and the real form are checked (M32.1.B: red-approved written
+  // through an alias of .claude/ is the same self-approval). Honest residual: the carve binds
+  // only the ENGAGED gate; outside an open un-approved work stage the settings deny rules are
+  // the only layer (every name but settings.json), and a script that writes a file itself
+  // bypasses both (a bar-raise, not a wall).
+  const isControl = (rel) => {
+    const p = normRel(path.normalize(rel)).toLowerCase();
+    return hookRoot.CONTROL_FILES.some((n) => p === '.claude/' + n || p.startsWith('.claude/' + n + '/'));
+  };
   for (const rel of [relPath, realRel]) {
-    if (CONTROL_FILES.indexOf(normRel(path.normalize(rel)).toLowerCase()) !== -1) {
+    if (isControl(rel)) {
       // M30.I (audit row 27): one plain sentence + the command when it bites.
       return `[red-gate] REFUSED — '${normRel(rel)}' is a red-gate control file, not agent-writable during an open un-approved stage; the human runs /approve-red (or: node scripts/approve-red.cjs --stage <id> --release-seq <n>).\n`;
     }
@@ -342,7 +354,7 @@ function main() {
   if (!payload) process.exit(ALLOW);
 
   const ti = payload.tool_input || {};
-  if (payload.tool_name === 'Bash') {
+  if (payload.tool_name === 'Bash' || payload.tool_name === 'PowerShell') { // M33.A, V-17: one rule for both shell tools
     const bashRefusal = releaseRefusal(ti.command);
     if (!bashRefusal) process.exit(ALLOW); // not the release command, or its exact form: no output
     process.stderr.write(bashRefusal);

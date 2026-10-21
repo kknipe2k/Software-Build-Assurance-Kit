@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.7
+# @kit-version 1.0.8
 # .githooks/pre-push  —  the fast lane: the tests your push affects, the open milestone's
 # own tests, and the always-tagged guards, on the native leg. The full matrix (Linux-in-
 # Docker + native, every test) is the `release` lane, run by /closeout, /verify and the

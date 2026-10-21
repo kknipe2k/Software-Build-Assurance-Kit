@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-gate-manifest.cjs
 //
 // The gate-command manifest (M30.I - the general form of the drift class that

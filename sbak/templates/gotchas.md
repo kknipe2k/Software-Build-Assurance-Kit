@@ -76,7 +76,21 @@ When a gotcha is graduated to this file, add a numbered entry with: the trap, th
 
 ---
 
-### 5. {{GOTCHA_TITLE_1}}
+### 5. A shell rule that names only Bash misses the PowerShell tool, and a PowerShell rule switches that tool on
+
+> Framework-shipped (the permission fence and the red-gate). Applies to any project whose sessions run on Windows. Do not delete.
+
+**Symptom:** a hook or a permission rule that guards shell commands holds under the Bash tool, yet the same command runs unguarded when Claude uses the PowerShell tool; or, after a `PowerShell(...)` rule is added anywhere, Claude starts running PowerShell as its primary shell.
+
+**Cause:** Claude Code ships a native PowerShell tool. A `Bash(...)` rule and a `Bash` hook matcher do not reach it, and any scoped `PowerShell(...)` rule switches it on where Git Bash is installed.
+
+**Workaround:** a hook that inspects shell commands matches `Bash|PowerShell` (the kit's red-gate does). Add a `PowerShell(...)` rule only when you want that tool on, and then twin every `Bash(...)` rule you rely on.
+
+**Origin:** kit M33.A (V-17; probed live on Claude Code 2.1.302).
+
+---
+
+### 6. {{GOTCHA_TITLE_1}}
 
 **Symptom:** {{HOW_THIS_SHOWS_UP_TO_THE_DEVELOPER}}
 

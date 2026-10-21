@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/lib/hook-root.cjs
 //   (twin: templates/scripts/lib/hook-root.cjs - byte-identical; ships via kit-update's table)
 //
@@ -74,7 +74,11 @@ function hasGitMarker(dir) {
 // and the receipts adapter must never grow a second copy of this list.
 // `hooks` is in the set as a DIRECTORY: the kit installs .claude/hooks/ at the project root and
 // the residue never carries one (amendment seq 116: a hooks-only fixture is a real shape).
-const CONTROL_FILES = ['settings.json', 'settings.local.json', 'role', 'stage-active', 'red-approved', 'red-gate-allow.txt', 'hooks'];
+// It is also the red gate's whole control set, both layers (M33.A, R-50 a): the hook's carve
+// judges every name here, and each settings twin denies the edit tools on each name but
+// settings.json (Phase 3 still fills that one with the edit tools; the M34 door). `stage-role`
+// is the role stage-active.cjs records at open, the one the gate judges.
+const CONTROL_FILES = ['settings.json', 'settings.local.json', 'role', 'stage-active', 'stage-role', 'red-approved', 'red-gate-allow.txt', 'hooks'];
 const CONTROL_FILE_RE = /^read-first-list.*\.txt$/;
 // The user's own `~/.claude/` is Claude Code's USER config dir (it carries a settings.json and
 // may carry hooks/), never a project root: a walk that reaches the home directory must not

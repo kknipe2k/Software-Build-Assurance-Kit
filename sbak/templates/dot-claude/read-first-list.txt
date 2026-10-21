@@ -3,7 +3,9 @@
 # One file path per line, relative to the repo root. Lines starting with `#`
 # are comments. Blank lines are ignored. The list is capped at session start
 # by the `read_first_cap` setting in project-config.md (small=4, medium=8,
-# large=12, unlimited=no cap). List in priority order; the cap takes the top N.
+# large=12, unlimited=no cap). List in priority order; the cap takes the top N
+# of the entries a session reads itself - host, on-demand and phase-N entries
+# sit outside it.
 #
 # Update this list when:
 #   - A new framework-level reference becomes load-bearing
@@ -21,15 +23,35 @@
 # it is redundant with the floor. docs/scope, docs/style, docs/design are cited
 # on-demand by the stage prompt, not preloaded (they were already past the cap-8
 # cut, silently — this makes the drop honest).
+#
+# M33.F (context assembly): the open Phase doc is read through the stage VIEW -
+# `node scripts/stage-view.cjs <stage>` (/stage step 3) writes the stage section,
+# its scope block, the ledger rows it names and the prior stages' decisions, with
+# the HEAD hashes the gate checks; the whole Phase doc is on demand, named by a
+# pattern (one match, or the entry is dead). The phase-N entries at the foot are
+# the bootstrap's own reads, shown only while the bootstrap is in progress.
 
 # Entry grammar (M30.G lazy orientation): <path>  when: <boundary>  [- why]. Boundaries:
 # session-start (inlined by the hook) | host (loaded by Claude Code itself) | stage-open (checked by
 # approve-red) | verify (/verify step 1) | closeout (/closeout step 1) | phase-0/1/3 (bootstrap) | on-demand.
+# M33.F: `view: <stage>  when: <boundary>` names the open stage's view; a `*` in the last path
+# segment resolves to exactly one file.
 CLAUDE.md  when: host - Claude Code loads it itself; listed for the record
 project-config.md  when: session-start - tier, toggles, operating_mode: small and always needed
-docs/build-prompts/M01-foundation.md  when: stage-open - the open Phase doc: read your stage section before the red-stop
+view: <stage>  when: stage-open - the open stage's view: its section, scope block, the rows it names, the prior decisions (node scripts/stage-view.cjs <stage> builds it)
+docs/build-prompts/M01-*.md  when: on-demand - the whole Phase doc, when the view is not enough
 docs/identity.md  when: session-start - what this is / is not
 docs/backlog.md  when: stage-open - the ranked backlog the stage must not drift from
 docs/gates.md  when: stage-open - the gate matrix your stage-end packet reports against
 docs/app-map.md  when: stage-open - the drive/test map you extend for every shipped surface
 docs/gotchas.md  when: session-start - the accumulated traps; short and always live
+sbak/bootstrap/PHASES.md  when: phase-0 - the bootstrap playbook: its Orientation section says which file each phase reads
+sbak/templates/CALIBRATION-INTERVIEW.md  when: phase-0 - Ask 1's mode table (the Full path's mode inference); the whole interview only on custom
+sbak/bootstrap/MODE-greenfield.md  when: phase-0 - read ONE, the resolved mode
+sbak/bootstrap/MODE-bug_fix.md  when: phase-0 - read ONE, the resolved mode
+sbak/bootstrap/MODE-research_publish.md  when: phase-0 - read ONE, the resolved mode
+sbak/bootstrap/MODE-audit.md  when: phase-0 - read ONE, the resolved mode
+sbak/templates/SPEC-TYPE-SECTIONS.md  when: phase-1 - the deliverable-type and IRL/HITL sections the spec appends
+sbak/templates/DESIGN-DISCOVERY-INTERVIEW.md  when: phase-1 - the Phase 1.5 design interview (web only)
+sbak/bootstrap/SCAFFOLD-TABLES.md  when: phase-3 - the scaffold tables and the one consent line
+sbak/templates/PHASE-DOC-TEMPLATE.md  when: phase-3 - the shape of the M01 Phase doc Phase 4 writes

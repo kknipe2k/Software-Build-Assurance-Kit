@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -8,7 +8,7 @@
 //
 // WHAT IT DOES (read-only by default — a plain run never writes):
 //   • For every kit-MANAGED enforcement file (validators/ · .claude/hooks/ ·
-//     .claude/commands/ · scripts/ · .githooks/ — the row-set-derived bounded list
+//     .claude/commands/ · .claude/skills/ · scripts/ · .githooks/ — the row-set-derived bounded list
 //     below), diff the LIVE copy against the kit's template:
 //       clean      — byte-identical after LF normalization
 //       note       — line-endings differ only (normalized-identical; the .gitattributes
@@ -60,6 +60,10 @@
 // M32.J adds `--ready`: the end-of-bootstrap readiness check that prints the one READY line
 // (or a NOT READY line per failed check); see cmdReady below.
 //
+// M33.D adds `--migrate`: the update path for a project built on an older kit - the per-file
+// table first, then `--apply-all`, merging the bootstrap-filled wiring rows three ways from the
+// pinned version's template; see cmdMigrate below.
+//
 // TEMPLATE SOURCE resolution: `--kit <dir>` (a kit checkout) → else `./templates/` in
 // the project root (kept at bootstrap) → else exit 2 with guidance.
 //
@@ -86,13 +90,17 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 // The confinement primitive travels with the tool (red ruling D2 — extend, don't fork).
 const { assertInside, classifyDestination } = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
 const { repairHookModes } = require(path.join(__dirname, 'lib', 'hook-chmod.cjs'));
 const { applySettingsMerge, deriveKitSettings, flattenRegistrations } = require(path.join(__dirname, 'lib', 'settings-merge.cjs'));
+// The one project-config reader (CFI-17): kit_version is read through it, never a parser of our own.
+const { readConfigValue } = require(path.join(__dirname, 'lib', 'read-ledger.cjs'));
 
 // ── the MANAGED set (rows-derived, smoke-locked against rows.json BOTH directions) ──────
 // Every enforcement-class row of the golden row-set (scripts/fixtures/golden-bootstrap/
@@ -133,13 +141,14 @@ const MANAGED = [
   { file: '.claude/commands/stage.md', template: 'templates/dot-claude/commands/stage.md', render: 'copy' },
   { file: '.claude/commands/verify.md', template: 'templates/dot-claude/commands/verify.md', render: 'copy' },
   { file: '.claude/commands/refactor.md', template: 'templates/dot-claude/commands/refactor.md', render: 'copy' },
-  { file: '.claude/commands/closeout.md', template: 'templates/dot-claude/commands/closeout.md', render: 'copy' },
+  { file: '.claude/skills/closeout/SKILL.md', template: 'templates/dot-claude/skills/closeout/SKILL.md', render: 'copy' },
   { file: '.claude/commands/on-track.md', template: 'templates/dot-claude/commands/on-track.md', render: 'copy' },
-  { file: '.claude/commands/approve-red.md', template: 'templates/dot-claude/commands/approve-red.md', render: 'copy' },
-  { file: '.claude/commands/send.md', template: 'templates/dot-claude/commands/send.md', render: 'copy' },
+  { file: '.claude/skills/approve-red/SKILL.md', template: 'templates/dot-claude/skills/approve-red/SKILL.md', render: 'copy' },
+  { file: '.claude/skills/send/SKILL.md', template: 'templates/dot-claude/skills/send/SKILL.md', render: 'copy' },
   { file: '.claude/commands/listen.md', template: 'templates/dot-claude/commands/listen.md', render: 'copy' },
   { file: 'scripts/set-mode.cjs', template: 'templates/scripts/set-mode.cjs', render: 'copy' },
   { file: 'scripts/stage-active.cjs', template: 'templates/scripts/stage-active.cjs', render: 'copy' },
+  { file: 'scripts/stage-view.cjs', template: 'templates/scripts/stage-view.cjs', render: 'copy' },
   { file: 'scripts/approve-red.cjs', template: 'templates/scripts/approve-red.cjs', render: 'copy' },
   { file: 'scripts/install-hooks.cjs', template: 'templates/scripts/install-hooks.cjs', render: 'copy' },
   { file: 'scripts/verify-local.cjs', template: 'templates/scripts/verify-local.cjs', render: 'wiring' },
@@ -187,7 +196,10 @@ function usage(msg) {
     'usage: node scripts/kit-update.cjs [--kit <kit-checkout>] [--apply <live-file>]\n' +
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
     '                                   [--place-project-claude <filled-file>] [--ready]\n' +
+    '                                   [--migrate [--pin <v>] [--base <dir>] [--apply-all [--release <file>]...]]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
+    '  --migrate shows the per-file table to take the kit at --kit (replace / merge / keep), then\n' +
+    '  writes it with --apply-all, merging bootstrap-filled files from the pinned version;\n' +
     '  --ready prints the one READY line after the bootstrap commit (or a NOT READY line per\n' +
     '  failed check, exit 1);\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
@@ -470,6 +482,9 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       continue;
     }
     for (const rel of walkFiles(srcRoot)) {
+      // M33.D: the tree's own README explains the kit's templates and stays with them in
+      // sbak/templates/dot-claude/; adopt places what the Phase-3 render places, so it is not copied.
+      if (t.from === 'templates/dot-claude' && rel === 'README.md') continue;
       const destRel = t.to + '/' + rel;
       const srcAbs = path.join(srcRoot, rel);
       const tpl = fs.readFileSync(srcAbs);
@@ -790,9 +805,288 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
       + ' (core.hooksPath=.githooks), no destination refused, no incomplete settings merge.');
   }
 
+  // The kit pin (M33.D): a project that has project-config.md but no kit_version gets this kit's
+  // version - but only when that is provably true: no managed copy file drifted and every stamped
+  // managed file carries this kit's version. Never raised over a recorded value: a raised pin
+  // whose filled files are older would make --migrate merge from the wrong base and drop the
+  // template's changes.
+  if (!dryRun && readIf(path.join(projRoot, 'project-config.md')) !== null && !readPin(projRoot).value) {
+    const kv = versionAt(kitRoot);
+    const stale = MANAGED.filter((r) => { const s = stampOf(readIf(path.join(projRoot, r.file)) || ''); return s !== null && s !== kv; }).length;
+    if (kv && drifted === 0 && stale === 0) { writePin(projRoot, kv); W('  kit pin  kit_version recorded as ' + kv + ' in project-config.md (every managed kit file matches this kit)'); }
+    else W('  kit pin  not recorded: ' + (drifted + stale) + ' managed kit file(s) are not at v' + kv + '; node scripts/kit-update.cjs --migrate asks for the version they came from');
+  }
   if (!dryRun) cmdIngest(projRoot, false);
   else W('  (dry-run: the known-issue ingest also runs on a real adopt — nothing harvested now)');
   return (hookRefused > 0 || rowRefused > 0 || settingsIncomplete > 0 || missingControls.length > 0) ? 1 : 0;
+}
+
+// ── --migrate: the migrate door (M33.D) ───────────────────────────────────────────────────
+// A project built on an older kit takes the current one file by file, table first:
+//   node scripts/kit-update.cjs --migrate [--kit <new kit>] [--pin <v>] [--base <dir>]
+//     prints one row per MANAGED file and writes nothing;
+//   ... --apply-all [--release <path>]...  writes it.
+// Per file, in order: an INTENTIONAL DIVERGENCE head -> keep-divergent (never written). A wiring
+// row (bootstrap-filled) is merged three ways - base = the PINNED version's template, ours = the
+// live file, theirs = the current template - through `git merge-file`; a clean merge is `merge`, a
+// conflicted one `conflict` (written WITH its markers, the run exits non-zero), and a live file
+// still carrying markers is refused until they are resolved. A copy row equal to the current
+// template is `current`; equal to the pinned template (the project never changed it) is
+// `replace`; anything else is `modified`, listed and never written unless the person names it
+// with --release (never guessed). The pin (project-config.md kit_version) is the version merged
+// FROM; it is raised to the current kit's version LAST, and only when the apply left no conflict.
+// The base comes from, in order: --base <dir>; the project's own sbak/ when it is that version;
+// the oldest commit in this repository whose sbak/release-manifest.json reads it; a tag v<pin> in
+// the --kit checkout. Never a network fetch. Refused while a stage is open or the tree is dirty,
+// so a migration is one reviewable diff at a milestone boundary.
+const MIGRATE_ORDER = ['current', 'replace', 'add', 'merge', 'conflict', 'modified', 'keep-divergent', 'absent'];
+const CONFLICT_MARKER_RE = /^<{7}( |$)/m;
+const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
+
+// The release manifest's payload hash: sha256 over the bytes with CRLF read as LF (the same rule
+// scripts/build-release.cjs writes the map with; a copy, because the builder does not ship).
+function payloadSha256(text) {
+  return crypto.createHash('sha256').update(Buffer.from(String(text).replace(/\r\n/g, '\n'), 'utf8')).digest('hex');
+}
+function readJsonIf(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } }
+function versionAt(treeRoot) { const m = treeRoot ? readJsonIf(path.join(treeRoot, 'release-manifest.json')) : null; return m && m.version ? String(m.version) : null; }
+function gitAt(cwd, args) { return spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
+
+function readPin(projRoot) {
+  const text = readIf(path.join(projRoot, 'project-config.md'));
+  return { text, value: text === null ? null : readConfigValue(text, 'kit_version') };
+}
+// Write the pin: the existing line or row takes the value; else one line lands under the Tier line.
+function writePin(projRoot, version) {
+  const p = path.join(projRoot, 'project-config.md');
+  const t = readIf(p);
+  if (t === null) return false;
+  const eol = t.indexOf('\r\n') !== -1 ? '\r\n' : '\n';
+  let out;
+  const line = /^(\*\*Kit version:\*\*[ \t]*)([^\s<|]*)/m;
+  const row = /^(\|[ \t]*kit[_ ]version[ \t]*\|[ \t]*)`?([^|`\s]*)`?/mi;
+  if (line.test(t)) out = t.replace(line, (m, a) => a + version);
+  else if (row.test(t)) out = t.replace(row, (m, a) => a + version);
+  else {
+    // (the comment never puts a word after "kit_version:" - the config reader would read it as the value)
+    const add = `**Kit version:** ${version}  <!-- The kit pin (read as kit_version), written by kit-update: the kit release this project's kit files came from -->`;
+    const tier = /^\*\*Tier:\*\*.*$/m.exec(t);
+    out = tier ? t.slice(0, tier.index + tier[0].length) + eol + add + t.slice(tier.index + tier[0].length) : t.replace(/\s*$/, '') + eol + eol + add + eol;
+  }
+  const tmp = p + '.kit-update.tmp';
+  fs.writeFileSync(tmp, out);
+  fs.renameSync(tmp, p);
+  return true;
+}
+function stampEvidence(projRoot) {
+  const counts = new Map();
+  for (const row of MANAGED) {
+    const s = stampOf(readIf(path.join(projRoot, row.file)) || '');
+    if (s) counts.set(s, (counts.get(s) || 0) + 1);
+  }
+  return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+}
+
+// The pinned version's kit tree, offline. Returns { label, read(rel) -> text|null, manifest } or
+// { refuse } or null (nothing found).
+function treeSource(treeRoot, label) {
+  return { label, read: (rel) => readIf(path.join(treeRoot, rel)), manifest: readJsonIf(path.join(treeRoot, 'release-manifest.json')) };
+}
+function kitTreeIn(dir) {
+  if (fs.existsSync(path.join(dir, 'templates'))) return dir;
+  if (fs.existsSync(path.join(dir, KIT_DIR, 'templates'))) return path.join(dir, KIT_DIR);
+  return null;
+}
+function resolveBase(projRoot, kitRoot, pin, baseArg) {
+  if (baseArg) {
+    const dir = path.resolve(baseArg);
+    const tree = kitTreeIn(dir);
+    const v = versionAt(tree);
+    if (!tree || v !== pin) return { refuse: `kit-update: --migrate refused - --base ${baseArg} is ${tree ? (v ? 'v' + v : 'a tree with no release-manifest.json version') : 'not a kit tree (no templates/)'}, not v${pin}; nothing was written.` };
+    return treeSource(tree, `--base ${baseArg} (v${pin})`);
+  }
+  for (const [tree, label] of [[path.join(projRoot, KIT_DIR), `${KIT_DIR}/ (v${pin})`], [projRoot, `the kit at the project root (v${pin})`]]) {
+    if (path.resolve(tree) === path.resolve(kitRoot)) continue;
+    if (fs.existsSync(path.join(tree, 'templates')) && versionAt(tree) === pin) return treeSource(tree, label);
+  }
+  // This repository's history: the OLDEST commit whose sbak/release-manifest.json reads the pin
+  // (the install or upgrade commit, before any later edit of the kit copy).
+  const log = gitAt(projRoot, ['log', '--format=%H', '--reverse', '--', `${KIT_DIR}/release-manifest.json`]);
+  if (log.status === 0) {
+    for (const sha of String(log.stdout).split(/\r?\n/).filter(Boolean)) {
+      const m = gitAt(projRoot, ['show', `${sha}:${KIT_DIR}/release-manifest.json`]);
+      let v = null; try { v = String(JSON.parse(m.stdout).version); } catch (_) { v = null; }
+      if (m.status === 0 && v === pin) {
+        const show = (rel) => { const r = gitAt(projRoot, ['show', `${sha}:${KIT_DIR}/${rel}`]); return r.status === 0 ? r.stdout : null; };
+        let manifest = null; try { manifest = JSON.parse(m.stdout); } catch (_) { manifest = null; }
+        return { label: `this repository's history (commit ${sha.slice(0, 12)}, v${pin})`, read: show, manifest };
+      }
+    }
+  }
+  // A kit checkout holding the release tag.
+  const tag = gitAt(kitRoot, ['rev-parse', '-q', '--verify', `refs/tags/v${pin}`]);
+  if (tag.status === 0) {
+    const show = (rel) => { const r = gitAt(kitRoot, ['show', `v${pin}:./${rel}`]); return r.status === 0 ? r.stdout : null; };
+    const m = show('release-manifest.json');
+    let manifest = null; try { manifest = JSON.parse(m); } catch (_) { manifest = null; }
+    return { label: `tag v${pin} in ${kitRoot}`, read: show, manifest };
+  }
+  return null;
+}
+
+// One three-way merge through git (exit 0 clean, N > 0 conflicts left as markers).
+function mergeThree(ours, base, theirs, labels) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-update-merge-'));
+  try {
+    const f = (n, t) => { const p = path.join(dir, n); fs.writeFileSync(p, t); return p; };
+    const o = f('live', ours); const b = f('base', base); const t = f('theirs', theirs);
+    const r = spawnSync('git', ['merge-file', '-p', '-L', labels[0], '-L', labels[1], '-L', labels[2], o, b, t], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (r.error || r.status === null || r.status > 127) return { error: r.error ? r.error.message : `git merge-file exit ${r.status}: ${String(r.stderr || '').trim()}` };
+    return { conflicts: r.status, text: r.stdout };
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+// Write temp + rename, keeping the live file's mode (a .githooks file keeps its exec bit).
+function writeKeepingMode(abs, data) {
+  let mode = null; try { mode = fs.statSync(abs).mode & 0o777; } catch (_) { mode = null; }
+  const tmp = abs + '.kit-update.tmp';
+  fs.writeFileSync(tmp, data);
+  if (mode !== null) { try { fs.chmodSync(tmp, mode); } catch (_) { /* win32: no exec bit */ } }
+  fs.renameSync(tmp, abs);
+}
+
+function cmdMigrate(projRoot, kitRoot, opts) {
+  const E = (s) => process.stderr.write(s + '\n');
+  const W = (s) => process.stdout.write(s + '\n');
+  // 1. a milestone boundary: no open stage
+  const stageFile = path.join(projRoot, '.claude', 'stage-active');
+  if (fs.existsSync(stageFile)) {
+    const id = (String(readIf(stageFile) || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean)) || 'unknown';
+    E(`kit-update: --migrate refused - stage ${id} is open (.claude/stage-active). Migrate at a milestone boundary: commit the stage and clear it (node scripts/stage-active.cjs --clear), then re-run.`);
+    return 2;
+  }
+  // 2. one reviewable diff: a clean tree (the channel's own traffic aside, as --ready reads it)
+  const st = gitAt(projRoot, ['status', '--porcelain', '--untracked-files=all']);
+  if (st.status !== 0) {
+    E('kit-update: --migrate refused - this directory is not a Git repository, so the migration could not land as one reviewable diff. Run git init and commit the project first.');
+    return 2;
+  }
+  const dirty = normalize(st.stdout).split('\n').filter(Boolean)
+    .map((l) => l.slice(3).replace(/^.* -> /, '').replace(/^"|"$/g, ''))
+    .filter((p) => !p.startsWith('.claude/channel/')).sort();
+  if (dirty.length) {
+    E(`kit-update: --migrate refused - ${dirty.length} uncommitted path(s): ${dirty.slice(0, 3).join(', ')}. Commit or discard them first, so the migration lands as one reviewable diff.`);
+    return 2;
+  }
+  // 3. the pin: recorded, or answered once with --pin (the stamps are the evidence, never a guess)
+  const recorded = readPin(projRoot);
+  if (recorded.value && opts.pin && recorded.value !== opts.pin) {
+    E(`kit-update: --migrate refused - --pin ${opts.pin} disagrees with project-config.md kit_version ${recorded.value}; nothing was written.`);
+    return 2;
+  }
+  const pin = recorded.value || opts.pin;
+  if (!pin) {
+    const ev = stampEvidence(projRoot);
+    E(`kit-update: --migrate needs the kit version this project was built on - project-config.md has no kit_version. The @kit-version stamps in its kit files say: ${ev.length ? ev.map(([v, n]) => `${v} (${n} files)`).join(', ') : 'nothing (no stamped kit file found)'}. Re-run with --pin <version> to record it (never guessed).`);
+    return 1;
+  }
+  const cur = versionAt(kitRoot);
+  if (!cur) { E(`kit-update: --migrate refused - the kit at ${kitRoot} has no release-manifest.json version to migrate to; nothing was written.`); return 2; }
+  if (cur === pin) { W(`kit-update: --migrate - this project is already at v${cur}; nothing to migrate (the plain report, node scripts/kit-update.cjs, shows any drift).`); return 0; }
+  // 4. the base: the PINNED version's templates, offline
+  const base = resolveBase(projRoot, kitRoot, pin, opts.base);
+  if (base && base.refuse) { E(base.refuse); return 2; }
+  if (!base) {
+    E(`kit-update: --migrate refused - no v${pin} kit tree to merge from (tried: --base, ${KIT_DIR}/, this repo's history, tag v${pin} in --kit). Pass --base <path to a v${pin} kit tree>; nothing was written.`);
+    return 2;
+  }
+  const hashes = base.manifest && base.manifest.payload && typeof base.manifest.payload === 'object' ? base.manifest.payload : null;
+  const labels = ['live', `v${pin}`, `v${cur}`];
+  // 5. classify every MANAGED row
+  const rows = [];
+  for (const row of MANAGED) {
+    const liveAbs = path.join(projRoot, row.file);
+    const live = readIf(liveAbs);
+    const tplRaw = readIf(path.join(kitRoot, row.template));
+    if (tplRaw === null) { rows.push({ row, cls: 'absent', detail: `the kit has no ${row.template} - skipped` }); continue; }
+    if (live === null) {
+      // A kit file new since the pin (no v<pin> template) is added: the project never had it, so
+      // nothing of its can be lost, and the files the new kit needs arrive with it. One the pinned
+      // kit already had is absent by the project's tier or toggles, and stays absent.
+      rows.push(row.render === 'copy' && base.read(row.template) === null && classifyDestination(liveAbs).kind !== 'symlink'
+        ? { row, cls: 'add', detail: `new since v${pin}` }
+        : { row, cls: 'absent', detail: 'not in this project (tier or toggle) - skipped' });
+      continue;
+    }
+    if (classifyDestination(liveAbs).kind === 'symlink') { rows.push({ row, cls: 'modified', detail: 'a symlink - never written through' }); continue; }
+    if (declaresDivergence(live)) { rows.push({ row, cls: 'keep-divergent', detail: 'declared INTENTIONAL DIVERGENCE - never written' }); continue; }
+    const L = normalize(live); const C = normalize(tplRaw);
+    let P = base.read(row.template);
+    let baseNote = '';
+    if (P !== null && hashes) {
+      const want = hashes[`${KIT_DIR}/${row.template}`];
+      if (want && payloadSha256(P) !== want) { P = null; baseNote = ` (the v${pin} copy fails its release hash)`; }
+    }
+    if (P !== null) P = normalize(P);
+    if (row.render === 'wiring') {
+      if (CONFLICT_MARKER_RE.test(L)) { rows.push({ row, cls: 'conflict', unresolved: true, detail: 'unresolved conflict markers - resolve them, commit, then re-run' }); continue; }
+      if (P === null) { rows.push({ row, cls: 'modified', detail: `no v${pin} template to merge from${baseNote}` }); continue; }
+      if (P === C) { rows.push({ row, cls: 'current', detail: 'the template did not change' }); continue; }
+      const m = mergeThree(L, P, C, labels);
+      if (m.error) { rows.push({ row, cls: 'modified', detail: `the merge failed: ${m.error}` }); continue; }
+      if (m.conflicts === 0 && m.text === L) { rows.push({ row, cls: 'current', detail: 'already carries the template change' }); continue; }
+      rows.push(m.conflicts === 0
+        ? { row, cls: 'merge', text: m.text, detail: `v${pin} -> v${cur}, your fills kept` }
+        : { row, cls: 'conflict', text: m.text, detail: `${m.conflicts} conflicting hunk(s), written with markers` });
+      continue;
+    }
+    if (L === C) { rows.push({ row, cls: 'current', detail: '' }); continue; }
+    if (P !== null && L === P) { rows.push({ row, cls: 'replace', detail: `unchanged since v${pin}` }); continue; }
+    rows.push({ row, cls: 'modified', detail: `changed here${P === null ? ` (no v${pin} copy to compare${baseNote})` : ''} - mark it INTENTIONAL DIVERGENCE to keep it, or re-run with --release ${row.file} to take the template` });
+  }
+  // --release: only a file the table lists as modified (a copy row) can be released
+  for (const rel of opts.release) {
+    const hit = rows.find((r) => r.row.file === rel.replace(/\\/g, '/'));
+    if (!hit || hit.cls !== 'modified' || hit.row.render !== 'copy' || /symlink/.test(hit.detail)) {
+      E(`kit-update: --migrate refused - --release ${rel} names no modified kit file in this table (only a copy file listed "modified" can be released); nothing was written.`);
+      return 2;
+    }
+    hit.cls = 'replace'; hit.detail = 'released by you (--release)';
+  }
+  // 6. the table
+  const unverified = hashes ? '' : `; base unverified: v${pin} ships no hashes`;
+  W(opts.apply
+    ? `kit-update --migrate --apply-all (v${pin} -> v${cur}; base: ${base.label}${unverified})`
+    : `kit-update --migrate - table only, nothing written (v${pin} -> v${cur}; base: ${base.label}${unverified})`);
+  rows.sort((a, b) => MIGRATE_ORDER.indexOf(a.cls) - MIGRATE_ORDER.indexOf(b.cls) || (a.row.file < b.row.file ? -1 : 1));
+  for (const r of rows) W(`  ${r.cls.padEnd(15)} ${r.row.file.padEnd(50)} ${r.detail}`.replace(/\s+$/, ''));
+  const count = (c) => rows.filter((r) => r.cls === c).length;
+  W(`=> ${MIGRATE_ORDER.map((c) => `${count(c)} ${c}`).join(', ')}`);
+  if (!opts.apply) {
+    W('Nothing was written. Re-run the same command with --apply-all to write it' + (recorded.value ? '.' : ` (keep --pin ${pin}).`));
+    return 0;
+  }
+  // 7. the apply: the confirmed pin first (when it was answered with --pin), the files, the pin last
+  if (!recorded.value) writePin(projRoot, pin);
+  let replaced = 0; let added = 0; let merged = 0;
+  const conflicts = [];
+  for (const r of rows) {
+    if (r.unresolved) { conflicts.push(r.row.file); continue; }
+    if (r.cls !== 'replace' && r.cls !== 'add' && r.cls !== 'merge' && r.cls !== 'conflict') continue;
+    let abs;
+    try { abs = assertInside(projRoot, r.row.file); } catch (e) { E(`  refused ${r.row.file} - ${e.message}`); conflicts.push(r.row.file); continue; }
+    if (r.cls === 'add') { fs.mkdirSync(path.dirname(abs), { recursive: true }); writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); added++; }
+    else if (r.cls === 'replace') { writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); replaced++; }
+    else { writeKeepingMode(abs, r.text); if (r.cls === 'merge') merged++; else conflicts.push(r.row.file); }
+  }
+  W(`=> wrote ${replaced} replaced, ${added} added, ${merged} merged${conflicts.length ? `, ${conflicts.length} with conflicts` : ''}; ${count('modified')} modified and ${count('keep-divergent')} keep-divergent left as they are.`);
+  if (conflicts.length) {
+    W(`=> CONFLICT in ${conflicts.join(', ')}: the markers are in the file. kit_version stays v${pin}. Resolve them, commit, then re-run with --apply-all.`);
+    return 1;
+  }
+  writePin(projRoot, cur);
+  W(`=> kit_version raised to v${cur}. Review the diff and commit it, then run: node scripts/kit-update.cjs --ready`);
+  return 0;
 }
 
 // ── hard rule 5, the MERGE form (M30.D; gate-1 ruling 2 2026-08-30) ─────────────────────
@@ -879,6 +1173,15 @@ function main() {
     process.exit(2);
   }
 
+  if (argv.includes('--migrate')) {
+    const valOf = (flag) => { const i = argv.indexOf(flag); return i === -1 ? null : argv[i + 1]; };
+    const pin = valOf('--pin');
+    if (argv.includes('--pin') && (!pin || !VERSION_RE.test(pin))) usage('--pin needs a kit version like 1.0.6');
+    if (argv.includes('--base') && (!valOf('--base') || valOf('--base').startsWith('--'))) usage('--base needs a directory');
+    const release = [];
+    argv.forEach((a, i) => { if (a === '--release') { if (!argv[i + 1] || argv[i + 1].startsWith('--')) usage('--release needs a managed live-file path'); release.push(argv[i + 1]); } });
+    process.exit(cmdMigrate(projRoot, kitRoot, { pin, base: valOf('--base'), release, apply: argv.includes('--apply-all') }));
+  }
   if (adopt) process.exit(cmdAdopt(projRoot, kitRoot, dryRun));
 
   // Classify every managed row against its template.
@@ -902,7 +1205,7 @@ function main() {
       // change instead, the release CHANGELOG's subsection for projects on the live stamp's release,
       // by its public address, because the project has no copy of that file.
       report.push({ row, cls: 'stamp', detail: row.render === 'wiring'
-        ? `live @${liveStamp} vs template @${tplStamp} - a bootstrap-filled file, so --apply refuses it: make the change by hand from "Manual change for a v${liveStamp} project" in the kit's CHANGELOG, ${KIT_CHANGELOG_URL}, then raise its @kit-version line`
+        ? `live @${liveStamp} vs template @${tplStamp} - a bootstrap-filled file, so --apply refuses it: make the change by hand from "Manual change for a v${liveStamp} project" in the kit's CHANGELOG, ${KIT_CHANGELOG_URL}, then raise its @kit-version line, or run node scripts/kit-update.cjs --migrate`
         : `live @${liveStamp} vs template @${tplStamp} (kit updated; --apply to take the template)` });
       continue;
     }

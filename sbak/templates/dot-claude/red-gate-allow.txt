@@ -10,7 +10,10 @@
 #   **/test/**  **/tests/**  **/__tests__/**
 #
 # Add THIS project's test entrypoint(s) below — anything the standard *.test.*
-# patterns don't catch (e.g. a single-file smoke rig, a custom test dir):
+# patterns don't catch (e.g. a single-file smoke rig, a custom test dir).
+# Claude's edit tools are denied on this file in every mode (a line here widens the
+# gate, so the agent must never write it): Claude proposes the glob, and you add the
+# line yourself in your own editor.
 #
 # scripts/smoke.cjs
 # e2e/**

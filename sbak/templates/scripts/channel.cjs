@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //
@@ -11,6 +11,7 @@
 //                                   (--body "text" | --body-file f) [--reply-to n]      role=work
 //   node scripts/channel.cjs send [--approval] [--kind k] (--body "text" | --body-file f) [--reply-to n]
 //                                                                                        role=orchestrator
+//   node scripts/channel.cjs ack --reply-to <seq>       role=orchestrator, no /send: answers one amendment
 //   node scripts/channel.cjs pickup [--from <seq>]      surface the unread inbox; advance the cursor
 //   node scripts/channel.cjs watch [--poll-ms 750] [--liveness-ms 120000] [--max-ms 28800000]
 //                                                       block until the inbox grows, then exit (the wake)
@@ -23,12 +24,17 @@
 // Direction and the sender stamp derive from THIS tree's .claude/role - there is no --to and no
 // --role; the orchestrator writes orch-to-builder and every other role (work, verifier, refactor -
 // the same worktree under a different role) writes builder-to-orch; an orchestrator cannot
-// publish a packet and a builder-side session cannot send.
+// publish a packet and a builder-side session cannot send. A stage-end packet that quotes two
+// release-lane runs carries a `release-run-reason:` line, or it is refused; the same holds for the
+// other full-floor classes (a selector audit, an identity proof) under `<class>-run-reason:`.
+// Every send and publish prints the bell after its sent line when a peer worktree exists: the line
+// the session rings the peer with (M33.G; the jsonl stays the record, D3).
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const ch = require('./lib/channel.cjs');
 
 const cwd = process.cwd();
@@ -48,6 +54,45 @@ function bodyBuf() {
   return Buffer.from(b, 'utf8');
 }
 function resolved() { const r = ch.resolve(cwd); if (!r.ok) die(r.line); return r; }
+// One release lane per stage: each distinct release-lane run a stage-end packet quotes, derived from
+// the lane's own last line or its verify-summary JSON and keyed on duration. A durationless failure
+// line is a run of its own unless a failed release summary in the same packet carries its duration.
+function releaseRuns(text) {
+  const runs = new Set(); let failedSummary = false;
+  for (const m of text.matchAll(/\(lane release, (?:total )?(\d+(?:\.\d+)?)s\)/g)) runs.add(`${Number(m[1]).toFixed(1)}s`);
+  for (const m of text.matchAll(/^verify-summary (\{.*\})[^\S\n]*$/gm)) {
+    let j = null; try { j = JSON.parse(m[1]); } catch (_) { j = null; }
+    if (!j || j.lane !== 'release' || !Number.isFinite(j.totalDurationMs)) continue;
+    runs.add(`${(j.totalDurationMs / 1000).toFixed(1)}s`);
+    if (j.verdict === 'fail') failedSummary = true;
+  }
+  if (/FAILED \(lane release\)/.test(text) && !failedSummary) runs.add('FAILED (no duration)');
+  return [...runs];
+}
+// One long proof per stage (R-61): the other full-floor classes, each keyed on its own banner's
+// duration - the selector audit's summary line and the identity proof's side-by-side row.
+const LONG_BANNERS = {
+  'selector-audit': /\[selector-audit\] [^\n]*?: (\d+(?:\.\d+)?) s wall, after a full run of /g,
+  'identity-proof': /two floors side by side: (\d+(?:\.\d+)?) s \(pool exit /g,
+};
+function longRuns(text, cls) { return [...new Set([...text.matchAll(LONG_BANNERS[cls])].map((m) => `${Number(m[1]).toFixed(1)} s`))]; }
+// The gate-1 grep (M33.G): the items under a "pins touched:" line (or text after it), null when
+// there is no such line. Presence and non-emptiness only; the orchestrator judges the truth.
+function pinsTouched(text) {
+  const lines = text.split(/\r?\n/);
+  const head = /^\s*(?:\*\*)?pins touched:(?:\*\*)?/i;
+  const i = lines.findIndex((l) => head.test(l));
+  if (i === -1) return null;
+  if (lines[i].replace(head, '').trim()) return 1;
+  let n = 0;
+  for (let j = i + 1; j < lines.length; j++) {
+    if (!lines[j].trim()) { if (n) break; continue; }
+    if (!/^\s*[-*]\s+\S/.test(lines[j])) break;
+    n++;
+  }
+  return n;
+}
+function bell(res, seq) { const b = ch.bellLine(res, seq); if (b) out(b); }
 function sleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 const pidAlive = ch.pidAlive; // the one KF-67 probe (the stage-active gate shares it)
 
@@ -68,10 +113,45 @@ if (verb === 'publish' || verb === 'send') {
   const kind = opt('--kind', null) || (cls === 'stage-open' ? 'open' : cls === 'courier' ? 'message' : cls);
   if (!ch.KIND_RE.test(kind)) die(`channel: --kind must match ${ch.KIND_RE}`);
   const replyTo = opt('--reply-to', null);
-  const r = ch.append(cwd, res, cls, kind, bodyBuf(), { replyTo: replyTo === null ? undefined : parseInt(replyTo, 10) });
+  const body = bodyBuf();
+  const extra = {};
+  if (cls === 'stage-packet' && kind === 'stage-end') {
+    const text = body.toString('utf8'); const runs = releaseRuns(text);
+    if (runs.length > 1 && !/^release-run-reason:[^\S\n]*\S/m.test(text)) die(`channel: this stage-end packet quotes ${runs.length} release-lane runs (${runs.join(', ')}) and no release-run-reason: line - one release lane per stage, on the final bytes; a second run needs "release-run-reason: <why>" in the packet`);
+    for (const c of Object.keys(LONG_BANNERS)) {
+      const rs = longRuns(text, c);
+      if (rs.length > 1 && !new RegExp(`^${c}-run-reason:[^\\S\\n]*\\S`, 'm').test(text)) die(`channel: this stage-end packet quotes ${rs.length} ${c} runs (${rs.join(', ')}) and no ${c}-run-reason: line - one long proof per stage, on the final bytes; a second run needs "${c}-run-reason: <why>" in the packet`);
+    }
+  }
+  if (cls === 'stage-packet' && kind === 'gate-1') {
+    const n = pinsTouched(body.toString('utf8'));
+    if (n === null) die('channel: a gate-1 packet needs a "pins touched:" block - list every smoke label and validator this stage will change (grep -n over the test surface), one per line under a "pins touched:" line; nothing was sent');
+    if (n === 0) die('channel: the gate-1 packet\'s "pins touched:" block lists nothing - list every smoke label and validator this stage will change (grep -n over the test surface), or "- none: <the grep that found none>"; nothing was sent');
+  }
+  if (cls === 'stage-packet' && kind === 'amendment') {
+    const a = ch.amendment(res);
+    if (!a.ok) die(a.line);
+    extra.amended = a.amended;
+  }
+  const r = ch.append(cwd, res, cls, kind, body, { replyTo: replyTo === null ? undefined : parseInt(replyTo, 10), extra });
   if (!r.ok) die(r.line);
   const peer = ch.PEER_NAME[ch.PEER[res.role]];
   out(`channel: sent seq ${r.msg.seq} to ${peer} (${cls}, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
+  bell(res, r.msg.seq);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// The ack (M33.G): the orchestrator's one publish without /send, only in reply to an amendment.
+if (verb === 'ack') {
+  const res = resolved();
+  if (res.role !== 'orchestrator') die(`channel: only the orchestrator acks (this tree's role is ${res.role}) - the builder publishes an amendment and waits for it`);
+  const rt = opt('--reply-to', null);
+  if (rt === null || !/^[1-9][0-9]{0,8}$/.test(rt)) die('channel: ack needs --reply-to <the amendment\'s seq> - an ack answers one amendment and nothing else');
+  const r = ch.ackAmendment(cwd, res, parseInt(rt, 10));
+  if (!r.ok) die(r.line);
+  out(`channel: sent seq ${r.msg.seq} to ${ch.PEER_NAME[ch.PEER[res.role]]} (courier, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
+  bell(res, r.msg.seq);
   process.exit(0);
 }
 
@@ -132,8 +212,11 @@ if (verb === 'watch') {
   const sizeOf = (f) => { try { const s = fs.statSync(f); return { size: s.size, mtime: s.mtimeMs }; } catch (_) { return { size: 0, mtime: 0 }; } };
   const start = Date.now();
   fs.mkdirSync(res.root, { recursive: true });
-  fs.writeFileSync(marker, JSON.stringify({ pid: process.pid, since: new Date(start).toISOString(), inbox: path.basename(inbox), size: sizeOf(inbox).size }) + '\n');
+  // M33.G: the marker carries a start token and this watcher touches it every poll; a
+  // live pid whose marker went stale is not listening (lib/channel.cjs watcherState).
+  fs.writeFileSync(marker, JSON.stringify({ pid: process.pid, since: new Date(start).toISOString(), inbox: path.basename(inbox), size: sizeOf(inbox).size, token: crypto.randomBytes(8).toString('hex'), poll_ms: pollMs }) + '\n');
   process.on('exit', clearMarker);
+  const touch = () => { try { const t = new Date(); fs.utimesSync(marker, t, t); } catch (_) { /* a missing marker is the exit path's */ } };
 
   // Liveness phase: something I published is not yet consumed by the peer.
   const mine = ch.readLog(ch.outboxFile(res), res.role, res.repo);
@@ -146,6 +229,7 @@ if (verb === 'watch') {
         die(`channel: ${peer} has not picked up seq ${lastSeq} in ${Math.round(livenessMs / 1000)} s - that session may be closed or not listening. Fallback: paste the block by hand into the ${peer} terminal (human courier); the log keeps seq ${lastSeq}.`, 3);
       }
       sleep(pollMs);
+      touch();
     }
   }
 
@@ -154,6 +238,7 @@ if (verb === 'watch') {
   for (;;) {
     if (Date.now() - start >= maxMs) { clearMarker(); die(`channel: watcher expired after ${Math.round(maxMs / 3600000)} h with no traffic - re-arm if the stage is still live (node scripts/channel.cjs watch)`, 5); }
     sleep(pollMs);
+    touch();
     const now = sizeOf(inbox);
     if (now.size !== base.size || now.mtime !== base.mtime) {
       const u = ch.unreadFor(res);
@@ -172,18 +257,25 @@ if (verb === 'status') {
   const inbox = ch.unreadFor(res);
   const turn = ch.readTurn(res.root);
   // M32.I (KF-67): a marker is not a listener. Each marker's pid is probed; a dead one (ESRCH, or a
-  // marker that cannot be read at all) is reported as DEAD and its stale file removed.
+  // marker that cannot be read at all) is reported as DEAD and its stale file removed. M33.G:
+  // a live pid whose token went stale is STALE - not listening, and its marker stays (the
+  // pid is alive; this command never kills a process it cannot name).
   const watchers = [];
   const dead = [];
+  const stale = [];
   for (const side of ['work', 'orchestrator']) {
     const marker = path.join(res.root, `watch.${side}.json`);
-    if (!fs.existsSync(marker)) continue;
-    let m = null;
-    try { m = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch (_) { m = null; }
-    if (m && Number.isInteger(m.pid) && m.pid > 0 && pidAlive(m.pid)) { watchers.push(side); continue; }
-    dead.push({ side, pid: m && Number.isInteger(m.pid) ? m.pid : null, since: m && typeof m.since === 'string' ? m.since : null });
+    const w = ch.watcherState(marker);
+    if (w.state === 'none') continue;
+    if (w.state === 'listening') { watchers.push(side); continue; }
+    const row = { side, pid: w.m && Number.isInteger(w.m.pid) ? w.m.pid : null, since: w.m && typeof w.m.since === 'string' ? w.m.since : null };
+    if (w.state === 'stale') { stale.push(row); continue; }
+    dead.push(row);
     try { fs.rmSync(marker, { force: true }); } catch (_) { /* fine */ }
   }
+  // R-57: the host reaps idle background shells unless the session was launched with the variable;
+  // this process inherits the session's environment, so it reports what the session has.
+  const reaper = String(process.env.CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP || '').trim() === '1' ? 'off' : 'on';
   // The builder tree's unpushed work against the resolved trunk (main, else master): the list
   // /closeout derives its CHANGELOG from, read through the one resolver.
   const tk = ch.aheadOf(res.tree);
@@ -191,13 +283,15 @@ if (verb === 'status') {
     role: res.role, repo: res.repo, root: res.root, turn: turn ? turn.holder : null,
     cursors: { work: ch.readCursor(res.root, 'work'), orchestrator: ch.readCursor(res.root, 'orchestrator') },
     unread: inbox.fault ? null : inbox.unread.length, fault: inbox.fault ? inbox.fault.line : null,
-    watchers, dead_watchers: dead, trunk: tk.trunk, ahead: tk.ahead,
+    watchers, dead_watchers: dead, stale_watchers: stale, trunk: tk.trunk, ahead: tk.ahead, reaper,
   };
   if (flag('--json')) { out(JSON.stringify(st)); process.exit(0); }
   const deadText = dead.map((d) => ` - watcher DEAD: ${d.side} (pid ${d.pid === null ? 'unknown' : d.pid}, armed ${d.since || 'unknown'}) - re-arm: node scripts/channel.cjs watch`).join('');
+  const staleText = stale.map((d) => ` - watcher STALE: ${d.side} (pid ${d.pid}, armed ${d.since || 'unknown'}, no fresh token) - re-arm: node scripts/channel.cjs watch`).join('');
   out(`channel: role=${st.role} repo=${st.repo} root=${st.root}`);
-  out(`channel: turn: ${st.turn || 'idle'} - cursors work=${st.cursors.work} orchestrator=${st.cursors.orchestrator} - unread for me: ${st.fault ? 'FAULT' : st.unread}${st.watchers.length ? ` - watching: ${st.watchers.join(', ')}` : ''}${deadText}`);
+  out(`channel: turn: ${st.turn || 'idle'} - cursors work=${st.cursors.work} orchestrator=${st.cursors.orchestrator} - unread for me: ${st.fault ? 'FAULT' : st.unread}${st.watchers.length ? ` - watching: ${st.watchers.join(', ')}` : ''}${deadText}${staleText}`);
   out(st.trunk === null ? 'channel: trunk unresolved - no main or master branch here' : `channel: trunk ${st.trunk} - ${st.ahead.length} commit(s) ahead of it`);
+  out(reaper === 'off' ? 'channel: reaper: off (CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1)' : 'channel: reaper: on - launch with CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 beside --model to keep the watcher alive');
   if (st.fault) out(st.fault);
   process.exit(0);
 }
@@ -220,4 +314,4 @@ if (verb === 'replay') {
   process.exit(0);
 }
 
-die('channel: unknown or missing command - the commands are publish | send | pickup | watch | status | replay; ask in this session for the right invocation rather than guessing.');
+die('channel: unknown or missing command - the commands are publish | send | ack | pickup | watch | status | replay; ask in this session for the right invocation rather than guessing.');

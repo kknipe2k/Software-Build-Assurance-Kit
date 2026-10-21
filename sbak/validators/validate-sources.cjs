@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-sources.cjs
 //
 // The citation↔registry binding primitive (M06) — sibling to

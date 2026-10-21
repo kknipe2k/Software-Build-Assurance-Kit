@@ -857,6 +857,18 @@ try {
   // builder reads: every required entry goes through the rendered lifecycle adapter as a
   // PostToolUse Read payload (recorded exactly as Claude Code's Read tool is). Approving without
   // reading would be the V104 instruction-skip the check exists to catch.
+  // The rendered work list's stage-open entry is the stage view, built from HEAD. The harness
+  // stands where a builder stands after Phase 4: an M01 Phase doc with a Stage A section, committed,
+  // and `node scripts/stage-view.cjs M01.A` (/stage step 3) before the reads. The doc, the view and
+  // the repo are removed after this leg, so the legs below see the rendered tree they always did.
+  const genv = Object.assign(sandbox.scrubGitEnv(), { GIT_CEILING_DIRECTORIES: path.dirname(goldenRoot) });
+  const g = (args) => spawnSync('git', args, { cwd: goldenRoot, encoding: 'utf8', env: genv });
+  const phaseDocRel = path.join('docs', 'build-prompts', 'M01-hello.md');
+  fs.mkdirSync(path.join(goldenRoot, 'docs', 'build-prompts'), { recursive: true });
+  fs.writeFileSync(path.join(goldenRoot, phaseDocRel), '# M01 - hello (bake fixture)\n\n## Stage A - the hello feature\n\nhello() returns "hello", with a real test.\n');
+  for (const a of [['init', '-q'], ['add', '-A'], ['-c', 'user.email=bake@example.invalid', '-c', 'user.name=bake', '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', 'bake: the rendered tree with its Phase doc']]) g(a);
+  const sv = spawnSync('node', [path.join(goldenRoot, 'scripts', 'stage-view.cjs'), 'M01.A'], { cwd: goldenRoot, encoding: 'utf8', env: genv });
+  if (sv.status !== 0) findings.push(`golden leg — stage-view M01.A failed in the rendered tree (exit ${sv.status}): ${String(sv.stderr || sv.stdout).trim().slice(0, 300)}`);
   try {
     const rl = require(path.join(goldenRoot, 'scripts', 'lib', 'read-ledger.cjs'));
     const required = rl.checkReads(goldenRoot, { boundary: 'stage-open', stage: 'M01.A' }).required;
@@ -875,6 +887,7 @@ try {
   const s3 = redGate();
   runRendered('scripts/stage-active.cjs', ['M01.A']); // 4) re-open a fresh stage → re-armed
   const s4 = redGate();
+  for (const rel of [phaseDocRel, path.join('.claude', 'views'), '.git']) { try { fs.rmSync(path.join(goldenRoot, rel), { recursive: true, force: true }); } catch (_) { /* best effort */ } }
 
   if (s1 !== 2) {
     findings.push(

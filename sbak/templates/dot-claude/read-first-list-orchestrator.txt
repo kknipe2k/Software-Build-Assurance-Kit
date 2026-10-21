@@ -36,6 +36,7 @@ ORCHESTRATOR.md  when: on-demand - read before your first adjudication
 CLAUDE.md  when: host - Claude Code loads it itself
 project-config.md  when: session-start - tier + toggles
 docs/scope.md  when: on-demand - the scope matrix, when authoring or adjudicating scope
-docs/build-prompts/M01-foundation.md  when: on-demand - the open Phase doc, when authoring couriers or adjudicating a gate
+view: <stage>  when: on-demand - the open stage's view, when adjudicating a gate (node scripts/stage-view.cjs <stage> --role orchestrator builds it)
+docs/build-prompts/M01-*.md  when: on-demand - the whole Phase doc, when authoring a stage section or couriers
 docs/gap-analysis.md  when: on-demand - the append-only closeout ledger, at closeout review
 docs/app-map.md  when: on-demand - the drive/test map, when routing Verifier findings

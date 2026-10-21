@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid),
@@ -50,8 +50,10 @@
 // THE UNION PIN. At closeout `--reconcile <milestone>` proves, in this order and before any
 // write: (1) every discovered test file is in exactly one of {settled, active} once the
 // closing milestone's files settle; (2) the last fast summary's handed files, unioned with
-// the settled set, cover every discovered file; (3) the release lane passed at this HEAD.
-// Only `--write` after all three touches tests/.settled.json (write-temp-rename).
+// the settled set, cover every discovered file; (3) the release lane passed at this HEAD, on
+// these contents (the fingerprint every lane records before its first task; a tree changed
+// after that run is refused, path by path). Only `--write` after all three touches
+// tests/.settled.json (write-temp-rename).
 //
 // The Linux leg mirrors the GitHub ubuntu image in Docker (WSL2 via VERIFY_LINUX=wsl);
 // VERIFY_SKIP_LINUX=1 is the logged emergency skip. Wired as .githooks/pre-push (`--lane
@@ -63,6 +65,7 @@ const { spawn, spawnSync, execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { StringDecoder } = require('string_decoder');
 
 // ---- project configuration (filled at bootstrap) ----------------------------
 const CONFIG = {
@@ -120,6 +123,16 @@ const OUTSIDE_SOURCE = [
   { match: 'Dockerfile', why: 'container definition' },
 ];
 
+// Run state: what a lane and the stage loop write while a lane runs or is reported. It stays out
+// of the contents fingerprint, so closeout does not refuse its own evidence. ONE table of exact
+// path prefixes (no globs); `--list` prints it.
+const RUN_STATE = [
+  { match: `${LAST_DIR}/verify-last-`, why: 'the lane summaries themselves' },
+  { match: '.claude/measurements/', why: 'evidence redirected while a lane runs' },
+  { match: '.claude/channel/', why: 'the channel logs; every packet appends' },
+  { match: '.claude/receipts/', why: 'the hook ledgers' },
+];
+
 const RED = '\x1b[31m', GREEN = '\x1b[32m', CYAN = '\x1b[36m', DIM = '\x1b[2m', RESET = '\x1b[0m';
 
 const unfilled = (v) => typeof v !== 'string' || v === '' || /^\{\{[A-Z_]+\}\}$/.test(v);
@@ -143,6 +156,60 @@ function isOutsideSource(rel) {
   const n = norm(rel);
   const base = path.posix.basename(n);
   return OUTSIDE_SOURCE.find((row) => (row.match.endsWith('/') ? n.startsWith(row.match) : (n === row.match || base.startsWith(row.match))));
+}
+const isRunState = (rel) => RUN_STATE.some((row) => norm(rel).startsWith(row.match));
+
+// The contents a lane tests, recorded beside its head: the tree of `git stash create` (index and
+// worktree as one tree, the stash list untouched; its commit carries a timestamp, so only the tree
+// is stable; empty output is a clean tree, so HEAD's), a digest of that tree's entries, and the
+// untracked files beside their blobs (stash create leaves them out). Run state is dropped from
+// both. Any git failure records { error }: the run says so once and --reconcile refuses it.
+function fingerprint(root) {
+  const run = (args, input) => spawnSync('git', args, { cwd: root, encoding: 'utf8', input, maxBuffer: 256 << 20, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+  const why = (r, what) => `${what}: ${String(r.stderr || '').trim().split(/\r?\n/)[0] || (r.error ? r.error.message : `exit ${r.status}`)}`;
+  run(['update-index', '-q', '--refresh']); // a stat-only change (a copy, a touch) makes stash create exit 1, silently
+  const sc = run(['stash', 'create']);
+  if (sc.status !== 0) return { error: why(sc, 'git stash create') };
+  const tr = run(['rev-parse', '--verify', `${sc.stdout.trim() || 'HEAD'}^{tree}`]);
+  if (tr.status !== 0) return { error: why(tr, 'git rev-parse') };
+  const tree = tr.stdout.trim();
+  const ls = run(['ls-tree', '-r', '-z', '--full-tree', tree]);
+  if (ls.status !== 0) return { error: why(ls, 'git ls-tree') };
+  const entries = ls.stdout.split('\0').filter((e) => e && !isRunState(e.slice(e.indexOf('\t') + 1)));
+  const others = run(['ls-files', '--others', '--exclude-standard', '-z']);
+  if (others.status !== 0) return { error: why(others, 'git ls-files') };
+  const paths = others.stdout.split('\0').filter((p) => p && !isRunState(p)).sort();
+  const files = paths.filter((p) => !p.endsWith('/')); // a trailing slash is a nested repository
+  let blobs = [];
+  if (files.length) {
+    const ho = run(['hash-object', '--stdin-paths'], files.join('\n') + '\n');
+    if (ho.status !== 0) return { error: why(ho, 'git hash-object') };
+    blobs = ho.stdout.split(/\r?\n/).filter(Boolean);
+    if (blobs.length !== files.length) return { error: `git hash-object returned ${blobs.length} blob(s) for ${files.length} path(s)` };
+  }
+  const blobOf = new Map(files.map((p, i) => [p, blobs[i]]));
+  const untrackedFiles = paths.map((p) => [p, blobOf.get(p) || 'repository']);
+  const digest = (s) => 'sha256:' + crypto.createHash('sha256').update(s).digest('hex');
+  return { tree, tracked: digest(entries.join('\0')), untracked: digest(JSON.stringify(untrackedFiles)), untrackedFiles };
+}
+// One line per path that differs between the tested contents and these, the path last.
+function contentsDiff(root, was, now) {
+  const lines = [];
+  if (was.tracked !== now.tracked) {
+    if (git(root, ['cat-file', '-e', `${was.tree}^{tree}`]) === null) lines.push(`  (the tested tree ${String(was.tree).slice(0, 9)} is no longer in the object store, so the changed tracked paths cannot be named)`);
+    else {
+      for (const rec of (git(root, ['diff', '--no-renames', '--numstat', '-z', was.tree, now.tree]) || '').split('\0')) {
+        const m = /^(\S+)\t(\S+)\t([\s\S]+)$/.exec(rec);
+        if (m && !isRunState(m[3])) lines.push(`  changed (${m[1] === '-' ? 'binary' : `+${m[1]} -${m[2]}`})  ${m[3]}`);
+      }
+    }
+  }
+  if (was.untracked !== now.untracked) {
+    const before = new Map(was.untrackedFiles || []); const after = new Map(now.untrackedFiles);
+    for (const [p, b] of after) if (!before.has(p)) lines.push(`  added (untracked)  ${p}`); else if (before.get(p) !== b) lines.push(`  modified (untracked)  ${p}`);
+    for (const p of before.keys()) if (!after.has(p)) lines.push(`  removed (untracked)  ${p}`);
+  }
+  return lines;
 }
 
 // test-file discovery under the configured globs: the common runner naming conventions
@@ -348,21 +415,32 @@ function stepsFor(task, lane, plan, root) {
 }
 
 // node --test exits 0 when its pattern matches no file, so a step whose command is the kit's
-// default runner is judged on the runner's OWN summary: `tests 0` fails the step. Other runners
-// already fail on no tests (pytest exits 5; vitest and jest print "No test files found" and exit
-// 1) and are not judged. The judged step pipes stdout and writes every chunk straight through as
-// it arrives, so the run stays live on screen; only a bounded tail is kept to read the summary
-// (spec `\u2139 tests N`, or tap `# tests N`: Node 20 and 22 print tap when stdout is a pipe).
+// default runner is judged on the runner's OWN summary: `tests 0` fails the step, and so does a
+// summary that cannot be read (the dot reporter prints none; a reporter destination other than
+// stdout leaves the pipe empty) - no count is never a pass. Other runners already fail on no tests
+// (pytest exits 5; vitest and jest print "No test files found" and exit 1) and are not judged; nor
+// is a wrapper such as `npm test`, and every step the guard does not judge says so on the run. The
+// judged step pipes stdout and writes every chunk straight through as it arrives, so the run stays
+// live on screen; the chunks are decoded as one stream (a chunk boundary can split the 3-byte
+// `\u2139`), and only a bounded tail is kept to read the summary (spec `\u2139 tests N`, tap
+// `# tests N` - Node 20 and 22 print tap when stdout is a pipe - or junit `<!-- tests N -->`).
 // A project with no test file yet (the bootstrap commit, before its first test stage) reports
 // `tests 0` honestly: when git tracks no test-shaped file, the step is a skip - never a pass - and
 // the release lane fails it as a required skip; the guard bites once the first test file exists.
 const NODE_TEST = /\bnode(?:\.exe)?"?\s+(?:\S+\s+)*?--test(?=\s|$)/;
 function testsRun(tail) {
   let n = null;
-  const rx = /^[^\S\n]*(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)[^\S\n]*$/gm;
+  const rx = /^[^\S\n]*(?:(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)|<!--[^\S\n]*tests[^\S\n]+(\d+)[^\S\n]*-->)[^\S\n]*$/gm;
   const t = tail.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r\n/g, '\n');
-  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1]);
+  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1] !== undefined ? m[1] : m[2]);
   return n;
+}
+// The reporter shape an unreadable summary names: every --test-reporter value (none given: the
+// runner's default), then each destination that is not stdout.
+function reporterShape(cmd) {
+  const values = (flag) => [...cmd.matchAll(new RegExp(`${flag}[= ]("?)([^\\s"]+)\\1`, 'g'))].map((m) => m[2]);
+  const reporters = values('--test-reporter');
+  return (reporters.length ? reporters.join('+') : 'default') + values('--test-reporter-destination').filter((d) => d !== 'stdout').map((d) => `, destination ${d}`).join('');
 }
 // Read only on the tests-0 path, so a normal run pays nothing. git failing, or no repository, is
 // "unknown", never "none": the FAIL stands.
@@ -384,16 +462,24 @@ function runStep(step, root, quiet) {
   const [sh, args] = win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
   const opts = { cwd: root, windowsVerbatimArguments: win };
   const io = quiet ? 'ignore' : 'inherit';
-  if (!NODE_TEST.test(step.shell)) return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  if (!NODE_TEST.test(step.shell)) {
+    if (!quiet) process.stdout.write(`${DIM}note the tests-0 guard does not judge this step (it reads the runner's count only when the command itself runs node --test): ${step.cmd}${RESET}\n`);
+    return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  }
   return new Promise((resolve) => {
     let tail = '';
+    const dec = new StringDecoder('utf8');
     const child = spawn(sh, args, Object.assign({ stdio: [io, 'pipe', io] }, opts));
-    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + b.toString('utf8')).slice(-65536); });
+    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + dec.write(b)).slice(-65536); });
     child.on('error', () => resolve(done(1)));
     child.on('close', (code) => { // a signal leaves code null, which fails like the sync path
-      if (code !== 0 || testsRun(tail) !== 0) return resolve(done(code));
+      tail = (tail + dec.end()).slice(-65536);
+      const n = code === 0 ? testsRun(tail) : null;
+      if (code !== 0 || (n !== null && n !== 0)) return resolve(done(code));
       if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
-      if (!quiet) process.stdout.write(`${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
+      if (!quiet) process.stdout.write(n === null
+        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(step.shell)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
+        : `${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
       return resolve(done(1));
     });
   });
@@ -422,6 +508,14 @@ function atomicWrite(p, text) {
 }
 function readLast(root, lane) {
   try { return JSON.parse(fs.readFileSync(path.join(root, LAST_DIR, `verify-last-${lane}.json`), 'utf8')); } catch (_) { return null; }
+}
+// One line per run: the summary above is overwritten each run; this file is how a stage's
+// measure line counts the lane runs it paid (scripts/lib/read-ledger.cjs measure). Run state.
+function appendRunLine(root, summary) {
+  let stage = null;
+  try { stage = fs.readFileSync(path.join(root, '.claude', 'stage-active'), 'utf8').split(String.fromCharCode(0)).join('').trim() || null; } catch (_) { stage = null; }
+  fs.mkdirSync(path.join(root, LAST_DIR), { recursive: true });
+  fs.appendFileSync(path.join(root, LAST_DIR, 'verify-last-runs.jsonl'), JSON.stringify({ at: new Date().toISOString(), stage, lane: summary.lane, verdict: summary.verdict, totalDurationMs: summary.totalDurationMs, head: summary.head }) + '\n', 'utf8');
 }
 
 // ── --reconcile: the three proofs, then (only with --write) the marker ────────────────
@@ -453,12 +547,23 @@ function reconcile(root, milestone, write) {
   if (uncovered.length) return fail(`uncovered: ${uncovered.map((f) => `${f} - in no lane`).join('; ')}`);
   say(`reconcile 2/3  union: the last fast-lane summary (${LAST_DIR}/verify-last-fast.json, head ${String(fast.head || '').slice(0, 9)}) handed ${handed.size} files; handed ∪ settled covers all ${discovered.length} discovered files - 0 uncovered`);
 
-  // proof 3 - release passed at this head
+  // proof 3 - release passed at this head, on these contents
   const rel = readLast(root, 'release');
   if (!rel || rel.schema !== SUMMARY_SCHEMA) return fail(`no release-lane summary at ${LAST_DIR}/verify-last-release.json - run --lane release at this head first`);
   if (rel.verdict !== 'pass') return fail(`the last release lane did not pass (verdict ${rel.verdict})`);
   if (rel.head !== head) return fail(`the last release lane ran at ${String(rel.head).slice(0, 9)}, not this HEAD ${head.slice(0, 9)} - re-run --lane release`);
-  say(`reconcile 3/3  release: the release lane passed at this head (${LAST_DIR}/verify-last-release.json, verdict pass, head ${head.slice(0, 9)} == HEAD)`);
+  const was = rel.contents;
+  if (!was || typeof was !== 'object') return fail(`the last release lane's summary records no contents fingerprint (${LAST_DIR}/verify-last-release.json, written by an older scripts/verify-local.cjs) - re-run --lane release`);
+  if (was.error) return fail(`the last release lane could not fingerprint the tree it tested (${was.error}) - re-run --lane release once it can`);
+  const now = fingerprint(root);
+  if (now.error) return fail(`this tree cannot be fingerprinted (${now.error}), so nothing shows it is the tree the release lane tested`);
+  if (now.tracked !== was.tracked || now.untracked !== was.untracked) {
+    process.stdout.write(`${RED}reconcile FAILED${RESET} the tree changed after the last release lane ran at this head (${LAST_DIR}/verify-last-release.json):\n`);
+    for (const l of contentsDiff(root, was, now)) say(l);
+    say('re-run --lane release on these contents');
+    return 1;
+  }
+  say(`reconcile 3/3  release: the release lane passed at this head, on these contents (${LAST_DIR}/verify-last-release.json, verdict pass, head ${head.slice(0, 9)} == HEAD, tree ${now.tree.slice(0, 9)})`);
 
   // the estate review - numbers from this run, never typed
   const per = Object.entries(manifest.milestones || {}).map(([m, e]) => `${m}: ${(e.tests || []).length}`);
@@ -512,7 +617,7 @@ if (require.main === module) (async () => {
   if (flag('--list')) {
     const rows = selected.map((t) => ({ id: t.id, lanes: t.lanes.slice(), requires: (t.requires || []).slice(), steps: stepsFor(t, lane, plan, root).map((s) => s.cmd) }));
     if (flag('--json')) {
-      process.stdout.write(JSON.stringify({ schema: 'sbak/verify-lane-listing/v1', lane, registryHash: registryHash(), taskCount: rows.length, selection: plan.selection, fallbackReason: plan.fallbackReason, base: plan.base, tasks: rows, outsideSource: OUTSIDE_SOURCE }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ schema: 'sbak/verify-lane-listing/v1', lane, registryHash: registryHash(), taskCount: rows.length, selection: plan.selection, fallbackReason: plan.fallbackReason, base: plan.base, tasks: rows, outsideSource: OUTSIDE_SOURCE, runState: RUN_STATE }, null, 2) + '\n');
       process.exit(0);
     }
     process.stdout.write(`\nlane: ${lane}  (${rows.length} task${rows.length === 1 ? '' : 's'})  ${registryHash()}\n`);
@@ -526,7 +631,8 @@ if (require.main === module) (async () => {
       for (const s of steps) process.stdout.write(`      ${s.name.padEnd(13)} ${s.cmd}\n`);
       if (t.laneCaveat && lane !== 'release') process.stdout.write(`      ! ${t.laneCaveat}\n`);
     }
-    process.stdout.write(`\n  release is DERIVED as the whole registry (lane tags ignored); a required skip is a failure there.\n  outside-source paths (any -> fast/stage run full): ${OUTSIDE_SOURCE.map((r) => r.match).join(' ')}\n\n`);
+    process.stdout.write(`\n  release is DERIVED as the whole registry (lane tags ignored); a required skip is a failure there.\n  outside-source paths (any -> fast/stage run full): ${OUTSIDE_SOURCE.map((r) => r.match).join(' ')}\n`);
+    process.stdout.write(`  run state (kept out of the contents fingerprint --reconcile compares):\n${RUN_STATE.map((r) => `      ${r.match.padEnd(24)} ${r.why}\n`).join('')}\n`);
     process.exit(0);
   }
 
@@ -541,6 +647,8 @@ if (require.main === module) (async () => {
 
   const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
   if (!quiet && docker && docker.value === null) process.stdout.write(`${DIM}note docker_leg not read (${docker.why}) - the Linux leg runs as before${RESET}\n`);
+  const contents = fingerprint(root);
+  if (!quiet && contents.error) process.stdout.write(`${DIM}note contents not fingerprinted (${contents.error}) - --reconcile refuses this summary${RESET}\n`);
   const availability = {};
   for (const t of selected) for (const r of (t.requires || [])) if (!(r in availability)) availability[r] = REQUIREMENTS[r].probe();
   const results = [];
@@ -590,12 +698,13 @@ if (require.main === module) (async () => {
   const summary = {
     schema: SUMMARY_SCHEMA, durationUnit: 'ms', lane, laneDerivation: lane === 'release' ? 'derived-all' : 'tagged-filter',
     platform: process.platform, node: process.version, registryHash: registryHash(),
-    head: (git(root, ['rev-parse', 'HEAD']) || '').trim(),
+    head: (git(root, ['rev-parse', 'HEAD']) || '').trim(), contents,
     base: plan.base, selection: plan.selection, fallbackReason: plan.fallbackReason,
     discovered: plan.discovered, settled: plan.settled, active: plan.active, settledTouched: plan.settledTouched, reopened: plan.reopened, handed: plan.handed, outsideSource: plan.outsideSource,
     taskCount: results.length, counts, verdict: failed ? 'fail' : 'pass', totalDurationMs: Date.now() - suiteStart, tasks: results,
   };
   try { atomicWrite(path.join(root, LAST_DIR, `verify-last-${lane}.json`), JSON.stringify(summary, null, 2) + '\n'); } catch (_) { /* a read-only tree still gets its verdict */ }
+  try { appendRunLine(root, summary); } catch (_) { /* the same */ }
   if (value('--summary')) fs.writeFileSync(value('--summary'), JSON.stringify(summary, null, 2) + '\n', 'utf8');
   if (summaryOnly) { process.stdout.write(JSON.stringify(summary, null, 2) + '\n'); process.exit(failed ? 1 : 0); }
 

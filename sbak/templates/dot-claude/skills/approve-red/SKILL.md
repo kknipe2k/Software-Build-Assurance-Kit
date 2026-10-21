@@ -1,5 +1,6 @@
 ---
 description: Approve the open stage's RED tests, unlocking implementation edits (human action)
+disable-model-invocation: true
 ---
 
 You are confirming, **as the human reviewer**, that you have read the surfaced failing (RED) tests for the open stage and approve their design. This is gate 2 of the three-gate per-stage loop (plan → **red** → stage-end).

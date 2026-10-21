@@ -143,33 +143,41 @@ const STATUS_HEADER = /^(in or out|in\/out|status|scope)$/i;
 const NEGATED_STATUS = /^(out|no|not|deferred|not in scope)$/i;
 const plainCell = (c) => String(c || '').replace(/[*_`]/g, '').trim();
 // The spec as units: prose split on sentence ends (wrapped lines joined), headings and list
-// items on their own, table cells one by one with their column header.
+// items on their own, table cells one by one with their column header. Each unit keeps the spec
+// line it starts on, so a derived value's why can name it.
 function specUnits(raw) {
   const units = [];
   let para = [];
   const flush = () => {
     if (!para.length) return;
-    for (const s of para.join(' ').split(/(?<=[.!?])\s+/)) if (s.trim()) units.push({ text: s.trim(), negatedColumn: false });
+    let joined = ''; const starts = [];
+    for (const p of para) { if (joined) joined += ' '; starts.push({ from: joined.length, line: p.line }); joined += p.text; }
+    const lineAt = (off) => starts.filter((s) => s.from <= off).pop().line;
+    let from = 0;
+    const cut = (to, next) => { const s = joined.slice(from, to); if (s.trim()) units.push({ text: s.trim(), negatedColumn: false, line: lineAt(from) }); from = next; };
+    for (const m of joined.matchAll(/(?<=[.!?])\s+/g)) cut(m.index, m.index + m[0].length);
+    cut(joined.length, joined.length);
     para = [];
   };
   let header = null;
-  for (const line of raw.replace(/\r\n?/g, '\n').split('\n')) {
-    const t = line.trim();
+  raw.replace(/\r\n?/g, '\n').split('\n').forEach((lineText, i) => {
+    const line = i + 1;
+    const t = lineText.trim();
     if (/^\|/.test(t)) {
       flush();
       const cells = t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
-      if (header === null) { header = cells; for (const c of cells) units.push({ text: c, negatedColumn: false }); continue; }
-      if (cells.every((c) => /^:?-{3,}:?$/.test(c))) continue;
-      const rowOut = cells.some((c, i) => STATUS_HEADER.test(plainCell(header[i])) && NEGATED_STATUS.test(plainCell(c)));
-      cells.forEach((c, i) => units.push({ text: c, negatedColumn: rowOut || NEGATED_COLUMN.test(header[i] || '') }));
-      continue;
+      if (header === null) { header = cells; for (const c of cells) units.push({ text: c, negatedColumn: false, line }); return; }
+      if (cells.every((c) => /^:?-{3,}:?$/.test(c))) return;
+      const rowOut = cells.some((c, j) => STATUS_HEADER.test(plainCell(header[j])) && NEGATED_STATUS.test(plainCell(c)));
+      cells.forEach((c, j) => units.push({ text: c, negatedColumn: rowOut || NEGATED_COLUMN.test(header[j] || ''), line }));
+      return;
     }
     header = null;
-    if (t === '') { flush(); continue; }
+    if (t === '') { flush(); return; }
     if (/^(#{1,6}\s|[-*+]\s|\d+[.)]\s|>)/.test(t)) flush();
-    para.push(t);
+    para.push({ text: t, line });
     if (/^#{1,6}\s/.test(t)) flush();
-  }
+  });
   flush();
   return units;
 }
@@ -181,6 +189,25 @@ function smellFragment(text, at, len) {
     f = (a > 0 ? '...' : '') + text.slice(a, b).trim() + (b < text.length ? '...' : '');
   }
   return f.replace(/"/g, '\'');
+}
+// docker_leg on the Full path: the ship targets come from the spec, matched with the --answers
+// table (derivations.docker_leg.ship_target_match) at a word start, over the same units and with
+// the same negation rule as the risk triggers. It rides the JSON only; `accept` writes the row.
+function dockerFromSpec(units) {
+  const keys = core.derivations && core.derivations.docker_leg && core.derivations.docker_leg.ship_target_match;
+  if (!Array.isArray(keys)) die('calibration-core.json lacks derivations.docker_leg.ship_target_match - docker_leg derives from the core\'s data table only');
+  let neg = null;
+  for (const u of units) {
+    const low = u.text.toLowerCase();
+    const hits = [];
+    for (const k of keys) for (const m of low.matchAll(new RegExp('\\b' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))) hits.push({ at: m.index, k, negated: u.negatedColumn || NEGATION_WORDS.test(low.slice(0, m.index)) });
+    hits.sort((a, b) => a.at - b.at);
+    const first = hits.find((h) => !h.negated);
+    if (first) return { value: true, why: 'spec line ' + u.line + ': "' + smellFragment(u.text, first.at, first.k.length) + '" names a linux/server-class ship target (' + first.k + '), so verify-local runs the Linux-in-Docker leg before push' };
+    if (!neg && hits.length) neg = { line: u.line, k: hits[0].k, fragment: smellFragment(u.text, hits[0].at, hits[0].k.length) };
+  }
+  if (neg) return { value: false, why: 'spec line ' + neg.line + ': "' + neg.k + '" appears only in negation ("' + neg.fragment + '"), so no linux/server-class ship target is named and verify-local runs native-only' };
+  return { value: false, why: 'no linux/server-class ship target named in the spec (' + keys.join(', ') + '), so verify-local runs native-only - no Docker install for a deliverable that never ships to Linux' };
 }
 if (fromSpecPath) {
   let specRaw;
@@ -219,9 +246,9 @@ if (fromSpecPath) {
   for (const s of core.glance_smells || []) { if (s.mode === gMode && (s.spec_any || []).some((k) => spec.includes(k))) { note = s.note; break; } }
   const glance = 'Full / ' + gMode + ' / risk triggers: ' + (trig.length ? trig.join(', ') : 'none') + (note ? ' / note: ' + note : '') + ' [type accept; a mode word or trigger token corrects it]';
   const smells = negated.map((n) => 'mentioned only in negation: ' + n.trigger + ' ("' + n.fragment + '")');
-  // the lane fills ride the JSON only - the glance LINE is the ruled one line, unchanged.
+  // the lane fills and docker_leg ride the JSON only - the glance LINE is the ruled one line, unchanged.
   const lanes = core.derivations && core.derivations.test_lanes ? laneFills(runnerFor(spec)) : null;
-  if (asJson) process.stdout.write(JSON.stringify({ tier: 'Full', operating_mode: gMode, risk_triggers: trig, negated, glance, test_lanes: lanes }, null, 2) + '\n');
+  if (asJson) process.stdout.write(JSON.stringify({ tier: 'Full', operating_mode: gMode, risk_triggers: trig, negated, glance, test_lanes: lanes, derived: { docker_leg: dockerFromSpec(units) } }, null, 2) + '\n');
   else process.stdout.write([glance].concat(smells).join('\n') + '\n');
   process.exit(0);
 }

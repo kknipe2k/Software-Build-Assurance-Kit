@@ -42,12 +42,13 @@ If the round count exceeds the budget, surface to user before proceeding (per `C
 
 ## Handoff note
 
-> The next session's only memory. Eight required fields, none blank, none boilerplate — `validators/validate-retrospective.cjs` enforces the contract mechanically (it catches blank/placeholder/stock/typed-number fields; whether the content is TRUE is the stage-end review's job). Numbers are SEEDED from receipts or a named command, never typed. Keep the `contract: v2` line: it is what makes the `efficiency:` field required.
+> The next session's only memory. Nine required fields, none blank, none boilerplate — `validators/validate-retrospective.cjs` enforces the contract mechanically (it catches blank/placeholder/stock/typed-number fields; whether the content is TRUE is the stage-end review's job). Numbers are SEEDED from receipts or a named command, never typed. Keep the `contract: v3` line: it is what makes the `efficiency:` field and the `measure:` line required. The `measure:` line is copied from `node scripts/lib/read-ledger.cjs --measure <stage>` at the stage-end packet (the stage's minutes, the bytes it read and its lane runs); `stage-active --clear` prints the final one at the commit.
 >
 > **The efficiency line is fenced.** Never cut communication between terminals, the status lines, or any word to or from the owner. Reading is strategic, never reflexive: read what the work depends on, in full, and say what you skipped. Cut freely: serial runs that could be parallel, re-runs of green work, idle waits, decision-free round-trips. Name specific things; "read less" fails the line.
 
 ```handoff
-contract: v2
+contract: v3
+measure: {{the line from node scripts/lib/read-ledger.cjs --measure <stage> - <m> min open, <b> B read, lanes: fast <s> s x<n>, release <s> s x<n>}}
 landed: {{what landed — files, tests, run-of-record (the command + result reference)}}
 open: {{what is open — each item with its NAMED next owner (a stage id or person)}}
 next-agent: {{what the next agent must know — the gotchas, the sharp edges, the load-bearing choices}}

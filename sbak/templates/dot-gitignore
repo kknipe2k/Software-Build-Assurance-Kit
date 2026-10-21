@@ -11,15 +11,22 @@
 .claude/role
 .claude/active-mode
 
-# PROC-001 red-gate markers (shipped via the red-gate hook): the open-stage marker
-# and the per-stage red-approval marker. Per-session, never committed. Comments stay
-# on their OWN lines — an inline `#` becomes part of the pattern and ignores nothing.
+# PROC-001 red-gate markers (shipped via the red-gate hook): the open-stage marker,
+# the role recorded at open, and the per-stage red-approval marker. Per-session, never
+# committed. Comments stay on their OWN lines — an inline `#` becomes part of the
+# pattern and ignores nothing.
 .claude/stage-active
+.claude/stage-role
 .claude/red-approved
+# M33.F the stage views (scripts/stage-view.cjs): generated read surfaces, rebuilt from HEAD,
+# never committed.
+.claude/views/
 
 # The last lane summaries verify-local writes per run (fast / stage / release). Read
 # by `--reconcile` at closeout; local run state, never committed.
 .claude/verify-last-*.json
+# One line per lane run (M33.G): the stage's measure line counts them.
+.claude/verify-last-runs.jsonl
 
 # Build-receipt event ledgers (per-session JSONL written by the receipts
 # machinery; local observability data, never committed).
@@ -31,6 +38,8 @@
 .claude/channel/watch.*.json
 .claude/channel/send-token
 .claude/channel/outgoing.md
+.claude/channel/present.*.json
+.claude/channel/approval.json
 
 # Build-receipt reports (rendered JSON/HTML/MD views written by
 # `node scripts/build-receipts.cjs render`; local observability output). This

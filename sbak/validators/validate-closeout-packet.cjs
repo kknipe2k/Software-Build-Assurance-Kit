@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-closeout-packet.cjs
 //
 // The closeout floor (M30.I, audit fades 2 + 4, rows 48/49 - all RULED at M30.B):
@@ -33,6 +33,7 @@
 'use strict';
 
 const fs = require('fs');
+const { escapeRegExp } = require('./lib/escape-regexp.cjs'); // the shared payload escape: --ladder is a CLI arg
 
 function die(msg, code) { process.stderr.write(msg.endsWith('\n') ? msg : msg + '\n'); process.exit(code); }
 function readOrDie(f) {
@@ -79,7 +80,7 @@ function checkGap(file) {
 
 function checkLadder(milestone, file) {
   const t = readOrDie(file);
-  const re = new RegExp('^##\\s+\\d{4}-\\d{2}-\\d{2}[^\\n]*\\(' + milestone + '\\b', 'm');
+  const re = new RegExp('^##\\s+\\d{4}-\\d{2}-\\d{2}[^\\n]*\\(' + escapeRegExp(milestone) + '\\b', 'm');
   if (!re.test(t)) {
     return [`the release-state ledger has no row for ${milestone} - the ladder update is part of closing (row 49); append the milestone's rung before the closeout commit`];
   }

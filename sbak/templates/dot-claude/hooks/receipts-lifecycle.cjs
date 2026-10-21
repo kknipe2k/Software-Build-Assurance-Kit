@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -41,6 +41,10 @@
 // hashed `read_ref` (never the path - the privacy floor holds), and the boundary's gate
 // (approve-red for stage-open; read-ledger --check for verify/closeout) refuses when a
 // required read is unrecorded. Derivation + tokenizer: scripts/lib/read-ledger.cjs.
+//
+// PRESENCE (M33.G) - the second addition: at SessionStart and UserPromptSubmit a session with a
+// resolved role writes <its tree>/.claude/channel/present.<side>.json ({at, role}), the record the
+// stage-active gate reads for the orchestrator. A file write, never stdout; the exit is unchanged.
 //
 // Cross-platform (Node, no shell-isms). The require is __dirname-relative so it
 // resolves identically in the kit tree (templates/dot-claude/hooks →
@@ -150,6 +154,17 @@ function main() {
   if (typeof payload.session_id === 'string') raw.session = payload.session_id;
   const role = resolveRole(claudeDir);
   if (role) raw.role = role;
+  // PRESENCE (M33.G): a session that starts or takes a prompt is present. Each session writes its
+  // own tree's record - the orchestrator's is what the stage-active gate reads. One small atomic
+  // write, no git call, no stdout; a failure is swallowed and the one exit stays 0 (RCPT-09).
+  if ((hookName === 'SessionStart' || hookName === 'UserPromptSubmit') && role) {
+    try {
+      const file = path.join(claudeDir, 'channel', `present.${role === 'orchestrator' ? 'orchestrator' : 'work'}.json`);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file + '.tmp', JSON.stringify({ at, role }) + '\n');
+      fs.renameSync(file + '.tmp', file);
+    } catch (_) { /* presence is bonus here; the receipt below still lands */ }
+  }
   // M26.F (Workstream 5): the by-phase axis is a REAL emitter — the open stage marker
   // (.claude/stage-active, written by scripts/stage-active.cjs) is stamped onto every
   // event as the allowlisted, format-checked `stage` field. Absent or malformed marker
@@ -219,19 +234,23 @@ function main() {
   // persisted (the J4 shape). Both readers on purpose: a builder in auto mode reads through
   // Bash, so a Read-only ledger would be a false floor.
   if (hookName === 'PostToolUse' && readLedger && payload.tool_input && typeof payload.tool_input === 'object') {
-    let refs = [];
+    let reads = [];
     try {
       // M32.A: refs canonicalise against the REPO ROOT, so a read from a subfolder session
       // hashes to the same read_ref the gate derives from the stage prompt's <read_first>.
       if (payload.tool_name === 'Read' && typeof payload.tool_input.file_path === 'string') {
-        const r = readLedger.refForPath(root, payload.tool_input.file_path);
-        if (r) refs = [r];
+        const c = readLedger.canonicalRel(root, payload.tool_input.file_path);
+        if (c) reads = [{ canonical: c, abs: path.resolve(root, payload.tool_input.file_path) }];
       } else if (payload.tool_name === 'Bash' && typeof payload.tool_input.command === 'string') {
-        refs = readLedger.readRefsFromBash(root, payload.tool_input.command);
+        reads = typeof readLedger.readPathsFromBash === 'function' ? readLedger.readPathsFromBash(root, payload.tool_input.command)
+          : readLedger.readRefsFromBash(root, payload.tool_input.command).map((ref) => ({ ref }));
       }
-    } catch (_) { refs = []; }
-    for (const ref of refs) {
+    } catch (_) { reads = []; }
+    for (const rd of reads) {
+      const ref = rd.ref || readLedger.refFor(rd.canonical);
       const fr = { schema: receipts.SCHEMA_VERSION, at, event: 'file_read', emitter: hookName, read_ref: ref };
+      // M33.F: a read of a stage view carries its header's HEAD blob ids, which the gate judges.
+      try { if (rd.canonical && typeof readLedger.isViewPath === 'function' && readLedger.isViewPath(rd.canonical)) { const vs = readLedger.viewSourcesAt(rd.abs); if (vs) fr.view_sources = vs; } } catch (_) { /* no ids on the row */ }
       if (typeof payload.session_id === 'string') fr.session = payload.session_id;
       if (role) fr.role = role;
       if (stageTok && receipts.STAGE_RE.test(stageTok)) fr.stage = stageTok;

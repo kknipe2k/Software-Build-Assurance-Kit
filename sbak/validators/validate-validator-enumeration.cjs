@@ -1,18 +1,19 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-validator-enumeration.cjs
 //
-// The artifact-enumeration coherence gate, EXTENDED to four artifact classes. It diffs the
+// The artifact-enumeration coherence gate, EXTENDED to five artifact classes. It diffs the
 // actual SHIPPED artifact set — by glob, so no count is ever hardcoded —
 // against the CATALOGS that enumerate it, and BLOCKS when a shipped artifact is absent from any of
 // its catalogs. This is the structural fix for the C1/C2 class: hooks, scripts, and slash commands
 // had catalogs in several places that nothing reconciled, so a missing row shipped undetected.
 //
-// ── THE FOUR ARTIFACT CLASSES, EACH WITH ITS OWN CATALOG SET (the per-class catalog model) ───────
+// ── THE FIVE ARTIFACT CLASSES, EACH WITH ITS OWN CATALOG SET (the per-class catalog model) ───────
 //   • validators  (validators/*.cjs)                    → validators/README.md · CLAUDE.md · templates/PROJECT-CLAUDE.md
 //   • hooks       (templates/dot-claude/hooks/*.cjs)     → CLAUDE.md · scripts/fixtures/golden-bootstrap/rows.json
 //   • scripts     (templates/scripts/*.cjs)              → CLAUDE.md · scripts/fixtures/golden-bootstrap/rows.json
 //   • commands    (templates/dot-claude/commands/*.md)   → CLAUDE.md · scripts/fixtures/golden-bootstrap/rows.json
+//   • skills      (templates/dot-claude/skills/*/SKILL.md) → CLAUDE.md · scripts/fixtures/golden-bootstrap/rows.json
 //   The 'CLAUDE.md' catalog is a probed sentinel: it resolves to bootstrap/SCAFFOLD-TABLES.md
 //   when that file exists (the kit repo since the M24.A tables re-home) and to the root
 //   CLAUDE.md otherwise (generated projects). See catalogPath().
@@ -75,8 +76,10 @@ const path = require('path');
 // resolved to this path (overridable with --rows). Kept in ONE place.
 const DEFAULT_ROWS = 'scripts/fixtures/golden-bootstrap/rows.json';
 
-// The four artifact classes. `dir`/`re` drive the glob (the shipped set); `catalogs` is the class's
+// The artifact classes. `dir`/`re` drive the glob (the shipped set); `catalogs` is the class's
 // own doc-set scope (the per-class model). The ONLY place to edit the class↔catalog mapping.
+// M33.G: skills (templates/dot-claude/skills/<name>/SKILL.md - /approve-red, /send, /closeout, the
+// human-only keystrokes) are a fifth class, named by `<name>/SKILL.md`, in the same two catalogs.
 const CLASSES = [
   { name: 'validator', dir: 'validators', re: /\.cjs$/,
     catalogs: ['validators/README.md', 'CLAUDE.md', 'templates/PROJECT-CLAUDE.md'] },
@@ -85,6 +88,8 @@ const CLASSES = [
   { name: 'script', dir: 'templates/scripts', re: /\.cjs$/,
     catalogs: ['CLAUDE.md', 'ROWS'] },
   { name: 'command', dir: 'templates/dot-claude/commands', re: /\.md$/,
+    catalogs: ['CLAUDE.md', 'ROWS'] },
+  { name: 'skill', dir: 'templates/dot-claude/skills', skills: true,
     catalogs: ['CLAUDE.md', 'ROWS'] },
 ];
 
@@ -105,6 +110,7 @@ function shipped(root, cls) {
   const dir = path.join(root, cls.dir);
   let names;
   try { names = fs.readdirSync(dir); } catch (_) { return []; }
+  if (cls.skills) return names.filter((n) => fs.existsSync(path.join(dir, n, 'SKILL.md'))).map((n) => `${n}/SKILL.md`).sort();
   return names.filter((n) => cls.re.test(n)).sort();
 }
 
@@ -191,7 +197,7 @@ function main() {
   }
 
   if (findings.length === 0) {
-    process.stdout.write(`ok    all ${totalArtifacts} artifact(s) across ${CLASSES.length} classes (validators/hooks/scripts/commands) enumerated in all their catalogs.\n`);
+    process.stdout.write(`ok    all ${totalArtifacts} artifact(s) across ${CLASSES.length} classes (validators/hooks/scripts/commands/skills) enumerated in all their catalogs.\n`);
     process.exit(0);
   }
 

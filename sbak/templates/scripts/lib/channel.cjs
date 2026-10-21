@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/lib/channel.cjs
 //   (kit source of truth: templates/scripts/lib/channel.cjs)
 //
@@ -28,7 +28,8 @@
 //     (paraphrase) or a dead peer stops the pickup with one line naming the fault and the
 //     human-courier fallback. A poisoned inbox is not partially trusted.
 //   * PERSISTENCE: the two logs are tracked and committed with the stage; cursor.<role>, turn,
-//     watch.<role>.json and send-token are transient (gitignored). Append-only means append-only:
+//     watch.<role>.json, send-token, present.<side>.json and approval.json are transient
+//     (gitignored). Append-only means append-only:
 //     nothing here rewrites, compacts or truncates a log.
 //
 // Dependency-free Node, Windows-native (file polling, no inotify). Requires only the frozen
@@ -240,6 +241,8 @@ function append(cwd, res, cls, kind, bodyBuf, opts) {
     reply_to: Number.isInteger(o.replyTo) ? o.replyTo : null,
   };
   if (cls === 'stage-packet') msg.state = stateOf(res.tree);
+  // A field the publish derived (an amendment's amended hashes) rides beside state, never over a stamp.
+  if (o.extra) for (const k of Object.keys(o.extra)) if (!(k in msg)) msg[k] = o.extra[k];
   msg.body = bodyBuf.toString('utf8');
   fs.mkdirSync(res.root, { recursive: true });
   // Torn-tail isolation (the receipts sink's rule): a non-newline tail gets its newline first.
@@ -300,7 +303,141 @@ function stampLine(cwd) {
 
 // The liveness probe (KF-67: a watch marker is not a listener): `channel status` and the
 // stage-active listening gate (M32.1.C, V-27) judge a marker's pid with this one function.
-function pidAlive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return !!(e && e.code === 'EPERM'); } }
+// R-49 (M33.A): on Linux a process that has exited but is not yet reaped by its parent is a
+// zombie - kill(pid, 0) still succeeds on it, so /proc/<pid>/stat's state field decides (Z is
+// dead). The state follows the last ')' because the command name in parentheses may hold spaces.
+// Windows has no zombies; elsewhere, or with /proc unreadable, kill decides as before.
+function pidAlive(pid) {
+  try { process.kill(pid, 0); } catch (e) { if (!(e && e.code === 'EPERM')) return false; }
+  if (process.platform === 'linux') {
+    try { const s = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); if (s.slice(s.lastIndexOf(')') + 2).split(' ')[0] === 'Z') return false; } catch (_) { /* no /proc entry readable: kill decides */ }
+  }
+  return true;
+}
+
+// M33.G: a marker is a listener only while its pid is alive AND its start token is fresh.
+// The watcher touches its marker every poll, so a marker older than max(60 s, 4 polls) belongs to a
+// watcher that stopped polling, or names a pid the OS handed to something else. The one judge: the
+// stage-active gate and `channel status`. -> { state: none | dead | stale | listening, m, mtime }
+const LISTEN_FRESH_MS = 60 * 1000;
+function watcherState(marker) {
+  if (!fs.existsSync(marker)) return { state: 'none', m: null, mtime: 0 };
+  let m = null; let mtime = 0;
+  try { m = JSON.parse(fs.readFileSync(marker, 'utf8')); mtime = fs.statSync(marker).mtimeMs; } catch (_) { return { state: 'dead', m: null, mtime: 0 }; }
+  if (!m || !Number.isInteger(m.pid) || m.pid <= 0 || !pidAlive(m.pid)) return { state: 'dead', m, mtime };
+  const poll = Number.isInteger(m.poll_ms) && m.poll_ms > 0 ? m.poll_ms : 750;
+  const fresh = /^[0-9a-f]{16}$/.test(String(m.token || '')) && Date.now() - mtime <= Math.max(LISTEN_FRESH_MS, 4 * poll);
+  return { state: fresh ? 'listening' : 'stale', m, mtime };
+}
+
+// The bell (M33.G, D3: native messaging is a bell only). One line naming the peer session's
+// worktree folder and the seq just written; the model rings the peer with it through the harness's
+// cross-session message. It carries no content and binds nothing: the jsonl is the record. Null
+// when there is no peer tree (Lite, or before the split): the watcher stays the wake.
+function peerFolder(res) {
+  if (SIDE[res.role] !== 'work') return path.basename(res.tree);
+  const orch = (worktrees(res.tree) || []).filter((w) => normPath(w) !== normPath(res.tree)).find((w) => { const r = readRole(w); return r.state === 'resolved' && r.role === 'orchestrator'; });
+  return orch ? path.basename(orch) : null;
+}
+function bellLine(res, seq) {
+  const folder = peerFolder(res);
+  return folder ? `channel: bell for the ${PEER_NAME[PEER[res.role]]} session (worktree ${folder}): channel: seq ${seq} landed - run: node scripts/channel.cjs pickup` : null;
+}
+
+// ---------------------------------------------------------------------------
+// The approval record and the amendment (M33.G; M32-FIELD-REPAIR §4.4's in-stage half).
+// approve-red records the test files changed at approval with their hashes; an amendment (edits
+// INSIDE those files) carries the amended hashes; the orchestrator's ack appends them. A new test
+// file or a new stage id is scope - the owner's /approve-red. Voiding an approval on a material
+// change and the un-approve are not here (M34).
+// ---------------------------------------------------------------------------
+const APPROVAL_FILE = 'approval.json';
+// The test globs of the red-gate hook (pretooluse-red-gate.cjs BUILTIN_ALLOW's test half) plus the
+// project's own entries in .claude/red-gate-allow.txt - the files a red-stop may write.
+const TEST_GLOBS = Object.freeze(['**/*.test.*', '**/*.spec.*', '**/*_test.*', '**/*_spec.*', '**/test/**', '**/tests/**', '**/__tests__/**']);
+function globToRe(glob) {
+  let re = '';
+  for (let i = 0; i < glob.length; i++) {
+    const c = glob[i];
+    if (c === '*') {
+      if (glob[i + 1] === '*') { i++; if (glob[i + 1] === '/') { re += '(?:[^/]+/)*'; i++; } else re += '.*'; }
+      else re += '[^/]*';
+    } else if (c === '?') re += '[^/]';
+    else if ('.+^${}()|[]\\'.indexOf(c) !== -1) re += '\\' + c;
+    else re += c;
+  }
+  return new RegExp('^' + re + '$');
+}
+function testGlobs(tree) {
+  const globs = TEST_GLOBS.slice();
+  try {
+    for (const raw of fs.readFileSync(path.join(tree, '.claude', 'red-gate-allow.txt'), 'utf8').split(/\r?\n/)) {
+      const l = raw.trim();
+      if (l && !l.startsWith('#') && l.replace(/[*/]/g, '') !== '') globs.push(l);
+    }
+  } catch (_) { /* optional */ }
+  return globs.map(globToRe);
+}
+function fileSha(tree, rel) { try { return crypto.createHash('sha256').update(fs.readFileSync(path.join(tree, rel))).digest('hex'); } catch (_) { return null; } }
+// The test files `git status` names (changed or untracked, never a deletion), sorted.
+function changedTestFiles(tree) {
+  const raw = git(tree, ['status', '--porcelain', '--untracked-files=all', '-z']);
+  if (raw === null) return [];
+  const res = testGlobs(tree);
+  const out = [];
+  const parts = raw.split(NUL);
+  for (let i = 0; i < parts.length; i++) {
+    const e = parts[i];
+    if (e.length < 4) continue;
+    const st = e.slice(0, 2); const rel = e.slice(3).replace(/\\/g, '/');
+    if (st[0] === 'R' || st[0] === 'C') i++; // the source path follows a rename or copy
+    if (st.indexOf('D') !== -1) continue;
+    if (res.some((re) => re.test(rel))) out.push(rel);
+  }
+  return Array.from(new Set(out)).sort();
+}
+function readApproval(root) { try { const j = JSON.parse(fs.readFileSync(path.join(root, APPROVAL_FILE), 'utf8')); return j && Array.isArray(j.files) ? j : null; } catch (_) { return null; } }
+// approve-red, after its marker: the open stage, the released seq (or null) and the test files' hashes.
+function writeApproval(tree, stage, seq) {
+  const files = changedTestFiles(tree).map((p) => ({ path: p, sha256: fileSha(tree, p) })).filter((f) => f.sha256);
+  const rec = { stage, approval_seq: Number.isInteger(seq) ? seq : null, at: new Date().toISOString(), files, acks: [] };
+  writeAtomic(path.join(tree, '.claude', 'channel', APPROVAL_FILE), JSON.stringify(rec, null, 2) + '\n');
+  return rec;
+}
+// The publish's check on --kind amendment. -> { ok:true, amended:[{path, sha256}] } | { ok:false, line }
+function amendment(res) {
+  const rec = readApproval(res.root);
+  if (!rec) return { ok: false, line: 'channel: amendment refused - no approval record for the open stage (/approve-red writes .claude/channel/approval.json); a test change before the release belongs in the red-stop' };
+  const open = stageOf(res.tree);
+  if (rec.stage !== open) return { ok: false, line: `channel: amendment refused - the open stage is ${open} and the approval was for ${rec.stage}; a new stage id is scope: the owner's /approve-red` };
+  const latest = new Map(rec.files.map((f) => [f.path, f.sha256]));
+  for (const a of rec.acks || []) for (const f of a.files || []) latest.set(f.path, f.sha256);
+  const added = changedTestFiles(res.tree).filter((p) => !latest.has(p));
+  if (added.length) return { ok: false, line: `channel: amendment refused - it adds a test file ${added[0]}; that is scope: the owner's /approve-red` };
+  const amended = Array.from(latest.keys()).sort().map((p) => ({ path: p, sha256: fileSha(res.tree, p) })).filter((f) => f.sha256 !== latest.get(f.path));
+  if (!amended.length) return { ok: false, line: 'channel: amendment refused - no approved test file changed since the approval (nothing to amend)' };
+  return { ok: true, amended };
+}
+// The orchestrator's ack: the ONE orchestrator publish with no /send token, and only in reply to
+// an amendment not yet acknowledged. It appends the amended hashes to the record.
+function ackAmendment(cwd, res, seq) {
+  const theirs = readLog(path.join(res.root, FILES.work), 'work', res.repo);
+  if (theirs.fault) return { ok: false, line: theirs.fault.line.replace('pickup stopped', 'ack stopped') };
+  const m = theirs.msgs.find((x) => x.seq === seq);
+  if (!m) return { ok: false, line: `channel: ack answers only an amendment - builder seq ${seq} does not exist` };
+  if (m.class !== 'stage-packet' || m.kind !== 'amendment') return { ok: false, line: `channel: ack answers only an amendment - seq ${seq} is ${m.class}/${m.kind}` };
+  const mine = readLog(outboxFile(res), 'orchestrator', res.repo);
+  if (mine.fault) return { ok: false, line: mine.fault.line.replace('pickup stopped', 'ack stopped') };
+  const prev = mine.msgs.find((x) => x.kind === 'ack' && x.reply_to === seq);
+  if (prev) return { ok: false, line: `channel: amendment seq ${seq} is already acknowledged (seq ${prev.seq})` };
+  const files = Array.isArray(m.amended) ? m.amended : [];
+  const body = `ack: amendment seq ${seq} acknowledged - ${files.length} amended test file(s): ${files.map((f) => f.path).join(', ') || 'none'}`;
+  const r = append(cwd, res, 'courier', 'ack', Buffer.from(body, 'utf8'), { replyTo: seq });
+  if (!r.ok) return r;
+  const rec = readApproval(res.root);
+  if (rec) { rec.acks = (rec.acks || []).concat([{ seq, files }]); writeAtomic(path.join(res.root, APPROVAL_FILE), JSON.stringify(rec, null, 2) + '\n'); }
+  return r;
+}
 
 // The human's consumption (approve-red.cjs): advance past a pending approval-request.
 function consumeApproval(cwd) {
@@ -319,4 +456,6 @@ module.exports = {
   readRole, repoIdentity, worktrees, resolve, readLog, readCursor, writeCursor, readTurn, writeTurn,
   unreadFor, append, sendGate, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
   stampLine, consumeApproval, emit, writeAtomic, pidAlive, trunkOf, aheadOf,
+  LISTEN_FRESH_MS, watcherState, bellLine, peerFolder,
+  APPROVAL_FILE, TEST_GLOBS, changedTestFiles, readApproval, writeApproval, amendment, ackAmendment,
 };

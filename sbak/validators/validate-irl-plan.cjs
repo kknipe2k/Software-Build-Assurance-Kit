@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-irl-plan.cjs
 //
 // THE IRL/HITL PRESENCE FLOOR (M29.A half b) — a Full-tier project's spec must carry the

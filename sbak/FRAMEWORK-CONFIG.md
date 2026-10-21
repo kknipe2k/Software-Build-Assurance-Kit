@@ -34,7 +34,7 @@ Each tier is a **default toggle bundle**. You can override any individual toggle
 ```
                    Lite          Full (default)
 Discovery Qs       2             5
-Scaffold files     ~53           ~120
+Scaffold files     ~54           ~121
 Approvals/stage    1 (per-PR)    1 (per-stage)
 Retro axes         1             2
 Ledger             CHANGELOG     append-only* (+ CI when risk-armed)
@@ -164,7 +164,7 @@ The Lite tier defaults to `always` deliberately: non-expert users benefit most f
 
 ### 4.5 Read-first cap — `read_first_cap`
 
-Controls the maximum number of files in any read-first list (per stage, per project orientation, per session).
+Controls the maximum number of files in any read-first list (per stage, per project orientation, per session). The cap counts the entries a session reads itself: `host` entries (Claude Code loads them), `on-demand` entries (no boundary requires them) and the bootstrap's `phase-N` entries are listed outside it.
 
 | Value | Cap | Default for |
 |---|---|---|
@@ -621,7 +621,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Lite
 
 - One discovery conversation (~15 minutes): what is this, what isn't it, success criteria.
-- Bootstrap generates ~53 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
+- Bootstrap generates ~54 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
 - Per stage: agent codes, surfaces a brief retrospective paragraph, you approve at PR time.
 - No append-only ledger. No formal ADRs (use commit messages). No cumulative closeout review.
 - Web-verify defaults: agent leans on current best practices for library choices, version pins, idiomatic patterns.
@@ -630,7 +630,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~120 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +3 files when a declared risk trigger arms the ledger CI, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`.)
+- Bootstrap generates ~121 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +3 files when a declared risk trigger arms the ledger CI, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`.)
 - Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
 - Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.

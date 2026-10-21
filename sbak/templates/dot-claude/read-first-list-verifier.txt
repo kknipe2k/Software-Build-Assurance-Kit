@@ -29,7 +29,8 @@
 # approve-red) | verify (/verify step 1) | closeout (/closeout step 1) | phase-0/1/3 (bootstrap) | on-demand.
 CLAUDE.md  when: host - Claude Code loads it itself
 project-config.md  when: session-start - tier + verifier_mode
-docs/build-prompts/M01-foundation.md  when: verify - the Phase doc: the contract Stage V verifies against
+view: <stage>  when: verify - the Stage V view: its section, the scope block, the findings template, never a retrospective (/verify step 1 builds it)
+docs/build-prompts/M01-*.md  when: on-demand - the whole Phase doc: the contract Stage V verifies against, stage by stage
 spec/project-spec.md  when: verify - the spec: behaviour claims are checked against it
 docs/gates.md  when: verify - the gate matrix the milestone claims to have passed
 docs/app-map.md  when: verify - every surface here gets driven, not read

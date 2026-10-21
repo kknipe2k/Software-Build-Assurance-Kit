@@ -94,7 +94,7 @@ Three values:
 
 **Reconciling with §1.1's "CI enforces."** The load-bearing constraint is that a *non-bypassable* check exists — the second pair of eyes that doesn't get tired. Under `cloud` that's the matrix; under `hybrid` it's the required PR smoke check (`--no-verify` skips the local hook, never a required status check); under `local_first` it's the self-hosted backstop or the release gate. The locus moves; the constraint holds. What changes is that the *bulk* of verification stops paying cloud minutes — it runs locally where it's free.
 
-**Lanes — what each gate runs.** `scripts/verify-local.cjs` carries three lanes over one task registry: **`fast`** (every push, the pre-push hook default) runs the tests the diff affects by the runner's own change scoping, the open milestone's own test files, and every test whose name carries `always` — native leg only; **`stage`** (the stage-end gate) runs the same over the whole milestone diff; **`release`** (closeout, Stage V, version tags) runs every test on every leg and ignores the settled marker. Narrowing is by proof, never by hope: when the stack has no native selection, the base cannot be resolved, or the diff touches a lockfile / CI / runner config, the lane widens to full and says so. Closed milestones' tests are marked settled in `tests/.settled.json` by `/closeout` — after `--reconcile` proves the union (every discovered test is in exactly one of settled / active; the last fast run plus the settled set covers all of them; release passed at this head). A settled test whose module the diff touches runs anyway. The full floor never leaves: it runs at every closeout, so a missed cross-module regression is caught within one milestone, never later. `node scripts/verify-local.cjs --list` prints the lanes.
+**Lanes — what each gate runs.** `scripts/verify-local.cjs` carries three lanes over one task registry: **`fast`** (every push, the pre-push hook default) runs the tests the diff affects by the runner's own change scoping, the open milestone's own test files, and every test whose name carries `always` — native leg only; **`stage`** (the stage-end gate) runs the same over the whole milestone diff; **`release`** (closeout, Stage V, version tags) runs every test on every leg and ignores the settled marker. Narrowing is by proof, never by hope: when the stack has no native selection, the base cannot be resolved, or the diff touches a lockfile / CI / runner config, the lane widens to full and says so. Closed milestones' tests are marked settled in `tests/.settled.json` by `/closeout` — after `--reconcile` proves the union (every discovered test is in exactly one of settled / active; the last fast run plus the settled set covers all of them; release passed at this head, on these contents). A settled test whose module the diff touches runs anyway. The full floor never leaves: it runs at every closeout, so a missed cross-module regression is caught within one milestone, never later. `node scripts/verify-local.cjs --list` prints the lanes.
 
 **The bootstrap flow (greenfield) and the migration recipe.** Standing this up is four phases — run at Phase 0/3 of bootstrap for a new project, or as a one-time migration for a project that arrives with a fat matrix:
 
@@ -311,6 +311,7 @@ Before any code. This is the most underspecified phase in most methodologies and
 - TDD micro-cycle per step (Part 3.5)
 - **Red-stop (gate 2; default-on at Full, `red_review: off` to disable):** after the tests are written and confirmed failing for the right reason, the agent STOPS, surfaces the test files + failing output, and waits for the human to approve the *test design* before implementing to green. This is the third approval gate — the per-stage loop is **plan-approval → red-approval → stage-end** when the toggle is on (two gates when off). It catches shallow or wrong-contract tests at the cheapest moment, before implementation locks them in; it matters most when the build runs on a weaker model. See `STAGE-PROMPT-PROTOCOL.md` `<await_red_approval>`.
 - All gates green; zero warnings, zero skips, no `--no-verify`
+- **One release lane per stage.** The pre-push lane is `fast`; the release lane runs at closeout, Stage V and version tags, and inside a work stage at most once, on the final bytes, before the stage-end packet, which names that run; a second run needs a `release-run-reason:` line in the packet. `channel.cjs publish` refuses a stage-end packet that quotes two release runs without one.
 - Self-correction loop: max 3 iterations; if still failing, surface (Part 4.3)
 - **App-Map delta (close-gate deliverable, when `app_map: on`):** the build session writes only the **delta** for surfaces this stage touched — new/changed `docs/app-map.md` entries + a "what's new this stage" line (the `<app_map_delta>` element in the Phase doc). It does *not* reconcile the whole map (that's closeout's job). If the stage touched a surface-source path with no UX change, the omission is logged with an `app-map-unchanged: <reason>` token — never a silent skip.
 - Agent fills `[END]` retrospective: three-axis scoring + threshold gates + decisions for next stage
@@ -837,7 +838,7 @@ A unit of work is done when:
 
 1. Run `git status` to confirm what's staged, unstaged, untracked.
 2. Run `git diff --stat HEAD` to summarize the diff.
-3. Re-run all gates one final time. Capture exact results.
+3. Re-run all gates one final time. Capture exact results. The release lane runs at closeout, Stage V and version tags, and inside a work stage at most once, on the final bytes, before the stage-end packet, which names that run; a second run needs a `release-run-reason:` line in the packet.
 4. Draft the PR description per the project's PR template.
 5. Surface to the human: title, description, diff stat, gate results, retrospective. State explicitly: *"I will not commit until you approve."*
 6. Wait. Do not commit, do not push, do not open a PR.
@@ -854,6 +855,8 @@ A unit of work is done when:
 When unsure: `git status`. State what you see. Wait.
 
 ### After approval
+
+**Who commits.** At Full, the builder's work ends at the stage-end packet: the orchestrator commits on the owner's stamp word (`ORCHESTRATOR.md` §5, the stage end) - it verifies in the builder worktree, transcribes the stamp, commits, clears the markers and pushes per step 3 below. At Lite, the one session commits on the word. The rule above is unchanged: no commit without the owner's word, and the word is the stamp.
 
 1. Stage exactly what's intended. Use specific filenames; not `git add -A` for surprise commits.
 2. `git commit -s -m "..."` — DCO sign-off mandatory. Conventional Commits format. Session URL in footer.

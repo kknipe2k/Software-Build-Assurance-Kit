@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // validators/lib/escape-regexp.cjs
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 //
 // THE ONE REGEX-ESCAPE for the shipped payload (M29.C, the CodeQL class fix).
 //

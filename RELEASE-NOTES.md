@@ -1,30 +1,33 @@
-# Release notes - v1.0.7
+# Release notes - v1.0.8
 
-**This is the current release of the Software Build Assurance Kit - a field-repair hotfix of the GA release.** The 1.0 bar is an integrity bar, not a feature bar: five decision-record properties, each demonstrated absent-of-defect **by execution** on verifier-built fixtures, in the authoritative CI environment. The evidence trail for every claim below is public in this repository's checks and in `example-receipt.html`.
+**This is the current release of the Software Build Assurance Kit - speed and defects on the GA release, with the migrate door for projects on earlier releases.** The 1.0 bar is an integrity bar, not a feature bar: five decision-record properties, each demonstrated absent-of-defect **by execution** on verifier-built fixtures, in the authoritative CI environment. The evidence trail for every claim below is public in this repository's checks and in `example-receipt.html`.
 
 Read this page before you adopt the kit for anything you care about. It says what works, what does not, and what evidence backs each claim. The release history in the same shape is in [CHANGELOG.md](CHANGELOG.md).
 
-## What v1.0.7 changes
+## What v1.0.8 changes
 
-No interface changes to the build loop. This hotfix closes what a real multi-milestone build on v1.0.6 and three hands-on first-run drives surfaced: gates that passed where they should have failed, and walls a new project hit on its first day.
+No interface changes to the build loop. This release closes what a real multi-milestone build on v1.0.7 surfaced, each defect beside the trim that lives in the same mechanism, and opens the door a project on an earlier release needed:
 
-- **A project's own test lanes run its tests on Windows.** The test command reaches `cmd` intact; before, it lost its quoting, so `node --test` matched no file and the lane still passed. A `node --test` run that reports zero tests now fails the step and names the pattern to check. While a project tracks no test file at all - the bootstrap commit, before the first test stage - the step is a named skip instead, so the first push goes through; the release lane still fails a project with no tests.
-- **The red gate judges the right repository.** It resolves the repository from the file it guards, from any folder, and judges a new file reached through a junction or a symbolic link by its real parent. It allows the scratch homes and refuses every other path outside the repository. The release command is accepted only in its one approved form, and its receipt binds the orchestrator's verdict to the human's click.
-- **The bootstrap drops in, boots and goes.** It ends with its own commit, `kit-update --ready` prints one READY line (or the NOT READY lines that say what is missing), and every role's turn ends on one loud line saying what the person does next.
-- **First-run walls removed.** The installer makes the trunk `main`, and the tools that list unpushed work resolve it. The spec examples land where the examples gate looks. `docker_leg: false` in `project-config.md` gives a native-only release lane for a project with no Linux target. A fresh App-Map passes its own check. A stage opens only while the orchestrator is listening.
-- **Checks tightened.** The append-only check walks every commit, CI runs one gate per step with no blocking gate that lacks an engine, and the session-start stamp reports its true byte budget.
+- **The migrate door.** `kit-update --migrate` upgrades the bootstrap-filled wiring files - the pre-commit hook and `scripts/verify-local.cjs` - from the version the project was built on: it shows the change file by file first, then merges three ways from that version's template with your fills kept. A project records its kit pin and a sha256 per kit file, so a hand-edited kit file is named, never overwritten. The manual change stays in the changelog for a reader who prefers it.
+- **The red gate protects its whole control set.** The role file, the stage marker and the hook itself are inside the gate, the seven Edit deny rules and the hook share one list of control paths, the role is judged as it was recorded at stage open, and PowerShell is judged like Bash.
+- **The project's floor fails closed.** `--reconcile` binds to a fingerprint of the contents the release lane tested and refuses a tree changed after it, one line per path. An unreadable test summary fails. `docker_leg` is derived from the spec on the Full path. A stage end that quotes a second release lane without its reason is refused.
+- **A session reads what its stage needs.** One view per stage and role is assembled from the Phase doc section and the ledger rows it names, bound to the sources' commit blobs; the release gate refuses an unbuilt, stale or unread view. A stage opens on about a tenth of the bytes it read before. The bootstrap gets its own reading manifest.
+- **Ceremony and liveness.** The two terminals ring each other when a packet lands and the log stays the record; a stage opens while the orchestrator is present or listening; `/send`, `/approve-red` and `/closeout` are skills only a person can invoke; an edit inside an approved test file is acknowledged without a keystroke; every stage records its minutes and bytes from the ledgers; every shipped launch line sets the variable that keeps the channel watcher alive.
+- **Checks tightened.** The live-watcher check passes on Linux CI. The closeout's ladder check accepts every milestone id.
 
-### Upgrading a v1.0.6 project
+### Upgrading a v1.0.6 or v1.0.7 project
 
-Run the same command as the install: download this release's `sbak-install.cjs` into the project folder, start `claude` there, type `sbak-install`, and answer `upgrade`. The upgrade refreshes `sbak/` and the kit-managed scripts. It leaves the project's own `scripts/verify-local.cjs` at v1.0.6 by design, because the bootstrap filled it with the project's test commands - and on Windows that file is where the test-lane fix lives. Make that change by hand from "Manual change for a v1.0.6 project" in the [CHANGELOG](https://github.com/kknipe2k/Software-Build-Assurance-Kit/blob/main/CHANGELOG.md): edits 1 to 5 are required, 6 to 8 are optional.
+Run the same command as the install: download this release's `sbak-install.cjs` into the project folder, start `claude` there, type `sbak-install`, and answer `upgrade`. The upgrade refreshes `sbak/` and the kit-managed scripts and leaves the bootstrap-filled wiring files at the installed version, named. Then run `node scripts/kit-update.cjs --migrate` (a v1.0.6 project records no kit pin, so it names its version once: `--pin 1.0.6`): the table first, then `--apply-all` to write. The hand-applied path remains in the [CHANGELOG](https://github.com/kknipe2k/Software-Build-Assurance-Kit/blob/main/CHANGELOG.md) under "Manual change for a v1.0.7 project" and "... for a v1.0.6 project".
 
 ### Carried from the previous release, unchanged
 
-No code or interface changes. That release realigned every user-facing document with the release before it as it shipped, and restored the check that let them drift:
+The previous release's field repair, proven on the gates a generated project runs on itself:
 
-- **Every document re-run through the per-document loop.** The README, QUICKSTART, QUICKSTART-COPILOT, HOW-IT-WORKS, WHY-THIS-KIT, STAGE-LOOP, the example receipt, these notes, the changelog, SECURITY, the limitations page and the two entry pages under `docs/` describe the kit as the previous release shipped it: the one-file installer, the opening on what you want to build, lazy orientation, the channel between the two terminals, the verification lanes. Every count on a shipped surface reads its machine source through a regression check that failed before the fix landed.
-- **Two lines of substance moved.** The `.claude/` template README names the playbook at the path each layout ships it to, and QUICKSTART's troubleshooting row no longer points at guidance the trimmed README does not carry.
-- **The doc check restored as mechanism.** A ritual change must name the documents it touches, the cut waits on a doc-loop record derived from the manifest's user-facing set, and the checklist that governs a documentation pass ships in the tree.
+- **A project's own test lanes run its tests on Windows.** The test command reaches `cmd` intact; a `node --test` run that reports zero tests fails the step; a project with no test file yet gets a named skip the release lane still fails.
+- **The red gate judges the right repository.** It resolves the repository from the file it guards, from any folder, judges a file reached through a junction or a symbolic link by its real parent, allows the scratch homes and refuses every other path outside the repository.
+- **The bootstrap drops in, boots and goes.** It ends with its own commit, `kit-update --ready` prints one READY line, and every role's turn ends on one loud line saying what the person does next.
+- **First-run walls removed.** The installer makes the trunk `main`; the spec examples land where the examples gate looks; `docker_leg: false` gives a native-only release lane; a stage opens only while the orchestrator is listening.
+- **Checks tightened.** The append-only check walks every commit, CI runs one gate per step, and the session-start stamp reports its true byte budget.
 
 ## What GA means here
 
@@ -51,7 +54,7 @@ Each was verified twice: by the framework's own gates, and by an independent fre
 - **Verification lanes over one registry.** `verify-local --lane fast|stage|release` - three filters over a single task registry, with `release` derived as the complete registry so omission is structurally impossible. Every run emits a deterministic JSON summary (verdicts, named skip reasons, durations in stated milliseconds, a registry hash). The bare invocation is the complete floor; `fast` and `stage` are developer feedback and are never release evidence.
 - **An enforcement layer that is itself tested.** Validators and hooks guard the stage protocol, the retrospective stamp, test honesty, risk declarations, destructive operations, release readiness, entry-doc drift, spec-example coverage, and more - and an enumeration check in CI proves each shipped validator is catalogued everywhere that lists them. A regression suite proves each check still fires; `sbak/scripts/bake-inheritance.cjs` ships as the effectiveness proof a reader can run.
 - **Evidence you can read.** Sessions leave append-only event ledgers. A collector turns those plus committed history into a deterministic report bound to real commits, showing findings, fixes, and rework - with unknown values reported as unknown rather than as zero.
-- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifacts are `sbak-v1.0.7-starter.zip` and, beside it, `sbak-install.cjs` - both attested.
+- **Reproducible, provenance-carrying artifacts.** The starter archive is built from a signed tag, never from a working tree. The same tag always produces the same hash. This release's artifacts are `sbak-v1.0.8-starter.zip` and, beside it, `sbak-install.cjs` - both attested.
 - **Runs on a supported runtime.** CI and the generated workflows pin Node 24 (Active LTS), and a floor check derives the minimum Node the kit's own prescribed test form requires from the prescription itself - the pins and the prescription cannot silently diverge again.
 
 ## Limitations

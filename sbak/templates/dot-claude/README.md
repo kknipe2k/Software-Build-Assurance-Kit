@@ -1,6 +1,6 @@
 # `.claude/` - project-scoped Claude Code config and hooks
 
-This directory ships with the **Software Build Assurance Kit**. After bootstrap, it lives at the project root as `.claude/` and wires Claude Code's SessionStart hook to print each session's orientation stamp and to record the reads that follow it.
+This directory ships with the **Software Build Assurance Kit**. Its files are installed at the project root as `.claude/` (this README stays here, with the templates) and wire Claude Code's SessionStart hook to print each session's orientation stamp and to record the reads that follow it.
 
 ## What's in here
 
@@ -8,7 +8,7 @@ This directory ships with the **Software Build Assurance Kit**. After bootstrap,
 |---|---|
 | `settings.json` | Project-scoped Claude Code settings. Registers the SessionStart hooks as one group with no matcher, so every source fires them (`startup`, `resume`, `clear`, `compact`, `fork`, and any later one). |
 | `hooks/session-start-read-first.cjs` | The hook (Node.js). Reads `role`, picks the matching read-first list, caps to the configured size, and prints the STAMP LAYER: the stamp line, the session identity, an orientation manifest (every entry with its `when:` boundary) and the memory-is-a-hint rule; only entries tagged `when: session-start` are inlined. The rest are read at their boundary with the agent's own tools; the receipts adapter records each read and the boundary's gate (`approve-red` for `stage-open`) checks the ledger. |
-| `read-first-list.txt` | Plain-text list for **work-mode** sessions (build stages A–D). One path per line, relative to repo root. May reference retrospectives. |
+| `read-first-list.txt` | Plain-text list for **work-mode** sessions (build stages A–D). One path per line, relative to repo root. May reference retrospectives. Two more entry forms: `view: <stage>`, the open stage's view that `node scripts/stage-view.cjs <stage>` builds from HEAD (the gate refuses a stale one), and a `*` in the last path segment, which must match exactly one file. Its `phase-N` entries are the bootstrap's own reads, listed only while the bootstrap is in progress. |
 | `read-first-list-verifier.txt` | Plain-text list for **verifier-mode** sessions. DELIBERATELY OMITS prior retrospectives - the fresh-context bias guard for Stage V. |
 | `read-first-list-orchestrator.txt` | Plain-text list for **orchestrator-mode** sessions (Full). Loads `ORCHESTRATOR.md` first, then `CLAUDE.md`, then standing methodology + live milestone state. Includes gap-analysis (the orchestrator needs full state). |
 | `read-first-list-refactor.txt` | Plain-text list for **refactor-mode** sessions (the milestone-boundary health check). Reads under the strictest bias guard in the kit. |

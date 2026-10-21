@@ -175,7 +175,7 @@
     <div class="step">
       <div class="n">3 · BOOTSTRAP</div>
       <div class="t">Spec, milestones, scaffold</div>
-      <div class="d">Generates 53 files for Lite, 120 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
+      <div class="d">Generates 54 files for Lite, 121 for Full (this tree's own derived figures). Then hands off to the build loop.</div>
     </div>
     <div class="step">
       <div class="n">4 · BUILD LOOP</div>
@@ -412,41 +412,37 @@
   <p><b>Then stay in this window.</b> Claude goes straight on in the same session and asks what you want to build; the line under <code>Done</code> tells you to switch back to auto mode (Shift+Tab).</p>
   <p><b>Upgrading is the same command.</b> The report becomes an upgrade report, <code>sbak/</code> and the live kit files refresh, files you modified are kept and named, and the previous version stays in git history.</p>
   <h3>The manual path: the release ZIP</h3>
-  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.7-starter.zip</code>.</p>
+  <p>Download the starter ZIP from the releases page and verify it: the <code>.sha256</code> checksum and, stronger, <code>gh attestation verify</code> (SLSA build attestation). The asset name follows the pattern <code>sbak-&lt;version&gt;-starter.zip</code>; the current release is <code>sbak-v1.0.8-starter.zip</code>.</p>
   <p>Run the sequence from the folder the ZIP downloaded to (usually <code>Downloads</code>), and replace <code>&lt;projects-path&gt;</code> with wherever you keep code - the point is that the project gets a real home, not <code>Downloads</code>.</p>
   <pre><code># macOS / Linux
-unzip sbak-v1.0.7-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
+unzip sbak-v1.0.8-starter.zip -d &lt;projects-path&gt;/my-project &amp;&amp; cd &lt;projects-path&gt;/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
-export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
-claude</code></pre>
+CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus</code></pre>
   <pre><code># Windows (cmd)
 mkdir &lt;projects-path&gt;\my-project
-tar -xf sbak-v1.0.7-starter.zip -C &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.8-starter.zip -C &lt;projects-path&gt;\my-project
 cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
-set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
-claude</code></pre>
+set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 &amp;&amp; claude --model opus</code></pre>
   <pre><code># Windows (PowerShell)
 mkdir &lt;projects-path&gt;\my-project
-tar -xf sbak-v1.0.7-starter.zip -C &lt;projects-path&gt;\my-project
+tar -xf sbak-v1.0.8-starter.zip -C &lt;projects-path&gt;\my-project
 cd &lt;projects-path&gt;\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
-$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"
-claude</code></pre>
-  <p>The <code>CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP</code> line keeps Claude Code from stopping the kit's background channel watcher when memory runs low; Claude Code reads it only at launch, so it goes on its own line before <code>claude</code>.</p>
+$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus</code></pre>
+  <p>The <code>CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP</code> variable keeps Claude Code from stopping the kit's background channel watcher when memory runs low; it works only when set on the line that starts <code>claude</code>.</p>
   <p><b>The adopt step verifies itself, and its exit code is the contract.</b> Exit 0 means adoption COMPLETE: every required enforcement layer is active. Anything less exits non-zero and says why: exit 1 is <code>ADOPTION INCOMPLETE</code> with the missing control named and a <code>repair:</code> command that runs as printed. An incomplete install cannot silently look complete. Re-running <code>--adopt</code> is always safe; a clean re-run changes nothing.</p>
   <p><b>Prefer to clone?</b> The alternate path (same rule - give it a real home): <code>git clone https://github.com/kknipe2k/Software-Build-Assurance-Kit.git &lt;projects-path&gt;/my-project</code>, then <code>cd &lt;projects-path&gt;/my-project</code>, the same adopt step, and <code>claude</code>. One heads-up: <code>origin</code> still points at the kit's repository until the bootstrap resets it at handoff; don't <code>git push</code> before then.</p>
   <h3>Start</h3>
-  <pre><code>export CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1
-claude
+  <pre><code>CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
 # The kit's CLAUDE.md auto-loads.
 # The first response is the read-first stamp.
 # Tell it what you want to build - a paragraph is enough.
 # It shows the calibration back as one acceptance line; type accept.</code></pre>
-  <p>Windows: <code>set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1</code> in cmd, <code>$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"</code> in PowerShell, in place of the <code>export</code> line.</p>
+  <p>Windows: <code>set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 &amp;&amp; claude --model opus</code> in cmd, <code>$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus</code> in PowerShell, in place of the first line.</p>
   <h3>Then</h3>
   <p>The agent runs bootstrap (spec, milestones, scaffold) and replaces the kit's CLAUDE.md with your project's own. It ends with its own commit and one READY line; you then open the orchestrator, and its first turn walks you through opening the build window - that split is where the channel starts. From then on, every session inherits the calibrated methodology automatically. You approve at each stage boundary; the agent does the implementation.</p>
   <p class="note">The full session layer runs in Claude Code. Other agents work with the enforcement split above: the Git hooks and CI stay mechanical everywhere (the README's host table and the Copilot QUICKSTART cover that path). Cross-platform: the hooks are Node, which the kit already requires; no bash or WSL needed on Windows.</p>
@@ -455,7 +451,7 @@ claude
   <table>
     <tr><th>&nbsp;</th><th><span class="pill lite">Lite</span></th><th><span class="pill full">Full</span> (default)</th></tr>
     <tr><td>Best for</td><td>Under a week, low audit needs</td><td>A second reader, an audit need, or a multi-week horizon</td></tr>
-    <tr><td>Scaffold files</td><td>53</td><td>120</td></tr>
+    <tr><td>Scaffold files</td><td>54</td><td>121</td></tr>
     <tr><td>Approvals</td><td>Per PR</td><td>Per stage</td></tr>
     <tr><td>Retrospective</td><td>Brief paragraph</td><td>2 axes (process + product)</td></tr>
     <tr><td>Audit ledger</td><td>CHANGELOG only</td><td>Append-only (advisory; CI-enforced when a risk trigger is declared)</td></tr>

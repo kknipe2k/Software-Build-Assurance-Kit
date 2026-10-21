@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-claude-integrity.cjs
 //
 // The project's CLAUDE.md self-integrity gate (M30.I) - the one check that would

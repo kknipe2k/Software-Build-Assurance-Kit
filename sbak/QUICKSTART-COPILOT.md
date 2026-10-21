@@ -43,11 +43,11 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.7-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.8-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.7-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.7-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.7-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.7-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.8-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.8-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.8-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.8-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -60,7 +60,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.7-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.8-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -71,7 +71,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.7-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -94,7 +94,7 @@ Then open the folder in VS Code: **File, then Open Folder, pick `my-project`.** 
 
 On this host that contract is worth restating: the session-layer hooks never run in Copilot, so **the Git hooks adopt arms are the only mechanical wall between an agent mistake and your history**. Don't skip adopt here.
 
-**Upgrading is the ZIP again:** download the new release, extract it over your project, and re-run the same adopt command - your own project files are untouched and adopt re-arms the hooks. **One warning that the installer's path does not carry:** extracting over an install **overwrites kit files you edited**, rather than keeping and naming them the way `sbak-install` does on Claude Code, so save any changes you made under `sbak/` first. Refresh your `.github/copilot-instructions.md` copy afterwards (§6) - `CLAUDE.md` may have changed in the new release.
+**Upgrading is the ZIP again:** download the new release, extract it over your project, and re-run the same adopt command - your own project files are untouched and adopt re-arms the hooks. **One warning that the installer's path does not carry:** extracting over an install **overwrites kit files you edited**, where `sbak-install` on Claude Code stops and names them first, so save any changes you made under `sbak/` first. Then commit, and bring the kit files the bootstrap copied into your project up to the new release with `node scripts/kit-update.cjs --migrate`: it shows each file's change first and writes nothing until you re-run it with `--apply-all`, merging your pre-commit hook and `scripts/verify-local.cjs` three ways so your fills are kept. Refresh your `.github/copilot-instructions.md` copy afterwards (§6) - `CLAUDE.md` may have changed in the new release.
 
 ### Clone the repo - the alternate path
 
@@ -151,7 +151,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 
 ## 4. Describe what you want to build
 
-**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 53 files for Lite, 120 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 54 files for Lite, 121 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle, and **before any disk write the agent states the blast radius** ("I'll create about N files across `.claude/`, `.githooks/`, `scripts/`, `docs/`, `.github/`, plus root files") so you consent to the footprint up front. In Agent Mode, VS Code additionally shows the diff for every file write - **Apply** or **Discard**, per edit.
 
@@ -180,7 +180,7 @@ Claude Code enforces the session layer with hooks in `.claude/`; Copilot never r
 | **SessionStart hook** (auto-loads the read-first list) | Fires automatically at every session start; prints the `[read-first stamp]` | No hook - the instructions file directs the read; **you verify the orientation stamp yourself** and re-ask if it is missing (§5.6) |
 | **Mode guard** (the role check) | A hook structurally **blocks** a stage prompt whose mode disagrees with `.claude/role` | Honor-system - **state the mode at the start of each chat** and check the stamp (§5.6) |
 | **Red-gate** (blocks implementation edits until the RED tests are approved) | A hook hard-blocks edit tools until `/approve-red` records the release | Honor-system - the agent must **stop at the red-stop and wait for your explicit approval**; nothing mechanical holds it if it doesn't (§5.4) |
-| **Stage invocation** - the eight slash commands: `/stage`, `/verify`, `/refactor`, `/closeout`, `/on-track`, `/approve-red`, `/listen`, `/send` | All eight run from the matching `.claude/commands/*.md` | **None of them run** - Copilot has no slash commands. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** (§5.7). `/on-track` and `/approve-red` have none - you ask for the backlog check in words, and your approval of the red-stop is the release. `/listen` and `/send` have nothing to drive (the channel row below) |
+| **Stage invocation** - the eight slash commands: `/stage`, `/verify`, `/refactor`, `/closeout`, `/on-track`, `/approve-red`, `/listen`, `/send` | All eight run from the matching `.claude/commands/*.md`, or `.claude/skills/*/SKILL.md` for `/approve-red`, `/send` and `/closeout` | **None of them run** - Copilot has no slash commands. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** (§5.7). `/on-track` and `/approve-red` have none - you ask for the backlog check in words, and your approval of the red-stop is the release. `/listen` and `/send` have nothing to drive (the channel row below) |
 | **The channel** - the append-only log the two sessions pass packets over | Stage packets travel it automatically in both directions; `/listen` and `/send` are its two ends, and every turn reports what it moved | **Does not run here.** You carry every packet between the two windows by hand - that is what §5.5 means when it calls you the conduit |
 | **Build receipts** (session-event ledgers under `.claude/receipts/`) | A session hook records events; `render` folds them into the receipt | No session events - receipts render from committed history only, so the receipt is thinner on this host |
 
@@ -241,7 +241,7 @@ Verify each by checking the `mode=` value in the orientation stamp: the instruct
 
 ### 5.7 Invoking stages without slash commands
 
-Claude Code runs the eight commands in `.claude/commands/`; Copilot runs none of them. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** - each opens the right doc, extracts the right prompt, and runs it as if pasted. Pasting the raw XML yourself always works too.
+Claude Code runs the eight commands in `.claude/commands/` and `.claude/skills/`; Copilot runs none of them. Four have typed stand-ins the instructions file teaches: **`Stage M01 A`**, **`Verify M01`**, **`Refactor M01`**, **`Closeout M01`** - each opens the right doc, extracts the right prompt, and runs it as if pasted. Pasting the raw XML yourself always works too.
 
 The other four have no stand-in, and it is worth knowing which job each one is handing back to you:
 

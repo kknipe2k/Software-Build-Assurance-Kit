@@ -311,7 +311,7 @@ The rule does NOT apply to:
 2. **Fill in the retrospective `[END]` section.** Per `prompts/RETROSPECTIVE-TEMPLATE.md`. Three axes scored, threshold gates evaluated, outcome marked, decisions for next stage written specifically (cite file:line, name the change, name the gate).
 3. **Draft the commit message** per the Phase doc's `X.6 Commit Message` section.
 4. **Surface for approval.** Show the user: diff stat, gate results, retrospective `[END]`, draft commit message. State explicitly: *"Stage X is ready. I will not commit until you approve."*
-5. **On approval:** commit and push. The branch tracks the parent milestone (e.g., `m02/stage-b`).
+5. **On the stamp word:** the orchestrator commits (in Lite, this session does) and pushes per BUILD-PLAYBOOK §4.7 - a milestone branch pushes at the closeout. The branch tracks the parent milestone (e.g., `m02/stage-b`).
 6. **Hand off:** the next stage starts in a fresh session with its own CLI prompt from the Phase doc.
 
 ### Closeout (stage E)

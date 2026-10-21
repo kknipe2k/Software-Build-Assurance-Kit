@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // session-start-read-first.js
 //
 // Claude Code SessionStart hook. Auto-loads the read-first orientation files
@@ -60,6 +60,16 @@
 //     in list order; what it withholds is named on a `NOT in context` stamp line and marked in
 //     the manifest. `--check` also refuses a listed Phase doc from a milestone other than the
 //     open stage's, and a budget key whose value is not a non-negative integer.
+//   - M33.F - CONTEXT ASSEMBLY. Two entry forms, resolved through scripts/lib/read-ledger.cjs (one
+//     resolver for the loader, `--check` and the gate): `view: <stage>  when: <boundary>` names the
+//     open stage's generated view (.claude/views/<stage>.<role>.md; `no stage open` and `not built`
+//     are states, never skips), and a `*` in an entry's last segment resolves to exactly one file
+//     (zero or two is a dead entry). A list carrying `phase-N` entries shows them, with its `host`
+//     entries, only while the bootstrap is in progress (project-config.md not at HEAD, the one
+//     probe below) and names the project entries in one count line; after the bootstrap commit the
+//     phase entries leave the manifest. read_first_cap counts the entries a session reads itself:
+//     `host`, `on-demand` and `phase-N` entries sit outside it (R-68 Q2). One stamp line states the
+//     files and bytes left to read at each lazy boundary - the stamp's own count.
 //
 // Output is captured by Claude Code as additional context for the session.
 // Failure modes (file missing, list missing) surface as warnings, not hard
@@ -78,6 +88,12 @@ const { execSync, spawnSync } = require('child_process');
 // load-bearing: orientation that cannot find its resolver has nothing honest to anchor on,
 // and the install self-integrity check owns the missing-module case.
 const hookRoot = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'hook-root.cjs'));
+// M33.F: the glob and view resolvers live with the gate (one resolver). Absent, those two entry
+// forms are named as unresolvable and every other entry loads as before.
+let readLedger = null;
+try { readLedger = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'read-ledger.cjs')); } catch (_) { readLedger = null; }
+const NO_RESOLVER = 'cannot resolve: scripts/lib/read-ledger.cjs is absent';
+function resolvePath(rootDir, p) { return p.indexOf('*') === -1 ? { rel: p } : readLedger ? readLedger.resolveListPath(rootDir, p) : { dead: NO_RESOLVER }; }
 
 // Shared, spelling-tolerant config reader (I7). Tolerates the THREE project-config.md
 // spellings for a scalar setting — the markdown table row `| key | value |`, the field
@@ -142,9 +158,20 @@ function withinCeiling(total, budget) {
 // scripts/lib is not installed. `<path>  when: <boundary>  [- why]`; no when: = session-start.
 const WHEN_VOCAB = ['session-start', 'host', 'stage-open', 'verify', 'closeout', 'phase-0', 'phase-1', 'phase-3', 'on-demand'];
 const WHEN_DEFAULT = 'session-start';
+// M33.F: the view form's one target token, and the boundaries a view is read at.
+const VIEW_TARGET = '<stage>';
+const VIEW_WHEN = ['stage-open', 'verify', 'closeout', 'on-demand'];
 function parseListLine(line) {
   const l = String(line || '').trim();
   if (!l || l.startsWith('#')) return null;
+  const v = /^view:\s*(\S*)\s*(.*)$/.exec(l);
+  if (v) {
+    const wm = /^when:\s*([A-Za-z0-9-]+)\s*(?:-\s*(.*))?$/.exec(v[2]);
+    const when = wm ? wm[1].toLowerCase() : v[2];
+    const reason = v[1] !== VIEW_TARGET ? `the one view form is view: ${VIEW_TARGET} (the open stage's view)`
+      : !wm || VIEW_WHEN.indexOf(when) === -1 ? `a view is read at when: ${VIEW_WHEN.join(' / ')}` : '';
+    return { path: 'view: ' + v[1], kind: 'view', target: v[1], when, why: wm ? (wm[2] || '').trim() : '', explicit: true, valid: !reason, reason };
+  }
   const sp = l.search(/\s/);
   const p = sp === -1 ? l : l.slice(0, sp);
   const rest = sp === -1 ? '' : l.slice(sp).trim();
@@ -409,12 +436,20 @@ if (process.argv.includes('--check')) {
   // M32.1.C (V-23): the lists this project's roles load under its operating_mode - never every
   // read-first-list*.txt on disk.
   const lists = selectedLists(root, operatingMode(root));
+  // M33.F: --check walks what the loader can select (CFI-08) - after the bootstrap commit the
+  // loader never lists a phase-N entry, so those entries are no longer orientation to check.
+  let ended = null;
+  const bootstrapOver = () => (ended === null ? (ended = bootstrapEnded(root) === true) : ended);
   for (const lf of lists) {
     const entries = loadList(path.join(root, '.claude', lf)) || [];
     for (const e of entries) {
-      if (!e.valid) { probs.push(`.claude/${lf}: ${e.path} - unknown when: ${JSON.stringify(e.when)} (one of: ${WHEN_VOCAB.join(', ')})`); continue; }
+      if (e.valid && /^phase-\d+$/.test(e.when) && bootstrapOver()) continue;
+      if (!e.valid) { probs.push(`.claude/${lf}: ${e.path} - ${e.reason || `unknown when: ${JSON.stringify(e.when)} (one of: ${WHEN_VOCAB.join(', ')})`}`); continue; }
+      if (e.kind === 'view') continue; // generated by scripts/stage-view.cjs; its state is the gate's to judge
       if (!isInsideRepo(root, e.path)) { probs.push(`.claude/${lf}: ${e.path} - escapes the repo root (DF-001)`); continue; }
-      if (!fs.existsSync(path.join(root, e.path))) probs.push(`.claude/${lf}: ${e.path} - resolves to no file (a dead orientation entry)`);
+      const rp = resolvePath(root, e.path);
+      if (rp.dead) probs.push(`.claude/${lf}: ${e.path} - ${rp.dead} (a dead orientation entry)`);
+      else if (!fs.existsSync(path.join(root, rp.rel))) probs.push(`.claude/${lf}: ${e.path} - resolves to no file (a dead orientation entry)`);
       const pd = open ? PHASE_DOC_RE.exec(normRel(e.path)) : null;
       if (pd && Number(pd[1]) !== open.nn) probs.push(`.claude/${lf}: ${e.path} - names milestone M${pd[1]} but the open stage is ${open.id}`);
     }
@@ -570,7 +605,25 @@ if (all === null) {
   process.exit(0);
 }
 
-const files = all.slice(0, cap);
+// M33.F (V-25): the bootstrap's own manifest. A list that carries phase-N entries shows them, with
+// its host entries, only while the bootstrap is in progress - the one probe (CFI-05) answers no -
+// and the project entries Phase 3 and 4 write are counted in one line instead; after the bootstrap
+// commit the phase entries leave the manifest. A list with no phase entry runs exactly as before.
+const PHASE_RE = /^phase-\d+$/;
+const hasPhase = all.some((e) => e.valid && PHASE_RE.test(e.when));
+const inBootstrap = hasPhase && bootstrapEnded(root) === false;
+const selected = !hasPhase ? all : all.filter((e) => (inBootstrap ? (!e.valid || e.when === 'host' || PHASE_RE.test(e.when)) : !(e.valid && PHASE_RE.test(e.when))));
+const laterCount = all.length - selected.length;
+// R-68 Q2: the cap counts the entries a session reads itself; host (Claude Code loads it),
+// on-demand (no boundary requires it) and phase-N (the bootstrap's) entries sit outside it.
+const UNCAPPED = ['host', 'on-demand', 'phase-0', 'phase-1', 'phase-3'];
+const files = [];
+const capDropped = [];
+let counted = 0;
+for (const e of selected) {
+  if (e.valid && UNCAPPED.indexOf(e.when) !== -1) { files.push(e); continue; }
+  if (counted < cap) { files.push(e); counted++; } else capDropped.push(e);
+}
 
 if (files.length === 0) {
   console.log('[read-first hook] WARN: read-first list is empty. Skipping auto-load.');
@@ -617,6 +670,18 @@ const badWhen = [];
 const manifest = []; // { path, when, why, note } — one line per entry in the stamp layer
 for (const e of files) {
   const f = e.path;
+  // M33.F: the view entry names the open stage's generated view - `no stage open` and `not built`
+  // are states the manifest says, never a skip; a built view counts its bytes.
+  if (e.kind === 'view') {
+    if (!e.valid) { badWhen.push(`${f} (${e.reason})`); continue; }
+    const os = openStage(root);
+    const rel = os && readLedger ? readLedger.viewRel(os.id, mode) : null;
+    const built = rel !== null && fs.existsSync(path.join(root, rel));
+    const label = !readLedger ? `${f} (${NO_RESOLVER})` : !os ? `${f} (no stage open)` : built ? `${rel} (${f})`
+      : `${f} -> ${rel} (not built - node scripts/stage-view.cjs ${os.id}${mode !== 'work' ? ' --role ' + mode : ''})`;
+    manifest.push({ path: label, when: e.when, why: e.why, note: '', withheld: false, bytes: built ? fs.statSync(path.join(root, rel)).size : null });
+    continue;
+  }
   // DF-001 (M16.B): repo-confinement FIRST — never read outside the repo root. A `..` /
   // absolute / symlink-out entry escapes into agent context; skip it LOUDLY (surfaced in the
   // K-skipped line with confinement wording), never emit its contents. Applies to every
@@ -630,20 +695,30 @@ for (const e of files) {
     badWhen.push(`${f} (when: ${e.when})`);
     continue;
   }
-  const abs = path.join(root, f);
+  // M33.F: a `*` in the last segment resolves to exactly one file, or the entry is dead.
+  const rp = resolvePath(root, f);
+  if (rp.dead) {
+    missing.push(`${f} (${rp.dead})`);
+    continue;
+  }
+  const rel = rp.rel;
+  const abs = path.join(root, rel);
   // Entries-resolve: every manifest entry is stat'd at session start — a dead LAZY entry fails loud here,
   // not at the phase that needs it.
   if (!fs.existsSync(abs)) {
     missing.push(f);
     continue;
   }
-  const entry = { path: f, when: e.when, why: e.why, note: e.explicit ? '' : ' (default)', withheld: false };
+  const entry = { path: rel === f ? f : `${rel} (${f})`, when: e.when, why: e.why, note: e.explicit ? '' : ' (default)', withheld: false, bytes: null };
   manifest.push(entry);
-  if (e.when !== 'session-start') continue; // the content layer is lazy — read at the boundary
+  if (e.when !== 'session-start') { // the content layer is lazy — read at the boundary
+    try { entry.bytes = fs.statSync(abs).size; } catch (_) { entry.bytes = null; }
+    continue;
+  }
   // Fence-aware: never read a deny-listed path into context (IPC-003). Under a present-but-
   // unparseable settings.json (fenceAll, DF-006) EVERY entry is fenced (fail-closed).
-  if (fenceAll || isFenced(f, denyGlobs)) {
-    fenced.push(f);
+  if (fenceAll || isFenced(rel, denyGlobs)) {
+    fenced.push(rel);
     continue;
   }
   const content = fs.readFileSync(abs, 'utf8');
@@ -654,12 +729,12 @@ for (const e of files) {
   if (overBudget || !withinCeiling(totalBytes + bytes, budget)) {
     overBudget = true;
     entry.withheld = true;
-    withheld.push(`${f} (${bytes} bytes)`);
+    withheld.push(`${rel} (${bytes} bytes)`);
     continue;
   }
   totalBytes += bytes;
   loaded++;
-  payloadOut += `### ${f} (${bytes} bytes)\n\n\`\`\`\n`;
+  payloadOut += `### ${rel} (${bytes} bytes)\n\n\`\`\`\n`;
   payloadOut += content;
   if (!content.endsWith('\n')) payloadOut += '\n';
   payloadOut += '```\n\n';
@@ -677,8 +752,8 @@ if (resumeText) console.log(resumeText); // M32.1.C (V-14): a new window mid-boo
 // LOUD truncation — a cap that drops list entries is announced (K kept of N,
 // with the first dropped name), never a silent hard-cut. Visibility only; the loader stays
 // fail-open (IPC-004), the cap still applies. `all[cap]` is the first entry past the cut.
-if (all.length > cap) {
-  console.log(`**[read-first stamp]** truncated: ${cap} of ${all.length} (${all.length - cap} dropped by read_first_cap; first dropped: ${all[cap].path})`);
+if (capDropped.length > 0) {
+  console.log(`**[read-first stamp]** truncated: ${cap} of ${counted + capDropped.length} (${capDropped.length} dropped by read_first_cap; first dropped: ${capDropped[0].path})`);
 }
 // I7: LOUD fallback — when the intended op/mode list was absent and a less-specific list
 // loaded, say so, rather than a bug_fix project quietly reading the greenfield list.
@@ -690,6 +765,20 @@ if (resolvedList !== intendedList) {
 if (withheld.length > 0) {
   console.log(`**[read-first stamp]** NOT in context: ${withheld.join(', ')} - read these files yourself before acting`);
 }
+// M33.F (V-25, R-68 Q3): during the bootstrap the project entries Phase 3 and 4 write are one line,
+// never "N skipped - orientation is INCOMPLETE".
+if (inBootstrap && laterCount > 0) {
+  console.log(`**[read-first stamp]** bootstrap in progress: ${laterCount} project entr${laterCount === 1 ? 'y is' : 'ies are'} read after the bootstrap commit; the phase entries below are the bootstrap's own reads.`);
+}
+// M33.F: the stamp's own count - the files and bytes left to read at each lazy boundary.
+const lazy = {};
+for (const e of manifest) {
+  if (e.when === 'session-start' || e.when === 'host') continue;
+  const b = lazy[e.when] || (lazy[e.when] = { files: 0, bytes: 0 });
+  if (typeof e.bytes === 'number') { b.files++; b.bytes += e.bytes; }
+}
+const lazyLine = WHEN_VOCAB.filter((w) => lazy[w]).map((w) => `${w} ${lazy[w].files} file${lazy[w].files === 1 ? '' : 's'}, ${lazy[w].bytes} bytes`).join('; ');
+if (lazyLine) console.log(`**[read-first stamp]** read at their when: ${lazyLine}`);
 if (skipped > 0) {
   console.log();
   console.log(`> ⚠️ **${skipped} read-first file(s) skipped** — orientation is INCOMPLETE; surface this before working:`);

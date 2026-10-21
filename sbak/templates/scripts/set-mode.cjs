@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -145,21 +145,22 @@ function doSplit(branch) {
   if (sh.note) process.stdout.write(sh.note + '\n');
   process.stdout.write(`Open the BUILD terminal and paste these lines, one at a time (${SHELL_FORMS[sh.shell].label}) - the guard refuses a wrong tree before the launch:\n\n`);
   process.stdout.write(SHELL_FORMS[sh.shell].cd(target) + '\n');
-  process.stdout.write(SHELL_FORMS[sh.shell].env + '\n');
   process.stdout.write(`node scripts/set-mode.cjs work --expect ${target}\n`);
-  process.stdout.write('claude\n');
-  const others = Object.keys(SHELL_FORMS).filter((s) => s !== sh.shell).map((s) => `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)} and ${SHELL_FORMS[s].env}`);
-  process.stdout.write(`(${others.join('; ')}; then the same two commands)\n`);
+  process.stdout.write(SHELL_FORMS[sh.shell].launch + '\n');
+  const others = Object.keys(SHELL_FORMS).filter((s) => s !== sh.shell).map((s) => `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)}, the same set-mode line, then ${SHELL_FORMS[s].launch}`);
+  process.stdout.write(`(other shells - ${others.join(' / ')})\n`);
 }
 
 // M32.1.A (drive note 9): the launch block renders in the shell the person pastes into, read from
-// the `shell` row of project-config.md (asked once in discovery). The variable stays on its own
-// line in every form: chained with && in cmd it stores the value with a trailing space.
+// the `shell` row of project-config.md (asked once in discovery). M33.G (R-57): the variable rides
+// the launch line in every form - it works only when set in the launching shell, and the trailing
+// space cmd's chained set stores is trimmed by Claude Code and the watcher alike. No --model here:
+// this script does not know the model (the orchestrator's first-turn block carries it).
 const REAP_VAR = 'CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP';
 const SHELL_FORMS = {
-  cmd: { label: 'cmd', cd: (p) => `cd /d ${p}`, env: `set ${REAP_VAR}=1` },
-  powershell: { label: 'PowerShell', cd: (p) => `cd "${p}"`, env: `$env:${REAP_VAR}="1"` },
-  bash: { label: 'bash', cd: (p) => `cd "${p}"`, env: `export ${REAP_VAR}=1` },
+  cmd: { label: 'cmd', cd: (p) => `cd /d ${p}`, launch: `set ${REAP_VAR}=1 && claude` },
+  powershell: { label: 'PowerShell', cd: (p) => `cd "${p}"`, launch: `$env:${REAP_VAR}="1"; claude` },
+  bash: { label: 'bash', cd: (p) => `cd "${p}"`, launch: `${REAP_VAR}=1 claude` },
 };
 function pasteShell(top) {
   const dflt = process.platform === 'win32' ? 'cmd' : 'bash';

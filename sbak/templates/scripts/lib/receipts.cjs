@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -175,7 +175,10 @@ const ALLOWED_FIELDS = Object.freeze([
   'emitter', 'tool_category', 'tool_use_id', 'marker', 'release', 'read_ref',
   'seq', 'channel_class', // M30.H: the channel events carry the message seq + its bounded class - never a body, hash or path
   'approval_seq', 'prompt_at', // M32.1.B (R-35 b): red_approved binds the orchestrator's word (the approval-request seq) to the human's click (the permission prompt's time)
+  'view_sources', // M33.F: a file_read of a stage view carries the view header's HEAD blob ids, in order - hashes, never paths
 ]);
+const VIEW_SOURCE_RE = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+const MAX_VIEW_SOURCES = 24;
 // The channel's class vocabulary (M30.H) - closed, mirrors scripts/lib/channel.cjs CLASSES.
 const CHANNEL_CLASSES = Object.freeze(['stage-open', 'stage-packet', 'clarification', 'courier', 'approval-request']);
 const CHANNEL_EVENTS = Object.freeze(['channel_published', 'channel_picked_up']);
@@ -261,6 +264,11 @@ function validateEvent(raw) {
   if ('read_ref' in event && (event.event !== 'file_read' || typeof event.read_ref !== 'string' || !READ_REF_RE.test(event.read_ref))) {
     delete event.read_ref;
     notes.push('field dropped (format check failed, or read_ref on a non-file_read event): read_ref');
+  }
+  if ('view_sources' in event && (event.event !== 'file_read' || !Array.isArray(event.view_sources) || event.view_sources.length === 0
+      || event.view_sources.length > MAX_VIEW_SOURCES || !event.view_sources.every((s) => typeof s === 'string' && VIEW_SOURCE_RE.test(s)))) {
+    delete event.view_sources;
+    notes.push('field dropped (not 1-24 blob ids, or view_sources on a non-file_read event): view_sources');
   }
   if ('approval_seq' in event && (event.event !== 'red_approved' || !Number.isInteger(event.approval_seq) || event.approval_seq < 1)) {
     delete event.approval_seq;

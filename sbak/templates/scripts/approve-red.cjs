@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/approve-red.cjs
 //
 // The HUMAN's action — gate 2 of the three-gate loop (plan -> RED -> stage-end).
@@ -130,11 +130,15 @@ if (pending && !pending.first) refuse(`approval-request seq ${pending.seq} is pe
 // proceeds without them is REFUSED here, one line naming the unread files. This replaced the
 // SessionStart hook's eager inline (the V104 instruction-skipping defence) — it does not add on
 // top of it. Marker semantics are unchanged; the check runs BEFORE the sacred rename.
+// M33.F: a `view: <stage>` entry requires the stage view, current against HEAD and read; a stale,
+// unbuilt, unhashable or unread view is refused with the line that names its rebuild.
 try {
   const rl = require('./lib/read-ledger.cjs');
   const res = rl.checkReads(process.cwd(), { boundary: 'stage-open', stage: stageId });
-  if (res.missing.length > 0) {
-    process.stderr.write(`approve-red: required reads not recorded for ${stageId}: ${res.missing.join(', ')} - read them, then re-run.\n`);
+  const lines = typeof rl.refusalLines === 'function' ? rl.refusalLines(res, 'approve-red', stageId)
+    : (res.missing.length > 0 ? [`approve-red: required reads not recorded for ${stageId}: ${res.missing.join(', ')} - read them, then re-run.`] : []);
+  if (lines.length > 0) {
+    process.stderr.write(lines.join('\n') + '\n');
     process.exit(2);
   }
 } catch (e) {
@@ -181,6 +185,11 @@ if (releasedSeq !== null) {
 } else {
   process.stdout.write(`release: no approval-request pending (--release-seq none) - ${clickText}\n`);
 }
+// THE APPROVAL RECORD (M33.G): the test files this release approves, by hash - what an amendment
+// is measured against and what the orchestrator's ack appends to. Silent, after the marker; a
+// record that cannot be written leaves the release standing and says so on stderr.
+try { require('./lib/channel.cjs').writeApproval(process.cwd(), stageId, releasedSeq); }
+catch (e) { process.stderr.write(`approve-red: note - the approval record (.claude/channel/approval.json) was not written (${e && e.message ? e.message : 'error'}); an amendment will be refused until it exists.\n`); }
 const extra = { stage: stageId, marker: 'red-approved' };
 if (releasedSeq !== null) extra.approval_seq = releasedSeq;
 if (click) extra.prompt_at = click.at;

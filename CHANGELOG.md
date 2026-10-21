@@ -2,9 +2,368 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.8 - 2026-10-21
+
+**The current release** - speed and defects on v1.0.7: every defect a real multi-milestone build on v1.0.7 surfaced is closed beside the trim in the same mechanism, and a v1.0.6 or v1.0.7 project takes this release's wiring files by one command; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop.
+
+- **Capabilities.** Everything in v1.0.7. `kit-update --migrate` upgrades the bootstrap-filled wiring files (the pre-commit hook and `verify-local`) from the version the project was built on, showing the change file by file first and merging three ways with your fills kept; a project records its kit pin and a sha256 per kit file. The red gate protects its whole control set (the role file, the stage marker, the hook itself) and judges the role recorded at stage open; PowerShell is judged like Bash. The project's release lane binds `--reconcile` to a fingerprint of the contents it tested and refuses a changed tree by path; an unreadable test summary fails; a second unreasoned release lane at a stage end is refused. A session reads one view assembled for its stage and role instead of the whole Phase doc (about a tenth of the bytes), and the bootstrap gets its own reading manifest. The two terminals ring each other when a packet lands, presence stands beside the watcher, `/send`, `/approve-red` and `/closeout` are human-only skills, and every shipped launch line keeps the watcher alive.
+- **Upgrading a v1.0.6 or v1.0.7 project.** Upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate` (a v1.0.6 project adds `--pin 1.0.6`); the manual change below remains for a reader who prefers to make it by hand.
+- **Limitations.** Unchanged from v1.0.7: [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** One fresh-context verifier round with the calibration self-test at zero false negatives, 30 of 30 planted defects killed, the six new gates driven from places the pins did not stand, this release candidate built, installed and migrated from a v1.0.7 project to READY, and the release lane green on the verified bytes; every new check mutation-tested.
+
+### Manual change for a v1.0.7 project
+
+**First, upgrade the kit folder.** The edits below assume the new kit is in `sbak/`. Download the new release's `sbak-install.cjs` into your project folder, start `claude` there, type `sbak-install`, and answer `upgrade` (the same command as the install). The upgrade refreshes `sbak/` and the kit-managed scripts. It leaves `scripts/verify-local.cjs` at v1.0.7 by design. Then make the edits below by hand.
+
+**Or let the kit make it.** With the new kit in `sbak/` and the upgrade committed, run `node scripts/kit-update.cjs --migrate`: it shows the change file by file first, and with `--apply-all` it merges `scripts/verify-local.cjs` three ways from the v1.0.7 template, keeping your fills. The steps below are the same change by hand.
+
+A project bootstrapped from v1.0.7 runs its own copy of `scripts/verify-local.cjs`, filled with the project's test commands at bootstrap. `kit-update --apply` refuses that file by design, because restoring it from the template would wipe those fills, so the change below is made by hand.
+
+- **What it fixes.** Two checks passed where they should have failed. `--reconcile` proved only that the release lane passed at the current commit, so an edit made after that run, or a new untracked file, reconciled on contents no lane had tested. And the test-count guard passed a `node --test` step whose summary it could not read: a chunk boundary inside the summary's first character, the dot reporter, a report sent to a file, and junit's count all passed.
+- **What changes.** Every lane records a fingerprint of the contents it tests beside the commit, and `--reconcile` refuses a tree whose contents changed after the release lane, one line per changed path. The run state the lanes and the stage loop write (the lane summaries, `.claude/measurements/`, the channel logs, the hook ledgers) stays out of the fingerprint, and `--list` prints that table. A `node --test` step whose summary cannot be read now fails, naming the reporter; junit's count is read; and a step the guard does not judge, such as `npm test`, says so on the run. Every run also appends one line to `.claude/verify-last-runs.jsonl`, which the stage's measure line counts.
+- **How.** Make the edits below in your project's `scripts/verify-local.cjs`. Each Find block appears exactly once in the v1.0.7 file. Edits 2, 3, 4, 6, 7, 8, 11, 12, 13 and 14 are required. Edits 1, 5, 9 and 10 are optional: they bring the comments and the `--list` output in line.
+
+**Edit 1 (optional): the header comment on the third proof.** Find these lines:
+
+```js
+// the settled set, cover every discovered file; (3) the release lane passed at this HEAD.
+// Only `--write` after all three touches tests/.settled.json (write-temp-rename).
+```
+
+Replace them with:
+
+```js
+// the settled set, cover every discovered file; (3) the release lane passed at this HEAD, on
+// these contents (the fingerprint every lane records before its first task; a tree changed
+// after that run is refused, path by path). Only `--write` after all three touches
+// tests/.settled.json (write-temp-rename).
+```
+
+**Edit 2 (required): the string decoder.** Find this line:
+
+```js
+const path = require('path');
+```
+
+Replace it with:
+
+```js
+const path = require('path');
+const { StringDecoder } = require('string_decoder');
+```
+
+**Edit 3 (required): the run-state table.** Find these lines:
+
+```js
+  { match: 'Dockerfile', why: 'container definition' },
+];
+```
+
+Replace them with:
+
+```js
+  { match: 'Dockerfile', why: 'container definition' },
+];
+
+// Run state: what a lane and the stage loop write while a lane runs or is reported. It stays out
+// of the contents fingerprint, so closeout does not refuse its own evidence. ONE table of exact
+// path prefixes (no globs); `--list` prints it.
+const RUN_STATE = [
+  { match: `${LAST_DIR}/verify-last-`, why: 'the lane summaries themselves' },
+  { match: '.claude/measurements/', why: 'evidence redirected while a lane runs' },
+  { match: '.claude/channel/', why: 'the channel logs; every packet appends' },
+  { match: '.claude/receipts/', why: 'the hook ledgers' },
+];
+```
+
+**Edit 4 (required): the contents fingerprint.** Find these lines:
+
+```js
+  return OUTSIDE_SOURCE.find((row) => (row.match.endsWith('/') ? n.startsWith(row.match) : (n === row.match || base.startsWith(row.match))));
+}
+```
+
+Replace them with:
+
+```js
+  return OUTSIDE_SOURCE.find((row) => (row.match.endsWith('/') ? n.startsWith(row.match) : (n === row.match || base.startsWith(row.match))));
+}
+const isRunState = (rel) => RUN_STATE.some((row) => norm(rel).startsWith(row.match));
+
+// The contents a lane tests, recorded beside its head: the tree of `git stash create` (index and
+// worktree as one tree, the stash list untouched; its commit carries a timestamp, so only the tree
+// is stable; empty output is a clean tree, so HEAD's), a digest of that tree's entries, and the
+// untracked files beside their blobs (stash create leaves them out). Run state is dropped from
+// both. Any git failure records { error }: the run says so once and --reconcile refuses it.
+function fingerprint(root) {
+  const run = (args, input) => spawnSync('git', args, { cwd: root, encoding: 'utf8', input, maxBuffer: 256 << 20, stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+  const why = (r, what) => `${what}: ${String(r.stderr || '').trim().split(/\r?\n/)[0] || (r.error ? r.error.message : `exit ${r.status}`)}`;
+  run(['update-index', '-q', '--refresh']); // a stat-only change (a copy, a touch) makes stash create exit 1, silently
+  const sc = run(['stash', 'create']);
+  if (sc.status !== 0) return { error: why(sc, 'git stash create') };
+  const tr = run(['rev-parse', '--verify', `${sc.stdout.trim() || 'HEAD'}^{tree}`]);
+  if (tr.status !== 0) return { error: why(tr, 'git rev-parse') };
+  const tree = tr.stdout.trim();
+  const ls = run(['ls-tree', '-r', '-z', '--full-tree', tree]);
+  if (ls.status !== 0) return { error: why(ls, 'git ls-tree') };
+  const entries = ls.stdout.split('\0').filter((e) => e && !isRunState(e.slice(e.indexOf('\t') + 1)));
+  const others = run(['ls-files', '--others', '--exclude-standard', '-z']);
+  if (others.status !== 0) return { error: why(others, 'git ls-files') };
+  const paths = others.stdout.split('\0').filter((p) => p && !isRunState(p)).sort();
+  const files = paths.filter((p) => !p.endsWith('/')); // a trailing slash is a nested repository
+  let blobs = [];
+  if (files.length) {
+    const ho = run(['hash-object', '--stdin-paths'], files.join('\n') + '\n');
+    if (ho.status !== 0) return { error: why(ho, 'git hash-object') };
+    blobs = ho.stdout.split(/\r?\n/).filter(Boolean);
+    if (blobs.length !== files.length) return { error: `git hash-object returned ${blobs.length} blob(s) for ${files.length} path(s)` };
+  }
+  const blobOf = new Map(files.map((p, i) => [p, blobs[i]]));
+  const untrackedFiles = paths.map((p) => [p, blobOf.get(p) || 'repository']);
+  const digest = (s) => 'sha256:' + crypto.createHash('sha256').update(s).digest('hex');
+  return { tree, tracked: digest(entries.join('\0')), untracked: digest(JSON.stringify(untrackedFiles)), untrackedFiles };
+}
+// One line per path that differs between the tested contents and these, the path last.
+function contentsDiff(root, was, now) {
+  const lines = [];
+  if (was.tracked !== now.tracked) {
+    if (git(root, ['cat-file', '-e', `${was.tree}^{tree}`]) === null) lines.push(`  (the tested tree ${String(was.tree).slice(0, 9)} is no longer in the object store, so the changed tracked paths cannot be named)`);
+    else {
+      for (const rec of (git(root, ['diff', '--no-renames', '--numstat', '-z', was.tree, now.tree]) || '').split('\0')) {
+        const m = /^(\S+)\t(\S+)\t([\s\S]+)$/.exec(rec);
+        if (m && !isRunState(m[3])) lines.push(`  changed (${m[1] === '-' ? 'binary' : `+${m[1]} -${m[2]}`})  ${m[3]}`);
+      }
+    }
+  }
+  if (was.untracked !== now.untracked) {
+    const before = new Map(was.untrackedFiles || []); const after = new Map(now.untrackedFiles);
+    for (const [p, b] of after) if (!before.has(p)) lines.push(`  added (untracked)  ${p}`); else if (before.get(p) !== b) lines.push(`  modified (untracked)  ${p}`);
+    for (const p of before.keys()) if (!after.has(p)) lines.push(`  removed (untracked)  ${p}`);
+  }
+  return lines;
+}
+```
+
+**Edit 5 (optional): the comment above the test-count guard.** Find these lines:
+
+```js
+// default runner is judged on the runner's OWN summary: `tests 0` fails the step. Other runners
+// already fail on no tests (pytest exits 5; vitest and jest print "No test files found" and exit
+// 1) and are not judged. The judged step pipes stdout and writes every chunk straight through as
+// it arrives, so the run stays live on screen; only a bounded tail is kept to read the summary
+// (spec `\u2139 tests N`, or tap `# tests N`: Node 20 and 22 print tap when stdout is a pipe).
+```
+
+Replace them with:
+
+```js
+// default runner is judged on the runner's OWN summary: `tests 0` fails the step, and so does a
+// summary that cannot be read (the dot reporter prints none; a reporter destination other than
+// stdout leaves the pipe empty) - no count is never a pass. Other runners already fail on no tests
+// (pytest exits 5; vitest and jest print "No test files found" and exit 1) and are not judged; nor
+// is a wrapper such as `npm test`, and every step the guard does not judge says so on the run. The
+// judged step pipes stdout and writes every chunk straight through as it arrives, so the run stays
+// live on screen; the chunks are decoded as one stream (a chunk boundary can split the 3-byte
+// `\u2139`), and only a bounded tail is kept to read the summary (spec `\u2139 tests N`, tap
+// `# tests N` - Node 20 and 22 print tap when stdout is a pipe - or junit `<!-- tests N -->`).
+```
+
+**Edit 6 (required): the summary reader.** Find these lines:
+
+```js
+  const rx = /^[^\S\n]*(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)[^\S\n]*$/gm;
+  const t = tail.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r\n/g, '\n');
+  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1]);
+  return n;
+}
+```
+
+Replace them with:
+
+```js
+  const rx = /^[^\S\n]*(?:(?:\u2139|#)[^\S\n]+tests[^\S\n]+(\d+)|<!--[^\S\n]*tests[^\S\n]+(\d+)[^\S\n]*-->)[^\S\n]*$/gm;
+  const t = tail.replace(/\x1b\[[0-9;]*m/g, '').replace(/\r\n/g, '\n');
+  for (let m = rx.exec(t); m; m = rx.exec(t)) n = Number(m[1] !== undefined ? m[1] : m[2]);
+  return n;
+}
+// The reporter shape an unreadable summary names: every --test-reporter value (none given: the
+// runner's default), then each destination that is not stdout.
+function reporterShape(cmd) {
+  const values = (flag) => [...cmd.matchAll(new RegExp(`${flag}[= ]("?)([^\\s"]+)\\1`, 'g'))].map((m) => m[2]);
+  const reporters = values('--test-reporter');
+  return (reporters.length ? reporters.join('+') : 'default') + values('--test-reporter-destination').filter((d) => d !== 'stdout').map((d) => `, destination ${d}`).join('');
+}
+```
+
+**Edit 7 (required): the judged step.** Find these lines:
+
+```js
+  if (!NODE_TEST.test(step.shell)) return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  return new Promise((resolve) => {
+    let tail = '';
+    const child = spawn(sh, args, Object.assign({ stdio: [io, 'pipe', io] }, opts));
+    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + b.toString('utf8')).slice(-65536); });
+    child.on('error', () => resolve(done(1)));
+    child.on('close', (code) => { // a signal leaves code null, which fails like the sync path
+      if (code !== 0 || testsRun(tail) !== 0) return resolve(done(code));
+      if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
+      if (!quiet) process.stdout.write(`${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
+```
+
+Replace them with:
+
+```js
+  if (!NODE_TEST.test(step.shell)) {
+    if (!quiet) process.stdout.write(`${DIM}note the tests-0 guard does not judge this step (it reads the runner's count only when the command itself runs node --test): ${step.cmd}${RESET}\n`);
+    return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
+  }
+  return new Promise((resolve) => {
+    let tail = '';
+    const dec = new StringDecoder('utf8');
+    const child = spawn(sh, args, Object.assign({ stdio: [io, 'pipe', io] }, opts));
+    child.stdout.on('data', (b) => { if (!quiet) process.stdout.write(b); tail = (tail + dec.write(b)).slice(-65536); });
+    child.on('error', () => resolve(done(1)));
+    child.on('close', (code) => { // a signal leaves code null, which fails like the sync path
+      tail = (tail + dec.end()).slice(-65536);
+      const n = code === 0 ? testsRun(tail) : null;
+      if (code !== 0 || (n !== null && n !== 0)) return resolve(done(code));
+      if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
+      if (!quiet) process.stdout.write(n === null
+        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(step.shell)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
+        : `${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
+```
+
+**Edit 8 (required): the third proof.** Find these lines:
+
+```js
+  // proof 3 - release passed at this head
+  const rel = readLast(root, 'release');
+  if (!rel || rel.schema !== SUMMARY_SCHEMA) return fail(`no release-lane summary at ${LAST_DIR}/verify-last-release.json - run --lane release at this head first`);
+  if (rel.verdict !== 'pass') return fail(`the last release lane did not pass (verdict ${rel.verdict})`);
+  if (rel.head !== head) return fail(`the last release lane ran at ${String(rel.head).slice(0, 9)}, not this HEAD ${head.slice(0, 9)} - re-run --lane release`);
+  say(`reconcile 3/3  release: the release lane passed at this head (${LAST_DIR}/verify-last-release.json, verdict pass, head ${head.slice(0, 9)} == HEAD)`);
+```
+
+Replace them with:
+
+```js
+  // proof 3 - release passed at this head, on these contents
+  const rel = readLast(root, 'release');
+  if (!rel || rel.schema !== SUMMARY_SCHEMA) return fail(`no release-lane summary at ${LAST_DIR}/verify-last-release.json - run --lane release at this head first`);
+  if (rel.verdict !== 'pass') return fail(`the last release lane did not pass (verdict ${rel.verdict})`);
+  if (rel.head !== head) return fail(`the last release lane ran at ${String(rel.head).slice(0, 9)}, not this HEAD ${head.slice(0, 9)} - re-run --lane release`);
+  const was = rel.contents;
+  if (!was || typeof was !== 'object') return fail(`the last release lane's summary records no contents fingerprint (${LAST_DIR}/verify-last-release.json, written by an older scripts/verify-local.cjs) - re-run --lane release`);
+  if (was.error) return fail(`the last release lane could not fingerprint the tree it tested (${was.error}) - re-run --lane release once it can`);
+  const now = fingerprint(root);
+  if (now.error) return fail(`this tree cannot be fingerprinted (${now.error}), so nothing shows it is the tree the release lane tested`);
+  if (now.tracked !== was.tracked || now.untracked !== was.untracked) {
+    process.stdout.write(`${RED}reconcile FAILED${RESET} the tree changed after the last release lane ran at this head (${LAST_DIR}/verify-last-release.json):\n`);
+    for (const l of contentsDiff(root, was, now)) say(l);
+    say('re-run --lane release on these contents');
+    return 1;
+  }
+  say(`reconcile 3/3  release: the release lane passed at this head, on these contents (${LAST_DIR}/verify-last-release.json, verdict pass, head ${head.slice(0, 9)} == HEAD, tree ${now.tree.slice(0, 9)})`);
+```
+
+**Edit 9 (optional): the run-state table in `--list --json`.** Find this line:
+
+```js
+      process.stdout.write(JSON.stringify({ schema: 'sbak/verify-lane-listing/v1', lane, registryHash: registryHash(), taskCount: rows.length, selection: plan.selection, fallbackReason: plan.fallbackReason, base: plan.base, tasks: rows, outsideSource: OUTSIDE_SOURCE }, null, 2) + '\n');
+```
+
+Replace it with:
+
+```js
+      process.stdout.write(JSON.stringify({ schema: 'sbak/verify-lane-listing/v1', lane, registryHash: registryHash(), taskCount: rows.length, selection: plan.selection, fallbackReason: plan.fallbackReason, base: plan.base, tasks: rows, outsideSource: OUTSIDE_SOURCE, runState: RUN_STATE }, null, 2) + '\n');
+```
+
+**Edit 10 (optional): the run-state table in `--list`.** Find this line:
+
+```js
+    process.stdout.write(`\n  release is DERIVED as the whole registry (lane tags ignored); a required skip is a failure there.\n  outside-source paths (any -> fast/stage run full): ${OUTSIDE_SOURCE.map((r) => r.match).join(' ')}\n\n`);
+```
+
+Replace it with:
+
+```js
+    process.stdout.write(`\n  release is DERIVED as the whole registry (lane tags ignored); a required skip is a failure there.\n  outside-source paths (any -> fast/stage run full): ${OUTSIDE_SOURCE.map((r) => r.match).join(' ')}\n`);
+    process.stdout.write(`  run state (kept out of the contents fingerprint --reconcile compares):\n${RUN_STATE.map((r) => `      ${r.match.padEnd(24)} ${r.why}\n`).join('')}\n`);
+```
+
+**Edit 11 (required): the fingerprint, taken once per run.** Find this line:
+
+```js
+  const availability = {};
+```
+
+Replace it with:
+
+```js
+  const contents = fingerprint(root);
+  if (!quiet && contents.error) process.stdout.write(`${DIM}note contents not fingerprinted (${contents.error}) - --reconcile refuses this summary${RESET}\n`);
+  const availability = {};
+```
+
+**Edit 12 (required): the fingerprint in the summary.** Find this line:
+
+```js
+    head: (git(root, ['rev-parse', 'HEAD']) || '').trim(),
+```
+
+Replace it with:
+
+```js
+    head: (git(root, ['rev-parse', 'HEAD']) || '').trim(), contents,
+```
+
+**Edit 13 (required): the run line.** Find these lines:
+
+```js
+function readLast(root, lane) {
+  try { return JSON.parse(fs.readFileSync(path.join(root, LAST_DIR, `verify-last-${lane}.json`), 'utf8')); } catch (_) { return null; }
+}
+```
+
+Replace them with:
+
+```js
+function readLast(root, lane) {
+  try { return JSON.parse(fs.readFileSync(path.join(root, LAST_DIR, `verify-last-${lane}.json`), 'utf8')); } catch (_) { return null; }
+}
+// One line per run: the summary above is overwritten each run; this file is how a stage's
+// measure line counts the lane runs it paid (scripts/lib/read-ledger.cjs measure). Run state.
+function appendRunLine(root, summary) {
+  let stage = null;
+  try { stage = fs.readFileSync(path.join(root, '.claude', 'stage-active'), 'utf8').split(String.fromCharCode(0)).join('').trim() || null; } catch (_) { stage = null; }
+  fs.mkdirSync(path.join(root, LAST_DIR), { recursive: true });
+  fs.appendFileSync(path.join(root, LAST_DIR, 'verify-last-runs.jsonl'), JSON.stringify({ at: new Date().toISOString(), stage, lane: summary.lane, verdict: summary.verdict, totalDurationMs: summary.totalDurationMs, head: summary.head }) + '\n', 'utf8');
+}
+```
+
+**Edit 14 (required): the run line, written after the summary.** Find this line:
+
+```js
+  try { atomicWrite(path.join(root, LAST_DIR, `verify-last-${lane}.json`), JSON.stringify(summary, null, 2) + '\n'); } catch (_) { /* a read-only tree still gets its verdict */ }
+```
+
+Replace it with:
+
+```js
+  try { atomicWrite(path.join(root, LAST_DIR, `verify-last-${lane}.json`), JSON.stringify(summary, null, 2) + '\n'); } catch (_) { /* a read-only tree still gets its verdict */ }
+  try { appendRunLine(root, summary); } catch (_) { /* the same */ }
+```
+
+After the edits:
+
+- Change the file's `// @kit-version 1.0.7` line to the new release's version, so the drift report stops naming the file.
+- Add the line `.claude/verify-last-runs.jsonl` to your `.gitignore` (run state, like the lane summaries).
+- Run `node scripts/verify-local.cjs --lane release` once. A summary written before the edits carries no fingerprint, and `--reconcile` refuses it by name.
+- Check it: `node scripts/verify-local.cjs --lane stage` prints `tests <N>` with your real count, and after a fast and a release lane, an uncommitted edit to a source file makes `node scripts/verify-local.cjs --reconcile <milestone>` refuse, naming that file.
+
 ## v1.0.7 - 2026-10-16
 
-**The current release** - the field-repair hotfix on v1.0.6: the gates that passed where they should have failed now fail, proven on the gates a generated project runs on itself; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop.
+The field-repair hotfix on v1.0.6, superseded by v1.0.8: the gates that passed where they should have failed now fail, proven on the gates a generated project runs on itself. No interface changes to the build loop.
 
 - **Capabilities.** Everything in v1.0.6. On Windows a project's own test lanes now run its tests: the test command reaches `cmd` intact, and a `node --test` run that finds no test file fails the step - while the project has no test file at all, the step is a named skip, which the release lane still fails. The red gate judges the repository of the file it guards, from any folder, and accepts the release command only in its one approved form. The bootstrap ends with its own commit and one READY line. The installer makes the trunk `main`. `docker_leg: false` gives a native-only release lane. A fresh App-Map passes its own check, and the spec examples land where the examples gate looks.
 - **Upgrading a v1.0.6 project.** The upgrade refreshes the kit and leaves the project's own `scripts/verify-local.cjs` at v1.0.6 by design, so the Windows test-lane fix is a manual change: see "Manual change for a v1.0.6 project" below.
@@ -14,6 +373,8 @@ Release history of the Software Build Assurance Kit, in the same shape as the re
 ### Manual change for a v1.0.6 project
 
 **First, upgrade the kit folder.** The edits below assume the new kit is in `sbak/`. Download the new release's `sbak-install.cjs` into your project folder, start `claude` there, type `sbak-install`, and answer `upgrade` (the same command as the install). The upgrade refreshes `sbak/` and the kit-managed scripts, `scripts/kit-update.cjs` and `scripts/lib/read-ledger.cjs` among them. It leaves `scripts/verify-local.cjs` at v1.0.6 by design. Then make edits 1 to 5 by hand. With the new kit in place, the `--apply` step for edits 6 to 8 takes the new reader.
+
+**Or let the kit make it.** With the new kit in `sbak/` and the upgrade committed, run `node scripts/kit-update.cjs --migrate --pin 1.0.6` (a v1.0.6 project records no kit version, so the pin is named once): it shows the change file by file first, and with `--apply-all` it merges `scripts/verify-local.cjs` three ways from the v1.0.6 template, keeping your fills, so this change and the v1.0.7 change above land together. The steps below are this change by hand.
 
 A project bootstrapped from v1.0.6 runs its own copy of `scripts/verify-local.cjs`, filled with the project's test commands at bootstrap. `kit-update --apply` refuses that file by design, because restoring it from the template would wipe those fills, so the fix below is made by hand.
 

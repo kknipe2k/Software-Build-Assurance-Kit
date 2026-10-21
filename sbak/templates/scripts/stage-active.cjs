@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // scripts/stage-active.cjs
 //
 // Atomic writer for .claude/stage-active — the open-stage marker the PROC-001
@@ -10,16 +10,28 @@
 // starts un-approved, so a leftover approval from a prior stage can never unlock
 // the new one. --clear removes both markers (the gate goes dormant).
 //
+// THE ROLE AT OPEN (M33.A, R-50 a): the open also writes .claude/stage-role, the session's role
+// read through the channel library's strict reader (a resolved role; absent gives work; a garbage
+// marker gives unresolved). The red-gate judges stage-role, never the live .claude/role an edit
+// tool could flip mid-stage; --clear removes it with the other two markers.
+//
 // THE LISTENING GATE (M32.1.C, V-27, R-39: "starting the stage is fine without my calling slash
 // - but there needs to be a gate that something is watching (Orch)? and it needs to announce
 // loudly"). When another worktree of this repo has .claude/role = orchestrator, a stage opens
-// only while <this tree>/.claude/channel/watch.orchestrator.json names a LIVE pid (the KF-67
-// probe `channel status` uses: a marker is not a listener); otherwise nothing is written and one
-// line says to type /listen in the orchestrator window. No orchestrator worktree (Lite, or before
+// only while the orchestrator listens or is present (PRESENCE, below; the judge `channel status`
+// uses: a marker is not a listener); otherwise nothing is written and one line names both ways
+// to satisfy the gate. No orchestrator worktree (Lite, or before
 // the split): the stage opens and the line says the gate did not apply. Every open prints one
 // loud STAGE OPEN line on STDERR (stdout keeps its one-line contract) and publishes the
 // stage-open packet itself, carrying that line, so the orchestrator's pickup surfaces it.
 // --clear is never gated.
+//
+// PRESENCE (M33.G). The gate opens when the orchestrator is listening - a watcher whose pid
+// is alive AND whose start token is fresh (lib/channel.cjs watcherState; any other live pid is not
+// a listener) - OR present: the receipts hook writes <its tree>/.claude/channel/present.<side>.json
+// at every SessionStart and prompt, and the orchestrator tree's record is inside the window
+// (project-config.md presence_minutes, default 30). The refusal names both ways. The open prints
+// the bell after the STAGE OPEN line; --clear prints the stage's measure line on stderr.
 //
 // Usage:
 //   node scripts/stage-active.cjs <stage-id>   (e.g. M09.D)  -> open a stage
@@ -37,6 +49,7 @@ const path = require('path');
 const claudeDir = path.join(process.cwd(), '.claude');
 const stageFile = path.join(claudeDir, 'stage-active');
 const redApprovedFile = path.join(claudeDir, 'red-approved');
+const stageRoleFile = path.join(claudeDir, 'stage-role');
 
 function atomicWrite(file, content) {
   const tmp = file + '.tmp';
@@ -71,10 +84,18 @@ function emitReceipt(event, extra) {
 const args = process.argv.slice(2);
 
 if (args.length === 1 && args[0] === '--clear') {
-  for (const f of [stageFile, redApprovedFile]) {
+  // The measure is read before the markers go (the open stage names it) and printed after the
+  // pinned stdout line, on stderr; a stage with nothing to measure prints nothing.
+  let measureLine = null;
+  try {
+    const open = fs.readFileSync(stageFile, 'utf8').split(String.fromCharCode(0)).join('').trim();
+    if (open) measureLine = require('./lib/read-ledger.cjs').measure(process.cwd(), open).line;
+  } catch (_) { measureLine = null; }
+  for (const f of [stageFile, redApprovedFile, stageRoleFile]) {
     try { fs.rmSync(f, { force: true }); } catch (_) { /* best effort */ }
   }
   process.stdout.write('stage-active + red-approved cleared (gate dormant)\n');
+  if (measureLine) process.stderr.write(measureLine + '\n');
   emitReceipt('stage_cleared', { marker: 'stage-active' });
   process.exit(0);
 }
@@ -103,19 +124,33 @@ function listeningGate() {
   if (trees === null) return courier('not inside a git repository');
   const orch = trees.filter((w) => !sameTree(w, process.cwd())).filter((w) => { const r = chan.readRole(w); return r.state === 'resolved' && r.role === 'orchestrator'; });
   if (orch.length === 0) return courier('no orchestrator worktree in this repo (Lite, or before the worktree split)');
-  let m = null;
-  try { m = JSON.parse(fs.readFileSync(path.join(claudeDir, 'channel', 'watch.orchestrator.json'), 'utf8')); } catch (_) { m = null; }
-  if (!m || !Number.isInteger(m.pid) || m.pid <= 0 || !chan.pidAlive(m.pid)) return { open: false };
-  return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is listening (watcher pid ${m.pid}, armed ${typeof m.since === 'string' ? m.since : 'at an unknown time'}).` };
+  const w = chan.watcherState(path.join(claudeDir, 'channel', 'watch.orchestrator.json'));
+  if (w.state === 'listening') return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is listening (watcher pid ${w.m.pid}, armed ${typeof w.m.since === 'string' ? w.m.since : 'at an unknown time'}).` };
+  // Presence: the orchestrator tree's own record, judged against the window.
+  let windowMin = 30;
+  try {
+    const v = require('./lib/read-ledger.cjs').readConfigValue(fs.readFileSync(path.join(process.cwd(), 'project-config.md'), 'utf8'), 'presence_minutes');
+    if (v && /^[1-9][0-9]{0,4}$/.test(v)) windowMin = parseInt(v, 10);
+  } catch (_) { /* no config: the default */ }
+  let p = null;
+  try { p = JSON.parse(fs.readFileSync(path.join(orch[0], '.claude', 'channel', 'present.orchestrator.json'), 'utf8')); } catch (_) { p = null; }
+  const at = p && typeof p.at === 'string' ? Date.parse(p.at) : NaN;
+  if (!Number.isFinite(at)) return { open: false, why: 'no presence record' };
+  const ago = Math.max(0, Math.floor((Date.now() - at) / 60000));
+  if (Date.now() - at > windowMin * 60000) return { open: false, why: `last prompt ${ago} min ago, over the ${windowMin}-minute window` };
+  return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is present (last prompt ${p.at}, ${ago} min ago, inside the ${windowMin}-minute window); the bell rings its session and the log keeps every packet.` };
 }
 const gate = listeningGate();
 if (!gate.open) {
-  process.stderr.write(`stage-active: ${id} is NOT open - the orchestrator is not listening (no live watcher in .claude/channel/watch.orchestrator.json). Type /listen ${id} in the orchestrator window, then open the stage again.\n`);
+  process.stderr.write(`stage-active: ${id} is NOT open - the orchestrator is not listening (no watcher with a fresh token) and not present (${gate.why}). Type any prompt in the orchestrator window, or /listen ${id} there, then open the stage again.\n`);
   process.exit(2);
 }
 
 try {
   atomicWrite(stageFile, id + '\n');
+  // the role the gate judges for this stage, recorded now (M33.A).
+  const r = chan.readRole(process.cwd());
+  atomicWrite(stageRoleFile, (r.state === 'unresolved' ? 'unresolved' : r.role) + '\n');
   // a new stage starts un-approved — clear any stale approval.
   try { fs.rmSync(redApprovedFile, { force: true }); } catch (_) { /* best effort */ }
 } catch (e) {
@@ -135,9 +170,10 @@ try {
   const res = chan.resolve(process.cwd());
   if (!res.ok) published = { ok: false, why: res.line };
   else if (chan.SIDE[res.role] !== 'work') published = { ok: false, why: `this tree's role is ${res.role}` };
-  else { const r = chan.append(process.cwd(), res, 'stage-open', 'open', Buffer.from(gate.line, 'utf8')); published = r.ok ? { ok: true } : { ok: false, why: r.line }; }
+  else { const r = chan.append(process.cwd(), res, 'stage-open', 'open', Buffer.from(gate.line, 'utf8')); published = r.ok ? { ok: true, bell: chan.bellLine(res, r.msg.seq) } : { ok: false, why: r.line }; }
 } catch (e) { published = { ok: false, why: e && e.message ? e.message : 'error' }; }
 process.stderr.write(gate.line + '\n');
+if (published.ok && published.bell) process.stderr.write(published.bell + '\n');
 if (gate.applied && !published.ok) {
   process.stderr.write(`stage-active: the stage-open packet was NOT published (${published.why}) - publish it by hand: node scripts/channel.cjs publish --class stage-open --body "${gate.line}"\n`);
 }

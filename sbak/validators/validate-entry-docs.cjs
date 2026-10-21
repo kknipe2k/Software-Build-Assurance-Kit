@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.7
+// @kit-version 1.0.8
 // validators/validate-entry-docs.cjs
 //
 // THE DOC-SYNC ENGINE — one source of truth for what the kit SAYS about
@@ -192,6 +192,9 @@ function toNum(tok) {
 
 function readIf(abs) { try { return fs.readFileSync(abs, 'utf8'); } catch (_) { return null; } }
 function globCount(root, dir, re) { try { return fs.readdirSync(path.join(root, dir)).filter((f) => re.test(f)).length; } catch (_) { return 0; } }
+// /approve-red, /send and /closeout ship as human-only skills (<dir>/<name>/SKILL.md); the
+// command count counts both forms.
+function skillCount(root, dir) { try { return fs.readdirSync(path.join(root, dir)).filter((n) => fs.existsSync(path.join(root, dir, n, 'SKILL.md'))).length; } catch (_) { return 0; } }
 
 // ════════════════════════════════════════════════════════════════════════════════════════
 // PART 1 — THE MANIFEST (derive / bind / reference)
@@ -308,7 +311,7 @@ function deriveManifest(root) {
     validator_count: { value: globCount(root, 'validators', /\.cjs$/), kind: 'derived', source: 'validators/*.cjs glob' },
     hook_count: { value: globCount(root, 'templates/dot-claude/hooks', /\.cjs$/), kind: 'derived', source: 'templates/dot-claude/hooks/*.cjs glob' },
     script_count: { value: globCount(root, 'templates/scripts', /\.cjs$/), kind: 'derived', source: 'templates/scripts/*.cjs glob' },
-    command_count: { value: globCount(root, 'templates/dot-claude/commands', /\.md$/), kind: 'derived', source: 'templates/dot-claude/commands/*.md glob' },
+    command_count: { value: globCount(root, 'templates/dot-claude/commands', /\.md$/) + skillCount(root, 'templates/dot-claude/skills'), kind: 'derived', source: 'templates/dot-claude/commands/*.md + templates/dot-claude/skills/*/SKILL.md globs' },
     interview_ask_count: { value: bindInterviewAsks(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md "## Ask N" headings (M26.D: 3 asks + 1 confirmation turn; the 5-choice shape retired)' },
     operating_mode_count: { value: bindOperatingModes(root), kind: 'bound', source: 'templates/CALIBRATION-INTERVIEW.md operating_mode value list' },
     scaffold_counts: { value: referenceScaffoldCounts(root), kind: 'referenced', source: 'golden-manifest.json tiers[tier].counts.rendered (read live)' },
