@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/lib/read-ledger.cjs
 //   (kit source of truth: templates/scripts/lib/read-ledger.cjs)
 //
@@ -27,6 +27,9 @@
 //     substring matching; tokens after a `>` / `>>` redirect are targets, not reads; capped
 //     at 16 refs per command. Honest scope: the ledger proves a file was NAMED by a read, not
 //     comprehended - the same honesty as any read ledger;
+//   * the PowerShell rule (M34.B), its own and not the Bash parser - a command segment whose
+//     verb is Get-Content, gc, cat or type names a read for each operand (-Path, -LiteralPath or
+//     positional; comma lists split, quotes stripped) that resolves EXACTLY to an existing file;
 //   * the required set per boundary - the resolved list's entries tagged with that boundary,
 //     plus (for stage-open) every path token in the open stage prompt's <read_first>;
 //   * the check itself, and a small CLI:  node scripts/lib/read-ledger.cjs --check <boundary>
@@ -132,6 +135,41 @@ function readPathsFromBash(root, command) {
 }
 function readRefsFromBash(root, command) { return readPathsFromBash(root, command).map((p) => refFor(p.canonical)); }
 
+// PowerShell (M34.B): which existing repo files does a read command NAME? Its own rule: the verb
+// Get-Content, gc, cat or type (any case) first in a `;`, `|` or newline segment, then every
+// operand that resolves exactly to an existing file. -> [{ canonical, abs }]
+const PS_READ_VERB = /^(?:get-content|gc|cat|type)$/i;
+const PS_PATH_PARAM = /^-(?:path|literalpath|lp|pspath)(?::|$)/i;
+const PS_VALUE_PARAM = /^-(?:totalcount|head|first|tail|last|readcount|encoding|delimiter|filter|include|exclude|stream|credential)$/i;
+function readPathsFromPowerShell(root, command) {
+  if (typeof command !== 'string' || !command) return [];
+  const out = [];
+  const seen = new Set();
+  for (const seg of command.split(/[;|\r\n]+/)) {
+    const words = seg.match(/'[^']*'|"[^"]*"|\S+/g) || [];
+    if (!words.length || !PS_READ_VERB.test(words[0])) continue;
+    for (let k = 1; k < words.length; k++) {
+      let w = words[k];
+      if (/^-/.test(w)) {
+        if (PS_VALUE_PARAM.test(w)) k++;
+        if (!PS_PATH_PARAM.test(w) || w.indexOf(':') === -1) continue;
+        w = w.slice(w.indexOf(':') + 1); // -Path:<file>
+      }
+      for (const piece of w.split(',')) {
+        const tok = piece.replace(/^['"]+|['"]+$/g, '').replace(/\\/g, '/');
+        if (!tok) continue;
+        const canonical = canonicalRel(root, tok);
+        if (canonical && !seen.has(canonical)) {
+          seen.add(canonical);
+          out.push({ canonical, abs: path.resolve(root, tok) });
+          if (out.length >= MAX_REFS_PER_COMMAND) return out;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // M33.F: an entry's path with a `*` in its LAST segment resolves to exactly one file.
 // -> { rel } (the path itself when it carries no `*`) | { dead: '<why>' }
 function resolveListPath(root, p) {
@@ -211,7 +249,23 @@ function currentRole(root) {
     return VALID_ROLES.indexOf(t) !== -1 ? t : null;
   } catch (_) { return 'work'; } // absent = the one legitimate default
 }
-function readConfigValue(text, key) {
+// THE ONE COMMENT STRIPPER (M34.A) for every reader of a markdown setting or row: this
+// reader, set-mode's shell row and the App-Map backstop. It strips until the text stops changing,
+// so a comment spliced out of the middle of another cannot leave a new one behind
+// ("<!-<!-- x -->-- y -->", CodeQL js/incomplete-multi-character-sanitization).
+function stripHtmlComments(text) {
+  let s = String(text);
+  for (let guard = 0; guard < 10000; guard++) {
+    const next = s.replace(/<!--[\s\S]*?-->/g, '');
+    if (next === s) return s;
+    s = next;
+  }
+  return s;
+}
+// A setting read outside HTML comments only: a template comment that starts "<key>: <word>" is
+// documentation, never the value (M34.A).
+function readConfigValue(source, key) {
+  const text = stripHtmlComments(source);
   const k = key.replace(/_/g, '[_ ]');
   // A value starts with a letter or a digit (M33.D: kit_version is a version, 1.0.6); an unfilled
   // {{TOKEN}} matches neither, so it reads as absent.
@@ -444,6 +498,89 @@ function measure(root, stage) {
   return { stage, opened, minutes, bytes, lanes, line };
 }
 
+// ---- the stage section at HEAD (M34.C, Q9): the ONE reader of a stage's section of its Phase doc.
+// stage-view carries it in the view, approve-red hashes it into the approval record, and the
+// channel's amendment and stage-end publishes compare it (materiality case 4), so "the section as
+// the view carries it" is one function. The section is the one H2 outside a code fence whose text,
+// after `## ` and an optional `§`, is the stage id or `Stage <the id after the milestone>`, followed
+// by neither a word character nor a dot, in the one Phase doc (docs/build-prompts/ or proposals/,
+// named M<nn>-*.md) that carries it; it runs to the next H2. A Phase doc with no stage headings at
+// all (one task list) is the stage's section whole. HEAD only, never the working tree.
+const mdLines = (text) => String(text).split('\n');
+function mdTrimTail(arr) { const a = arr.slice(); while (a.length && /^\s*(---)?\s*$/.test(a[a.length - 1])) a.pop(); return a; }
+// headings outside fences: [{ i, level, text }]
+function mdHeadings(ls) {
+  const out = []; let fence = false;
+  ls.forEach((l, i) => {
+    if (/^\s*```/.test(l)) { fence = !fence; return; }
+    const m = fence ? null : /^(#{1,6})\s+(.*)$/.exec(l);
+    if (m) out.push({ i, level: m[1].length, text: m[2].trim() });
+  });
+  return out;
+}
+// the slice from heading h to the next heading of its level or higher
+function mdSliceFrom(ls, hs, h) {
+  const next = hs.find((x) => x.i > h.i && x.level <= h.level);
+  return mdTrimTail(ls.slice(h.i, next ? next.i : ls.length)).join('\n');
+}
+const reEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// path -> { blob, text } | null, one `git cat-file --batch` per call. -> { ok, map } | { ok: false, why }
+function headReadAt(root, paths) {
+  const { spawnSync } = require('child_process');
+  const map = new Map();
+  if (!paths.length) return { ok: true, map };
+  const r = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: paths.map((p) => `HEAD:./${p}`).join('\n') + '\n', maxBuffer: 256 << 20, timeout: 60000, windowsHide: true });
+  if (r.error) return { ok: false, why: `git could not run (${r.error.message})` };
+  if (r.status !== 0) return { ok: false, why: `git cat-file failed (${String(r.stderr).trim()})` };
+  const buf = r.stdout;
+  let at = 0;
+  for (const p of paths) {
+    const nl = buf.indexOf(10, at);
+    const head = buf.slice(at, nl).toString('utf8');
+    at = nl + 1;
+    const m = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) (\w+) (\d+)$/.exec(head);
+    if (!m) { map.set(p, null); continue; }
+    const size = Number(m[3]);
+    map.set(p, m[2] === 'blob' ? { blob: m[1], text: buf.slice(at, at + size).toString('utf8').replace(/\r\n/g, '\n') } : null);
+    at += size + 1;
+  }
+  return { ok: true, map };
+}
+// -> { ok: true, doc, blob, text, docText } | { ok: false, none: true, why } (no Phase doc for the
+//    milestone at HEAD, or no HEAD) | { ok: false, why } (git did not run, no section, two sections)
+function stageSectionAt(root, stage) {
+  const { spawnSync } = require('child_process');
+  const sm = /^M(\d+)\.(.+)$/.exec(String(stage));
+  if (!sm) return { ok: false, none: true, why: `${stage} names no milestone (a stage id like M01.A), so no Phase doc carries it` };
+  const msNum = Number(sm[1]);
+  const rest = sm[2];
+  const ls = spawnSync('git', ['ls-tree', '--name-only', 'HEAD', './docs/build-prompts/', './proposals/'], { cwd: root, maxBuffer: 64 << 20, timeout: 60000, windowsHide: true });
+  if (ls.error) return { ok: false, why: `git could not run (${ls.error.message})` };
+  const names = ls.status === 0 ? String(ls.stdout).split(/\r?\n/).filter(Boolean) : [];
+  const docPaths = names.filter((p) => { const m = /^(?:docs\/build-prompts|proposals)\/M(\d+)-[^/]*\.md$/.exec(p); return m && Number(m[1]) === msNum; });
+  if (!docPaths.length) return { ok: false, none: true, why: `no Phase doc for M${String(msNum).padStart(2, '0')} at HEAD (docs/build-prompts/ or proposals/, named M<nn>-*.md)` };
+  const read = headReadAt(root, docPaths);
+  if (!read.ok) return { ok: false, why: read.why };
+  const STAGE_HEAD = new RegExp(`^§?\\s*(?:${reEscape(stage)}|Stage\\s+${reEscape(rest)})(?![\\w.])`);
+  const ANY_STAGE_HEAD = /^§?\s*(?:M\d+(?:\.[0-9A-Za-z]+)+|Stage\s+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)(?![\w.])/;
+  const hits = []; const lite = [];
+  for (const p of docPaths) {
+    const d = read.map.get(p);
+    if (!d) continue;
+    const l = mdLines(d.text); const hs = mdHeadings(l);
+    const h2 = hs.filter((h) => h.level === 2);
+    for (const h of h2.filter((x) => STAGE_HEAD.test(x.text))) hits.push({ p, d, l, hs, h });
+    if (!h2.some((h) => ANY_STAGE_HEAD.test(h.text))) lite.push({ p, d, l });
+  }
+  if (hits.length > 1) return { ok: false, why: `${hits.length} sections match ${stage}: ${hits.map((x) => `${x.p}:${x.h.i + 1}`).join(', ')}` };
+  if (hits.length === 1) {
+    const x = hits[0];
+    return { ok: true, doc: x.p, blob: x.d.blob, docText: x.d.text, text: mdSliceFrom(x.l, x.hs.filter((h) => h.level <= 2), x.h) };
+  }
+  if (lite.length === 1 && docPaths.length === 1) return { ok: true, doc: lite[0].p, blob: lite[0].d.blob, docText: lite[0].d.text, text: mdTrimTail(lite[0].l).join('\n') };
+  return { ok: false, why: `no section for ${stage} in ${docPaths.join(', ')} (an H2 "## §${stage} ..." or "## Stage ${rest} ...")` };
+}
+
 // The refusal lines a gate prints for a checkReads result, `label` naming what was checked.
 function refusalLines(res, prefix, label) {
   const out = [];
@@ -457,12 +594,15 @@ function refusalLines(res, prefix, label) {
 
 module.exports = {
   WHEN_VOCAB, WHEN_DEFAULT, MAX_REFS_PER_COMMAND, VIEW_TARGET, VIEW_WHEN, VIEW_DIR, MAX_VIEW_SOURCES,
-  parseListLine, canonicalRel, refFor, refForPath, readRefsFromBash, readPathsFromBash, resolveListPath,
+  parseListLine, canonicalRel, refFor, refForPath, readRefsFromBash, readPathsFromBash, readPathsFromPowerShell, resolveListPath,
   viewRel, isViewPath, parseViewHeader, viewSourcesAt, headBlobs, viewStatus,
   resolveListFile, loadManifest, stagePromptReadFirst, requiredReads, recordedReads, recordedRefs, checkReads, refusalLines,
   currentRole,
   readConfigValue, // verify-local reads docker_leg through it (M32.1.D): one config reader
+  stripHtmlComments, // set-mode and the App-Map backstop strip through it (M34.A): one stripper
   RUNS_FILE, measure, // the measure line (M33.G): --measure here, and stage-active --clear
+  // the stage section at HEAD (M34.C): stage-view, approve-red and the channel's publishes
+  stageSectionAt, headReadAt, mdLines, mdHeadings, mdSliceFrom, mdTrimTail,
 };
 
 if (require.main === module) {

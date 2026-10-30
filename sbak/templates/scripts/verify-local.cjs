@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid),
@@ -55,7 +55,8 @@
 // after that run is refused, path by path). Only `--write` after all three touches
 // tests/.settled.json (write-temp-rename).
 //
-// The Linux leg mirrors the GitHub ubuntu image in Docker (WSL2 via VERIFY_LINUX=wsl);
+// The Linux leg mirrors the GitHub ubuntu image in Docker (WSL2 via VERIFY_LINUX=wsl) and is
+// judged like the native leg: the tests-0 guard reads the container's own runner summary;
 // VERIFY_SKIP_LINUX=1 is the logged emergency skip. Wired as .githooks/pre-push (`--lane
 // fast`); `git push --no-verify` cannot bypass the required PR check (docs/gates.md).
 
@@ -394,9 +395,10 @@ function registryHash() {
 function stepsFor(task, lane, plan, root) {
   if (task.id === 'linux') {
     const wsl = (process.env.VERIFY_LINUX || 'docker') === 'wsl';
+    // `judge` is the command the container runs: the tests-0 guard reads it as it reads a native step.
     return [wsl
-      ? { name: 'linux-wsl', file: 'wsl', args: ['bash', '-lc', CONFIG.linuxTestCommand], cmd: `wsl bash -lc ${JSON.stringify(CONFIG.linuxTestCommand)}` }
-      : { name: 'linux-docker', file: 'docker', args: ['run', '--rm', '-v', `${root}:/work`, '-w', '/work', CONFIG.dockerImage, 'sh', '-lc', CONFIG.linuxTestCommand],
+      ? { name: 'linux-wsl', file: 'wsl', args: ['bash', '-lc', CONFIG.linuxTestCommand], judge: CONFIG.linuxTestCommand, cmd: `wsl bash -lc ${JSON.stringify(CONFIG.linuxTestCommand)}` }
+      : { name: 'linux-docker', file: 'docker', args: ['run', '--rm', '-v', `${root}:/work`, '-w', '/work', CONFIG.dockerImage, 'sh', '-lc', CONFIG.linuxTestCommand], judge: CONFIG.linuxTestCommand,
         cmd: `docker run --rm -v <root>:/work -w /work ${CONFIG.dockerImage} sh -lc ${JSON.stringify(CONFIG.linuxTestCommand)}` }];
   }
   if (task.id === 'always') {
@@ -454,15 +456,17 @@ function noTestFiles(root) {
 function runStep(step, root, quiet) {
   const t0 = Date.now();
   const done = (status) => ({ name: step.name, cmd: step.cmd, exitCode: status === null ? 1 : status, durationMs: Date.now() - t0 });
-  if (step.file) return done(spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root }).status);
   // On Windows the command reaches cmd intact, in Node's own shell form (cmd /d /s /c "<command>",
   // arguments verbatim). cmd /c under Node's default argument quoting turned every inner " into \",
   // which cmd passes through, so a quoted test glob matched no file. The POSIX branch is unchanged.
+  // A step with a `file` (the Linux leg: docker or wsl) runs it directly and is judged on the
+  // command it hands the container (before, a Linux leg whose pattern matched nothing passed silently).
   const win = process.platform === 'win32';
-  const [sh, args] = win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
-  const opts = { cwd: root, windowsVerbatimArguments: win };
+  const [sh, args] = step.file ? [step.file, step.args] : win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
+  const opts = step.file ? { cwd: root } : { cwd: root, windowsVerbatimArguments: win };
   const io = quiet ? 'ignore' : 'inherit';
-  if (!NODE_TEST.test(step.shell)) {
+  const judged = step.file ? step.judge || '' : step.shell;
+  if (!NODE_TEST.test(judged)) {
     if (!quiet) process.stdout.write(`${DIM}note the tests-0 guard does not judge this step (it reads the runner's count only when the command itself runs node --test): ${step.cmd}${RESET}\n`);
     return done(spawnSync(sh, args, Object.assign({ stdio: io }, opts)).status);
   }
@@ -478,7 +482,7 @@ function runStep(step, root, quiet) {
       if (code !== 0 || (n !== null && n !== 0)) return resolve(done(code));
       if (noTestFiles(root)) return resolve(Object.assign(done(0), { skip: NO_TEST_YET }));
       if (!quiet) process.stdout.write(n === null
-        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(step.shell)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
+        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(judged)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
         : `${RED}FAIL the runner ran 0 tests: node --test found no test file - check the pattern in: ${step.cmd}${RESET}\n`);
       return resolve(done(1));
     });

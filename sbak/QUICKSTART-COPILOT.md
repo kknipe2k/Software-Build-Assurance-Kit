@@ -31,7 +31,7 @@ The sections below unpack the same path in full - prerequisites, the install, th
 | **Node.js 22+** | The kit's validators and Git-hook gates are Node scripts. The floor is 22 rather than 18 because the test command this kit prescribes is a path-scoped glob (`node --test "tests/**/*.test.cjs"`), and glob positionals require Node 21 or newer - 22 is the lowest maintained line that runs it. CI pins 24 (Active LTS). | `node --version` |
 | **Git** | Cloning and per-stage commits - and on this host the Git hooks are the mechanical enforcement layer | `git --version` |
 
-You do **not** need Claude Code installed. Everything Copilot needs is Copilot itself + Node + Git.
+You do **not** need Claude Code installed. Everything Copilot needs is Copilot itself + Node + Git. The Claude Code version floor the Claude Code path names does not apply here: Copilot reads none of the Claude Code settings it protects.
 
 ---
 
@@ -43,11 +43,11 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.8-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.9-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.8-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.8-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.8-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.8-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.9-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.9-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.9-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -60,7 +60,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.8-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -71,7 +71,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -94,7 +94,7 @@ Then open the folder in VS Code: **File, then Open Folder, pick `my-project`.** 
 
 On this host that contract is worth restating: the session-layer hooks never run in Copilot, so **the Git hooks adopt arms are the only mechanical wall between an agent mistake and your history**. Don't skip adopt here.
 
-**Upgrading is the ZIP again:** download the new release, extract it over your project, and re-run the same adopt command - your own project files are untouched and adopt re-arms the hooks. **One warning that the installer's path does not carry:** extracting over an install **overwrites kit files you edited**, where `sbak-install` on Claude Code stops and names them first, so save any changes you made under `sbak/` first. Then commit, and bring the kit files the bootstrap copied into your project up to the new release with `node scripts/kit-update.cjs --migrate`: it shows each file's change first and writes nothing until you re-run it with `--apply-all`, merging your pre-commit hook and `scripts/verify-local.cjs` three ways so your fills are kept. Refresh your `.github/copilot-instructions.md` copy afterwards (§6) - `CLAUDE.md` may have changed in the new release.
+**Upgrading is the ZIP again:** download the new release, extract it over your project, and re-run the same adopt command - your own project files are untouched and adopt re-arms the hooks. **Before you extract,** unzip the new release to a folder beside your project and run `node scripts/kit-update.cjs --upgrade-check <that folder>`: it names every file under `sbak/` you changed that the extract would overwrite (exit 1), or says the extract loses nothing (exit 0). Copy any file it names aside first: an extract does not keep them, where `sbak-install` on Claude Code does. Then commit, and bring the kit files the bootstrap copied into your project up to the new release with `node scripts/kit-update.cjs --migrate`: it shows each file's change first and writes nothing until you re-run it with `--apply-all`, merging your pre-commit hook and `scripts/verify-local.cjs` three ways so your fills are kept. Refresh your `.github/copilot-instructions.md` copy afterwards (§6) - `CLAUDE.md` may have changed in the new release.
 
 ### Clone the repo - the alternate path
 
@@ -221,7 +221,7 @@ Open a new chat for the next stage and repeat. After the main build stages come 
 
 At Full tier the framework splits into two session types - **orchestrator** (authors Phase docs, adjudicates the build's surfaces, routes findings) and **build** (executes one stage). In Copilot that maps to two VS Code windows, each with its own chat:
 
-- **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed). Orchestrator window: the main checkout. Build window: `../<project>-build-wt`. Shared `.git`, isolated working trees, no file-race risk. Open each via **File, then Open Folder** (same `code .` caveat as §1).
+- **Canonical for Full on Copilot: two windows + git worktrees** (Topology D in `ORCHESTRATOR.md` §1). From the repo root: `node scripts/set-mode.cjs --split <milestone-branch>` (it creates `../<project>-build-wt` fail-closed). Orchestrator window: the main checkout. Build window: `../<project>-build-wt`. Shared `.git`, isolated working trees, no file-race risk. The orchestrator works in the main checkout; the builder, verifier and refactor chats run in one builder-side worktree, and the roles rotate through it, because the kit expects exactly one builder tree (on Claude Code, the channel does). Open each via **File, then Open Folder** (same `code .` caveat as §1).
 - **From day one:** bootstrap ends with its own commit - the bootstrap commit is the project's first commit - so `node scripts/set-mode.cjs --split <milestone-branch>` works as soon as bootstrap closes. Only a repo with no commit at all (never bootstrapped) has to wait: there the split refuses, and both chats run against the single checkout - one role at a time, mode stated in each chat's first message - until its first commit lands.
 
 You are the conduit - copy surfaces from the build chat to the orchestrator chat and decisions back, by switching windows. Only one role acts at a time. **On Claude Code this is the one job the channel took over:** there, the packets move themselves and the human only adjudicates and releases the gates. Here, moving them is yours, and it is the largest single difference in day-to-day work between the two hosts. (Topologies A, B, C in `ORCHESTRATOR.md` §1 are Claude-Code-specific and don't apply in Copilot.)

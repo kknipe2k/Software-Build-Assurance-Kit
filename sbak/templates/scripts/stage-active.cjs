@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/stage-active.cjs
 //
 // Atomic writer for .claude/stage-active — the open-stage marker the PROC-001
@@ -33,13 +33,30 @@
 // (project-config.md presence_minutes, default 30). The refusal names both ways. The open prints
 // the bell after the STAGE OPEN line; --clear prints the stage's measure line on stderr.
 //
+// THE ONE CLEAR (M34.C item 4, R-56): --clear is the only clear of an approval (approve-red has
+// none); it archives .claude/channel/approval.json into .claude/measurements/<stage>/ and removes
+// the live record.
+//
+// CLEARED MEANS GONE (M34.1.B, V-2). --clear reads each marker by lstat of the path itself: a link
+// (symlink or junction) is removed as a link, never followed to its target; a directory is removed
+// whole; a file is unlinked. A removal that fails stops the clear with one line and exit 1, and the
+// cleared line, the approval archive and the stage_cleared receipt come only after a second lstat
+// of all three markers finds nothing. The open refuses over a marker that is a directory or a link
+// (a rename over a link replaces it, over a directory it fails), naming the clear.
+//
+// A CLEAR WHERE NOTHING WAS (M34.2.B, R-113). --clear in a tree whose .claude/ holds none of the
+// three markers clears nothing there, and says so on stderr, naming the folder it looked in; it
+// archives nothing and writes no receipt. The stdout line is unchanged. A clear run from the wrong
+// folder printed the cleared line over nothing and nothing showed it.
+//
 // Usage:
 //   node scripts/stage-active.cjs <stage-id>   (e.g. M09.D)  -> open a stage
 //   node scripts/stage-active.cjs --clear                    -> close it (both markers)
 //
-// Exit 0 = wrote/cleared. Exit 2 = bad invocation, or the orchestrator is not listening, or the
-// gate cannot check (existing markers untouched). .cjs = CommonJS regardless of the host
-// project's package.json type.
+// Exit 0 = wrote/cleared. Exit 1 = --clear could not remove a marker (it is named; nothing was
+// cleared). Exit 2 = bad invocation, a broken marker at the open, or the orchestrator is not
+// listening, or the gate cannot check (existing markers untouched). .cjs = CommonJS regardless of
+// the host project's package.json type.
 
 'use strict';
 
@@ -50,6 +67,18 @@ const claudeDir = path.join(process.cwd(), '.claude');
 const stageFile = path.join(claudeDir, 'stage-active');
 const redApprovedFile = path.join(claudeDir, 'red-approved');
 const stageRoleFile = path.join(claudeDir, 'stage-role');
+const MARKERS = [['stage-active', stageFile], ['red-approved', redApprovedFile], ['stage-role', stageRoleFile]];
+
+// A marker by lstat of the path itself: 'absent' | 'link' | 'directory' | 'file'; any other lstat
+// error is thrown to the caller.
+function markerKind(f) {
+  let st;
+  try { st = fs.lstatSync(f); } catch (e) {
+    if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return 'absent';
+    throw e;
+  }
+  return st.isSymbolicLink() ? 'link' : st.isDirectory() ? 'directory' : 'file';
+}
 
 function atomicWrite(file, content) {
   const tmp = file + '.tmp';
@@ -87,15 +116,61 @@ if (args.length === 1 && args[0] === '--clear') {
   // The measure is read before the markers go (the open stage names it) and printed after the
   // pinned stdout line, on stderr; a stage with nothing to measure prints nothing.
   let measureLine = null;
+  let open = null;
   try {
-    const open = fs.readFileSync(stageFile, 'utf8').split(String.fromCharCode(0)).join('').trim();
-    if (open) measureLine = require('./lib/read-ledger.cjs').measure(process.cwd(), open).line;
+    if (markerKind(stageFile) === 'file') {
+      open = fs.readFileSync(stageFile, 'utf8').split(String.fromCharCode(0)).join('').trim();
+      if (open) measureLine = require('./lib/read-ledger.cjs').measure(process.cwd(), open).line;
+    }
   } catch (_) { measureLine = null; }
-  for (const f of [stageFile, redApprovedFile, stageRoleFile]) {
-    try { fs.rmSync(f, { force: true }); } catch (_) { /* best effort */ }
+  // M34.1.B (V-2): each marker removed by what lstat says it is, then a second lstat of all three;
+  // a removal that fails names the marker and clears nothing more.
+  const notCleared = (why) => {
+    process.stderr.write(`stage-active: ${why} - the stage is NOT cleared; remove it from your own terminal, then run node scripts/stage-active.cjs --clear again\n`);
+    process.exit(1);
+  };
+  const named = [];
+  let found = 0;
+  for (const [name, f] of MARKERS) {
+    let kind;
+    try { kind = markerKind(f); } catch (e) { notCleared(`could not read .claude/${name} (${(e && e.code) || 'lstat failed'})`); }
+    if (kind === 'absent') continue;
+    found++;
+    try {
+      if (kind === 'link') {
+        // the link entry itself: unlink, or rmdir for a directory symlink on win32 - never rmSync
+        // with recursive, which leaves a junction to a file and a dangling junction in place there
+        try { fs.unlinkSync(f); } catch (e) { if (process.platform !== 'win32') throw e; fs.rmdirSync(f); }
+        named.push(`stage-active: .claude/${name} was a link; removed the link, its target untouched`);
+      } else if (kind === 'directory') {
+        fs.rmSync(f, { recursive: true, force: true });
+        named.push(`stage-active: .claude/${name} was a directory; removed`);
+      } else fs.unlinkSync(f);
+    } catch (e) { notCleared(`could not remove .claude/${name} (${(e && e.code) || 'removal failed'})`); }
+  }
+  for (const [name, f] of MARKERS) {
+    let kind;
+    try { kind = markerKind(f); } catch (e) { notCleared(`could not read .claude/${name} (${(e && e.code) || 'lstat failed'})`); }
+    if (kind !== 'absent') notCleared(`.claude/${name} is still there after the removal`);
+  }
+  // M34.2.B (R-113): no marker was here, so nothing was cleared here; no archive, no receipt.
+  if (found === 0) {
+    process.stdout.write('stage-active + red-approved cleared (gate dormant)\n');
+    process.stderr.write(`stage-active: no marker was present in ${claudeDir}; nothing was cleared here\n`);
+    process.exit(0);
+  }
+  // M34.C item 4: the approval record goes beside the stage's evidence (.claude/measurements/<stage>/
+  // approval.json, never over an earlier archive) and the live file is removed, once the markers are
+  // gone. The clear is never held up by it: an archive that cannot be written leaves the live record
+  // and says so.
+  let archiveNote = null;
+  try { require('./lib/channel.cjs').archiveApproval(process.cwd(), open); } catch (e) {
+    archiveNote = `stage-active: note - the approval record (.claude/channel/approval.json) was not archived (${e && e.message ? e.message : 'error'}); it stays in place.`;
   }
   process.stdout.write('stage-active + red-approved cleared (gate dormant)\n');
+  for (const l of named) process.stderr.write(l + '\n');
   if (measureLine) process.stderr.write(measureLine + '\n');
+  if (archiveNote) process.stderr.write(archiveNote + '\n');
   emitReceipt('stage_cleared', { marker: 'stage-active' });
   process.exit(0);
 }
@@ -107,6 +182,17 @@ if (args.length !== 1 || /^-/.test(args[0])) {
 }
 
 const id = args[0].trim();
+
+// M34.1.B (V-2): a marker that is a directory or a link is broken; the open writes nothing over it
+// and names the clear, which the person runs (the red gate refuses the agent while it stands).
+for (const [name, f] of MARKERS) {
+  let kind = 'absent';
+  try { kind = markerKind(f); } catch (_) { kind = 'absent'; /* unreadable: the write below reports it */ }
+  if (kind === 'directory' || kind === 'link') {
+    process.stderr.write(`stage-active: ${id} is NOT open - .claude/${name} is a ${kind}; clear it from your own terminal first (the red gate refuses the agent's call while a marker is broken): node scripts/stage-active.cjs --clear, then open the stage again.\n`);
+    process.exit(2);
+  }
+}
 
 // The gate reads before anything is written: a refusal leaves every marker as it was.
 let chan;
@@ -121,7 +207,16 @@ const sameTree = (a, b) => {
 function listeningGate() {
   const courier = (why) => ({ open: true, line: `STAGE OPEN: ${id} - the listening gate did not apply: ${why}; packets travel by the human courier.` });
   const trees = chan.worktrees(process.cwd());
-  if (trees === null) return courier('not inside a git repository');
+  if (trees === null) {
+    // M34.A: null is "not a repository" OR "git did not run"; only the first is the
+    // courier case. git itself tells them apart, and anything but its own "not a git repository"
+    // is a refusal naming git (an orchestrator worktree may exist that this call cannot see).
+    const g = require('child_process').spawnSync('git', ['rev-parse', '--git-dir'], { cwd: process.cwd(), encoding: 'utf8' });
+    if (g.error) return { open: false, line: `stage-active: ${id} is NOT open - git did not run (${g.error.code || g.error.message}), so the listening gate cannot see this repo's worktrees; put git on PATH, then open the stage again.` };
+    if (g.status !== 0 && /not a git repository/i.test(g.stderr || '')) return courier('not inside a git repository');
+    const said = String(g.stderr || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || `git worktree list failed, git rev-parse exit ${g.status}`;
+    return { open: false, line: `stage-active: ${id} is NOT open - git failed (${said}), so the listening gate cannot see this repo's worktrees; fix git here, then open the stage again.` };
+  }
   const orch = trees.filter((w) => !sameTree(w, process.cwd())).filter((w) => { const r = chan.readRole(w); return r.state === 'resolved' && r.role === 'orchestrator'; });
   if (orch.length === 0) return courier('no orchestrator worktree in this repo (Lite, or before the worktree split)');
   const w = chan.watcherState(path.join(claudeDir, 'channel', 'watch.orchestrator.json'));
@@ -141,6 +236,10 @@ function listeningGate() {
   return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is present (last prompt ${p.at}, ${ago} min ago, inside the ${windowMin}-minute window); the bell rings its session and the log keeps every packet.` };
 }
 const gate = listeningGate();
+if (!gate.open && gate.line) {
+  process.stderr.write(gate.line + '\n');
+  process.exit(2);
+}
 if (!gate.open) {
   process.stderr.write(`stage-active: ${id} is NOT open - the orchestrator is not listening (no watcher with a fresh token) and not present (${gate.why}). Type any prompt in the orchestrator window, or /listen ${id} there, then open the stage again.\n`);
   process.exit(2);

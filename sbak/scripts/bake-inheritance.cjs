@@ -779,7 +779,7 @@ try {
   // Invoke the RENDERED red-gate hook directly with a PreToolUse payload (the bake can't run Claude
   // Code). Returns the hook's exit code (2 = BLOCK, 0/other = ALLOW).
   function redGate() {
-    const payload = JSON.stringify({ cwd: goldenRoot, tool_input: { file_path: implAbs } });
+    const payload = JSON.stringify({ cwd: goldenRoot, tool_name: 'Edit', tool_input: { file_path: implAbs } }); // the harness payload names its tool: a payload naming none is the gate's unknown state
     const r = spawnSync('node', [path.join(goldenRoot, '.claude', 'hooks', 'pretooluse-red-gate.cjs')],
       { cwd: goldenRoot, input: payload, encoding: 'utf8' });
     return r.status;
@@ -881,6 +881,11 @@ try {
   } catch (e) {
     findings.push(`golden leg — the rendered read-ledger lib is unusable, so the stage-open reads could not be recorded (${e && e.message ? e.message : e}).`);
   }
+  // The release records the RED set and refuses an empty one, so the rendered tree is a
+  // repository holding one uncommitted test file, as a real stage's tree does.
+  spawnSync('git', ['init', '-q'], { cwd: goldenRoot, env: sandbox.scrubGitEnv(), encoding: 'utf8' });
+  fs.mkdirSync(path.join(goldenRoot, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(goldenRoot, 'tests', 'golden.test.js'), "test('golden', () => {});\n");
   runRendered('scripts/approve-red.cjs', ['--stage', 'M01.A', '--release-seq', 'none']); // 2) human approves the RED (reads recorded above); the bare release form, no channel here
   const s2 = redGate();
   runRendered('scripts/stage-active.cjs', ['--clear']); // 3) stage closed → dormant

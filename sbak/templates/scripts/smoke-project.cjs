@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -115,11 +115,16 @@ if (fs.existsSync(H_RG) && fs.existsSync(S_SA) && fs.existsSync(S_AR)) {
   const rg = fixtureDir('red-gate');
   const redGate = () => runNode(H_RG, [], {
     cwd: rg,
-    input: JSON.stringify({ cwd: rg, tool_input: { file_path: path.join(rg, 'src', 'impl.cjs') } }),
+    input: JSON.stringify({ cwd: rg, tool_name: 'Edit', tool_input: { file_path: path.join(rg, 'src', 'impl.cjs') } }), // the payload Claude Code sends names its tool; one that does not is refused
   });
   runNode(S_SA, ['M01.A'], { cwd: rg });                 // open a stage, un-approved
   ok('hook red-gate (pretooluse): failing case — a pre-approval implementation edit must block (exit 2)',
     redGate().code === 2);
+  // The release records the RED set (the test files that differ from HEAD) and refuses an empty
+  // one, so the fixture is a repository holding one uncommitted test file, as a real stage's is.
+  spawnSync('git', ['init', '-q'], { cwd: rg, env: sandbox.scrubGitEnv(), encoding: 'utf8' });
+  fs.mkdirSync(path.join(rg, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(rg, 'tests', 'red.test.js'), "test('red', () => {});\n");
   runNode(S_AR, ['--stage', 'M01.A', '--release-seq', 'none'], { cwd: rg }); // human approval (the bare release form)
   ok('hook red-gate (pretooluse): happy — after approve-red the edit is allowed', redGate().code === 0);
   runNode(S_SA, ['--clear'], { cwd: rg });               // stage closed -> dormant

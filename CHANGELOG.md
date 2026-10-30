@@ -2,9 +2,102 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.9 - 2026-10-30
+
+**The current release** - what breaks now stops instead of allowing: the hook on its own faults, the shell writes it can read, the approval record, the attestation and the readiness check each refuse and name the recovery where they used to stand down; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change; the install and every upgrade now need Claude Code 2.1.295 or newer.
+
+- **Capabilities.** Everything in v1.0.8. The red gate works out one of three states before it judges anything and refuses every edit and command in the unknown state, with the fault and the recovery line. It judges shell commands that write through a recognised construct, up to eight levels of nesting deep, and refuses one whose target it cannot read; in every state it refuses a command that deletes, moves or writes one of its control files. `/approve-red` refuses without its evidence and records the approved test files by hash; an approval that stops standing is void, and `--void` takes one back. The installer reports one of four attestation outcomes and stops on REJECTED. `kit-update --ready` is one readiness result with one next command, and `--place-settings` is the door to `.claude/settings.json`.
+- **Upgrading a v1.0.6, v1.0.7 or v1.0.8 project.** Update Claude Code, upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate` (a v1.0.6 project adds `--pin 1.0.6`). It now merges the two generated workflows and retires what the release no longer ships; the manual change below remains for a reader who prefers to make it by hand.
+- **Limitations.** One added: the shell write gate is a parser, not a sandbox. [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Three fresh-context verifier iterations, the third past the cap of two: the first two found 8 red findings, closed by two fix rounds and re-proven by execution; the third found 0 red, with the calibration self-test 11 of 11 blind. A differential harness composes every construct with every container and every victim against the real shell: the 1,003 rows that ran are 0 failing, and 102 rows that need `pwsh`, `python3` or `rename` are visible skips that have run on no host. The release candidate built twice byte-identical, installed under all four attestation outcomes, and upgraded and migrated to READY. The second fix round's pins carry the builders' mutation records only; the verifier's own plants did not run.
+
+### Manual change for a v1.0.8 project
+
+**First, upgrade the kit folder.** The edits below assume the new kit is in `sbak/`. Download the new release's `sbak-install.cjs` into your project folder, start `claude` there, type `sbak-install`, and answer `upgrade` (the same command as the install). The upgrade refreshes `sbak/` and the kit-managed scripts, leaves `scripts/verify-local.cjs` at v1.0.8 by design, and ends on the readiness block, whose last line names the one next command.
+
+**Or let the kit make it.** With the new kit in `sbak/` and the upgrade committed, run `node scripts/kit-update.cjs --migrate`: it shows the change file by file first, and with `--apply-all` it merges `scripts/verify-local.cjs` three ways from the v1.0.8 template, keeping your fills. The steps below are the same change by hand.
+
+A project bootstrapped from v1.0.8 runs its own copy of `scripts/verify-local.cjs`, filled with the project's test commands at bootstrap. `kit-update --apply` refuses that file by design, because restoring it from the template would wipe those fills, so the change below is made by hand.
+
+- **What it fixes.** The release lane's Linux leg passed when its test pattern matched no file: `node --test` exits 0 on no match, and the leg's exit code was all that was read.
+- **What changes.** The Linux leg is judged like the native leg. When `linuxTestCommand` runs `node --test`, the test-count guard reads the container's own runner summary, so `tests 0` fails the leg; any other command prints the one line saying the guard does not judge that step.
+- **How.** Make the edits below in your project's `scripts/verify-local.cjs`. Each Find block appears exactly once in the v1.0.8 file. Edits 2, 3 and 4 are required. Edit 1 is optional: it brings the header comment in line.
+
+**Edit 1 (optional): the header comment on the Linux leg.** Find this line:
+
+```js
+// The Linux leg mirrors the GitHub ubuntu image in Docker (WSL2 via VERIFY_LINUX=wsl);
+```
+
+Replace it with:
+
+```js
+// The Linux leg mirrors the GitHub ubuntu image in Docker (WSL2 via VERIFY_LINUX=wsl) and is
+// judged like the native leg: the tests-0 guard reads the container's own runner summary;
+```
+
+**Edit 2 (required): the command the Linux leg hands the container.** Find these lines:
+
+```js
+    return [wsl
+      ? { name: 'linux-wsl', file: 'wsl', args: ['bash', '-lc', CONFIG.linuxTestCommand], cmd: `wsl bash -lc ${JSON.stringify(CONFIG.linuxTestCommand)}` }
+      : { name: 'linux-docker', file: 'docker', args: ['run', '--rm', '-v', `${root}:/work`, '-w', '/work', CONFIG.dockerImage, 'sh', '-lc', CONFIG.linuxTestCommand],
+```
+
+Replace them with:
+
+```js
+    // `judge` is the command the container runs: the tests-0 guard reads it as it reads a native step.
+    return [wsl
+      ? { name: 'linux-wsl', file: 'wsl', args: ['bash', '-lc', CONFIG.linuxTestCommand], judge: CONFIG.linuxTestCommand, cmd: `wsl bash -lc ${JSON.stringify(CONFIG.linuxTestCommand)}` }
+      : { name: 'linux-docker', file: 'docker', args: ['run', '--rm', '-v', `${root}:/work`, '-w', '/work', CONFIG.dockerImage, 'sh', '-lc', CONFIG.linuxTestCommand], judge: CONFIG.linuxTestCommand,
+```
+
+**Edit 3 (required): the Linux leg judged like a native step.** Find these lines:
+
+```js
+  if (step.file) return done(spawnSync(step.file, step.args, { stdio: quiet ? 'ignore' : 'inherit', cwd: root }).status);
+  // On Windows the command reaches cmd intact, in Node's own shell form (cmd /d /s /c "<command>",
+  // arguments verbatim). cmd /c under Node's default argument quoting turned every inner " into \",
+  // which cmd passes through, so a quoted test glob matched no file. The POSIX branch is unchanged.
+  const win = process.platform === 'win32';
+  const [sh, args] = win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
+  const opts = { cwd: root, windowsVerbatimArguments: win };
+  const io = quiet ? 'ignore' : 'inherit';
+  if (!NODE_TEST.test(step.shell)) {
+```
+
+Replace them with:
+
+```js
+  // On Windows the command reaches cmd intact, in Node's own shell form (cmd /d /s /c "<command>",
+  // arguments verbatim). cmd /c under Node's default argument quoting turned every inner " into \",
+  // which cmd passes through, so a quoted test glob matched no file. The POSIX branch is unchanged.
+  // A step with a `file` (the Linux leg: docker or wsl) runs it directly and is judged on the
+  // command it hands the container (before, a Linux leg whose pattern matched nothing passed silently).
+  const win = process.platform === 'win32';
+  const [sh, args] = step.file ? [step.file, step.args] : win ? ['cmd', ['/d', '/s', '/c', `"${step.shell}"`]] : ['sh', ['-lc', step.shell]];
+  const opts = step.file ? { cwd: root } : { cwd: root, windowsVerbatimArguments: win };
+  const io = quiet ? 'ignore' : 'inherit';
+  const judged = step.file ? step.judge || '' : step.shell;
+  if (!NODE_TEST.test(judged)) {
+```
+
+**Edit 4 (required): the unreadable-summary line reads the judged command.** Find this line:
+
+```js
+        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(step.shell)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
+```
+
+Replace it with:
+
+```js
+        ? `${RED}FAIL the runner's summary could not be read (reporter ${reporterShape(judged)}) - the step is judged on the runner's own "tests N" line on stdout, so use the spec, tap or junit reporter there: ${step.cmd}${RESET}\n`
+```
+
 ## v1.0.8 - 2026-10-21
 
-**The current release** - speed and defects on v1.0.7: every defect a real multi-milestone build on v1.0.7 surfaced is closed beside the trim in the same mechanism, and a v1.0.6 or v1.0.7 project takes this release's wiring files by one command; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). No interface changes to the build loop.
+Speed and defects on v1.0.7, superseded by v1.0.9: every defect a real multi-milestone build on v1.0.7 surfaced is closed beside the trim in the same mechanism, and a v1.0.6 or v1.0.7 project takes this release's wiring files by one command. No interface changes to the build loop.
 
 - **Capabilities.** Everything in v1.0.7. `kit-update --migrate` upgrades the bootstrap-filled wiring files (the pre-commit hook and `verify-local`) from the version the project was built on, showing the change file by file first and merging three ways with your fills kept; a project records its kit pin and a sha256 per kit file. The red gate protects its whole control set (the role file, the stage marker, the hook itself) and judges the role recorded at stage open; PowerShell is judged like Bash. The project's release lane binds `--reconcile` to a fingerprint of the contents it tested and refuses a changed tree by path; an unreadable test summary fails; a second unreasoned release lane at a stage end is refused. A session reads one view assembled for its stage and role instead of the whole Phase doc (about a tenth of the bytes), and the bootstrap gets its own reading manifest. The two terminals ring each other when a packet lands, presence stands beside the watcher, `/send`, `/approve-red` and `/closeout` are human-only skills, and every shipped launch line keeps the watcher alive.
 - **Upgrading a v1.0.6 or v1.0.7 project.** Upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate` (a v1.0.6 project adds `--pin 1.0.6`); the manual change below remains for a reader who prefers to make it by hand.

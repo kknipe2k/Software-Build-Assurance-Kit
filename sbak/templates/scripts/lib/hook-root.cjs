@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/lib/hook-root.cjs
 //   (twin: templates/scripts/lib/hook-root.cjs - byte-identical; ships via kit-update's table)
 //
@@ -23,7 +23,10 @@
 //      this case);
 //   2. only when that walk finds nothing: CLAUDE_PROJECT_DIR, if set and a directory;
 //   3. else the start directory itself - today's behavior, so a hook that cannot find a
-//      repo never fails CLOSED and locks the person out (the KF-62 class).
+//      repo never fails CLOSED and locks the person out (the KF-62 class). The red gate is the
+//      exception (M34.A): it establishes its state with its own probe, a deliberate copy of
+//      walkUpToGit bound to it by a lockstep pin, and refuses when neither the payload cwd nor
+//      its own folder has a root above it.
 // Why cwd before the env var: Claude Code documents CLAUDE_PROJECT_DIR as "the project root
 // where the session STARTED" and the payload cwd as following Claude into a worktree
 // (code.claude.com/docs/en/hooks). A session started in the main checkout that enters a
@@ -38,8 +41,8 @@
 // folder holding only residue is NOT a marker: the old cwd anchor left stray `.claude/receipts/`
 // folders in subfolders, and they must never become roots.
 // Never from __dirname: a hook can be invoked from a copied tree.
-// For an edit TOOL's target the red-gate asks repoRootFor first (M32.1.B, R-36): an absolute
-// target is judged by the repo above the target itself; the order above is its fallback.
+// For an edit TOOL's target the root is the repo above the target itself (M32.1.B, R-36,
+// repoRootFor); the order above is its fallback.
 //
 // It never throws. Every exported function degrades to a safe value on any error, because
 // each caller is a hook and a hook fault must never brick a session.
@@ -74,12 +77,22 @@ function hasGitMarker(dir) {
 // and the receipts adapter must never grow a second copy of this list.
 // `hooks` is in the set as a DIRECTORY: the kit installs .claude/hooks/ at the project root and
 // the residue never carries one (amendment seq 116: a hooks-only fixture is a real shape).
-// It is also the red gate's whole control set, both layers (M33.A, R-50 a): the hook's carve
-// judges every name here, and each settings twin denies the edit tools on each name but
-// settings.json (Phase 3 still fills that one with the edit tools; the M34 door). `stage-role`
-// is the role stage-active.cjs records at open, the one the gate judges.
+// It is also the red gate's control set under .claude/, both layers (M33.A, R-50 a): the hook's
+// carve judges every name here, and each settings twin denies the edit tools on every name,
+// settings.json included (M34.C: Phase 3 places it through kit-update --place-settings, never an
+// edit tool). `stage-role` is the role stage-active.cjs records at open, the one the gate judges.
 const CONTROL_FILES = ['settings.json', 'settings.local.json', 'role', 'stage-active', 'stage-role', 'red-approved', 'red-gate-allow.txt', 'hooks'];
-const CONTROL_FILE_RE = /^read-first-list.*\.txt$/;
+// THE READ-FIRST LISTS (M34.D): .claude/read-first-list*.txt join the control set as one glob, both
+// layers - the red gate's carve judges every name it matches, each settings block denies
+// Edit(/.claude/<glob>), and a changed list is placed through kit-update --place-read-first. The
+// lists have always anchored a root walk (CONTROL_FILE_RE, the same names).
+const CONTROL_LIST_GLOB = 'read-first-list*.txt';
+const CONTROL_FILE_RE = new RegExp('^' + CONTROL_LIST_GLOB.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+// THE CONTROL PATHS (M34.A): repo-relative control files outside .claude/, carved by the same
+// rule and denied by the same settings rules (Edit(/<path>)). The installed release manifest is
+// the reference the red gate authenticates the repair script against, so it must not be
+// edit-tool writable into agreement. Never a root marker: only CONTROL_FILES anchor a walk.
+const CONTROL_PATHS = ['sbak/release-manifest.json'];
 // The user's own `~/.claude/` is Claude Code's USER config dir (it carries a settings.json and
 // may carry hooks/), never a project root: a walk that reaches the home directory must not
 // anchor there by its control files (amendment seq 116, found live: a fixture under %TEMP%
@@ -224,8 +237,9 @@ function readStdinBounded() {
 }
 // readHookInput() -> { raw, payload, root, claudeDir }. `payload` is the parsed JSON object or
 // null (not JSON / not an object / an array) - each hook keeps its OWN policy on null (the
-// red-gate allows, the mode-check treats raw as the prompt, the receipts adapter records
-// nothing). `root` is repoRoot(payload); `claudeDir` is <root>/.claude.
+// mode-check treats raw as the prompt, the receipts adapter records nothing; the red gate reads
+// its payload with its own probe and refuses a null one, M34.A). `root` is repoRoot(payload);
+// `claudeDir` is <root>/.claude.
 function readHookInput() {
   const raw = readStdinBounded();
   let payload = null;
@@ -237,4 +251,4 @@ function readHookInput() {
   return { raw, payload, root, claudeDir: path.join(root, '.claude') };
 }
 
-module.exports = { repoRoot, targetRoot, repoRootFor, decodeBytes, realOrLexical, readStdinBounded, readHookInput, MAX_STDIN_BYTES, CONTROL_FILES };
+module.exports = { repoRoot, targetRoot, repoRootFor, walkUpToGit, decodeBytes, realOrLexical, readStdinBounded, readHookInput, MAX_STDIN_BYTES, CONTROL_FILES, CONTROL_PATHS, CONTROL_LIST_GLOB };

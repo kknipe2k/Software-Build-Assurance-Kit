@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/lib/channel.cjs
 //   (kit source of truth: templates/scripts/lib/channel.cjs)
 //
@@ -151,6 +151,11 @@ function readLog(file, expectRole, repo) {
   return { msgs, fault: null };
 }
 function readCursor(root, role) { try { const v = parseInt(fs.readFileSync(path.join(root, `cursor.${SIDE[role] || role}`), 'utf8'), 10); return Number.isInteger(v) && v >= 0 ? v : 0; } catch (_) { return 0; } }
+// The channel's own files under .claude/channel/ (M34.D): the two logs, the transient markers the
+// project gitignores, and writeAtomic's temp beside each. kit-update --ready's tree row ignores
+// exactly these; any other file there is uncommitted like any other.
+const OWN_FILES = Object.freeze([/^(builder-to-orch|orch-to-builder)\.jsonl(\.tmp)?$/, /^cursor\.(work|orchestrator)(\.tmp)?$/, /^turn(\.tmp)?$/,
+  /^(watch|present)\.(work|orchestrator)\.json(\.tmp)?$/, /^send-token(\.tmp)?$/, /^outgoing\.md$/, /^approval\.json(\.tmp)?$/]);
 function writeAtomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.tmp';
@@ -345,11 +350,31 @@ function bellLine(res, seq) {
 }
 
 // ---------------------------------------------------------------------------
-// The approval record and the amendment (M33.G; M32-FIELD-REPAIR §4.4's in-stage half).
-// approve-red records the test files changed at approval with their hashes; an amendment (edits
-// INSIDE those files) carries the amended hashes; the orchestrator's ack appends them. A new test
-// file or a new stage id is scope - the owner's /approve-red. Voiding an approval on a material
-// change and the un-approve are not here (M34).
+// The approval record and the amendment (M33.G; M32-FIELD-REPAIR §4.4's in-stage half), and the
+// five materiality cases (M34.C, R-80 on R-21's discretion). The record (.claude/channel/
+// approval.json) is a list per stage, appended to while the stage is open:
+//   { v: 2, stage, rows: [ <approval | ack | void>, ... ] }
+//   approval  approve-red's: who (role), where (repo), when (at, prompt_at), session, the released
+//             seq, base (HEAD), scope { doc, blob, section_sha256 } and the test files changed at
+//             approval, each { path, sha256, blob } - the blob is the bytes in git's object store,
+//             what case 5 diffs against;
+//   ack       the orchestrator's, naming the amended bytes the same way;
+//   void      the human's un-approve (approve-red --void), with its reason.
+// The marker's second line binds one approval row by approvalRowHash (the red gate keeps its own
+// copy, lockstep-pinned). A record without v: 2 (M33.G's shape, or one a pre-M34.C release wrote) is
+// a legacy record: read as rows, and case 3 at the stage end and case 4 do not run against it.
+//   case 1  implementation changes during Green: expected, nothing checks them;
+//   case 2  an edit inside an approved test file: an amendment, the orchestrator's ack, no keystroke;
+//   case 3  a test file added, an approved one deleted or renamed, or a new stage id: scope, void
+//           until the owner's /approve-red - the red gate checks the record's files before an
+//           implementation edit, and the stage-end publish refuses an added file and a recorded
+//           file that is missing or renamed (M34.1.B); an approval that would record no file is
+//           refused (approve-red, appendApproval);
+//   case 4  the approved scope section changed at HEAD: the amendment and stage-end publishes refuse;
+//   case 5  an amendment that removes or loosens an assertion: the ack refuses it (the one
+//           obligation); the ack prints the diff summary so the read happens in the acking turn.
+// A hash proves bytes changed; the case is decided by the path class, the scope compare and the ack
+// record, never by the hash alone.
 // ---------------------------------------------------------------------------
 const APPROVAL_FILE = 'approval.json';
 // The test globs of the red-gate hook (pretooluse-red-gate.cjs BUILTIN_ALLOW's test half) plus the
@@ -380,9 +405,12 @@ function testGlobs(tree) {
 }
 function fileSha(tree, rel) { try { return crypto.createHash('sha256').update(fs.readFileSync(path.join(tree, rel))).digest('hex'); } catch (_) { return null; } }
 // The test files `git status` names (changed or untracked, never a deletion), sorted.
-function changedTestFiles(tree) {
+function changedTestFiles(tree) { return redSet(tree) || []; }
+// The same list, or null when git cannot list changes here (not a repository, or git did not run):
+// the RED set an approval records (M34.1.B, Y-4), told apart from an empty one.
+function redSet(tree) {
   const raw = git(tree, ['status', '--porcelain', '--untracked-files=all', '-z']);
-  if (raw === null) return [];
+  if (raw === null) return null;
   const res = testGlobs(tree);
   const out = [];
   const parts = raw.split(NUL);
@@ -396,30 +424,261 @@ function changedTestFiles(tree) {
   }
   return Array.from(new Set(out)).sort();
 }
-function readApproval(root) { try { const j = JSON.parse(fs.readFileSync(path.join(root, APPROVAL_FILE), 'utf8')); return j && Array.isArray(j.files) ? j : null; } catch (_) { return null; } }
-// approve-red, after its marker: the open stage, the released seq (or null) and the test files' hashes.
-function writeApproval(tree, stage, seq) {
-  const files = changedTestFiles(tree).map((p) => ({ path: p, sha256: fileSha(tree, p) })).filter((f) => f.sha256);
-  const rec = { stage, approval_seq: Number.isInteger(seq) ? seq : null, at: new Date().toISOString(), files, acks: [] };
-  writeAtomic(path.join(tree, '.claude', 'channel', APPROVAL_FILE), JSON.stringify(rec, null, 2) + '\n');
+// The approval row's binding hash: sha256 over the row with every object's keys sorted, arrays in
+// order, values as JSON (an undefined value is absent, as JSON writes it). The marker's second line
+// names it; the red gate's probeRowHash is its lockstep copy.
+function canonicalJson(v) {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(',')}]`;
+  if (v && typeof v === 'object') return `{${Object.keys(v).filter((k) => v[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(v[k])}`).join(',')}}`;
+  return JSON.stringify(v);
+}
+function approvalRowHash(row) { return crypto.createHash('sha256').update(canonicalJson(row), 'utf8').digest('hex'); }
+// The files' bytes written to git's object store, one call (`hash-object -w --no-filters`: the exact
+// bytes). -> Map path -> blob id, or null where git could not take it (no repository).
+const BLOB_RE = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+function snapshotBlobs(tree, rels) {
+  const out = new Map();
+  if (!rels.length) return out;
+  const r = spawnSync('git', ['hash-object', '-w', '--no-filters', '--'].concat(rels), { cwd: tree, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const ids = r.status === 0 ? String(r.stdout).split(/\r?\n/).filter(Boolean) : [];
+  rels.forEach((p, i) => out.set(p, BLOB_RE.test(ids[i] || '') ? ids[i] : null));
+  return out;
+}
+function blobBytes(tree, blob) {
+  if (typeof blob !== 'string' || !BLOB_RE.test(blob)) return null;
+  const r = spawnSync('git', ['cat-file', 'blob', blob], { cwd: tree, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 << 20 });
+  return r.status === 0 ? r.stdout : null;
+}
+// -> the v2 record, a legacy record read as rows ({ legacy: true }), or null.
+function readApproval(root) {
+  let j;
+  try { j = JSON.parse(fs.readFileSync(path.join(root, APPROVAL_FILE), 'utf8')); } catch (_) { return null; }
+  if (!j || typeof j !== 'object' || typeof j.stage !== 'string') return null;
+  if (j.v === 2 && Array.isArray(j.rows)) return j;
+  if (!Array.isArray(j.files)) return null;
+  const rows = [{ kind: 'approval', at: j.at || null, seq: Number.isInteger(j.approval_seq) ? j.approval_seq : null, scope: null, files: j.files }];
+  for (const a of Array.isArray(j.acks) ? j.acks : []) rows.push({ kind: 'ack', seq: a.seq, files: Array.isArray(a.files) ? a.files : [] });
+  return { legacy: true, stage: j.stage, rows, raw: j };
+}
+// The standing approval: the last approval row, each approved path's latest bytes (the approval's,
+// or an ack's after it), and a void after it. -> null | { row, latest: Map path -> { sha256, blob }, voided }
+function currentApproval(rec) {
+  if (!rec || !Array.isArray(rec.rows)) return null;
+  let idx = -1;
+  rec.rows.forEach((r, i) => { if (r && r.kind === 'approval') idx = i; });
+  if (idx === -1) return null;
+  const row = rec.rows[idx];
+  const latest = new Map((Array.isArray(row.files) ? row.files : []).map((f) => [f.path, { sha256: f.sha256, blob: f.blob || null }]));
+  let voided = null;
+  for (const r of rec.rows.slice(idx + 1)) {
+    if (r && r.kind === 'ack') for (const f of Array.isArray(r.files) ? r.files : []) latest.set(f.path, { sha256: f.sha256, blob: f.blob || null });
+    if (r && r.kind === 'void') voided = r;
+  }
+  return { row, latest, voided };
+}
+function writeRecord(root, rec) { writeAtomic(path.join(root, APPROVAL_FILE), JSON.stringify(rec, null, 2) + '\n'); }
+// The record's bytes as they stand (null when absent), and their return: approve-red's refusal after
+// the record was written leaves the tree as it was (D1).
+function recordBytes(root) { try { return fs.readFileSync(path.join(root, APPROVAL_FILE)); } catch (_) { return null; } }
+function restoreRecord(root, bytes) {
+  const f = path.join(root, APPROVAL_FILE);
+  if (bytes === null) { fs.rmSync(f, { force: true }); return; }
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(f + '.tmp', bytes);
+  fs.renameSync(f + '.tmp', f);
+}
+// A row appended to the stage's record; a record for another stage is replaced (a new stage starts
+// its own list), a legacy record for this stage is carried over as rows.
+function appendRow(tree, stage, row) {
+  const root = path.join(tree, '.claude', 'channel');
+  const prior = readApproval(root);
+  const rows = prior && prior.stage === stage ? prior.rows.concat([row]) : [row];
+  const rec = { v: 2, stage, rows };
+  writeRecord(root, rec);
   return rec;
 }
-// The publish's check on --kind amendment. -> { ok:true, amended:[{path, sha256}] } | { ok:false, line }
+// approve-red, step 5: the approval row. fields: { seq, role, repo, session, prompt_at, scope }.
+// -> { rec, row } (the row as written: its hash is the marker's binding)
+function appendApproval(tree, stage, fields) {
+  const f = fields || {};
+  const paths = changedTestFiles(tree);
+  const blobs = snapshotBlobs(tree, paths);
+  const files = paths.map((p) => ({ path: p, sha256: fileSha(tree, p), blob: blobs.get(p) || null })).filter((x) => x.sha256);
+  // M34.1.B (Y-4): the record is a list of approvals, never of nothing.
+  if (!files.length) throw new Error('the RED set is empty: an approval names at least one test file');
+  const row = JSON.parse(JSON.stringify({
+    kind: 'approval', at: new Date().toISOString(), seq: Number.isInteger(f.seq) ? f.seq : null,
+    role: f.role, repo: f.repo || null, session: f.session || null, prompt_at: f.prompt_at || null,
+    base: git(tree, ['rev-parse', 'HEAD']) || null, scope: f.scope || null, files,
+  }));
+  return { rec: appendRow(tree, stage, row), row };
+}
+// approve-red --void: the void row. fields: { reason, role, repo, session, prompt_at }.
+function appendVoid(tree, stage, fields) {
+  const f = fields || {};
+  const row = JSON.parse(JSON.stringify({ kind: 'void', at: new Date().toISOString(), reason: f.reason, role: f.role, repo: f.repo || null, session: f.session || null, prompt_at: f.prompt_at || null }));
+  return { rec: appendRow(tree, stage, row), row };
+}
+// stage-active --clear: the record archived beside the stage's evidence, the live file removed.
+// Never overwrites an archive (a second is approval-1.json). -> the archive's path, or null (no record)
+function archiveApproval(tree, openStage) {
+  const f = path.join(tree, '.claude', 'channel', APPROVAL_FILE);
+  let bytes;
+  try { bytes = fs.readFileSync(f); } catch (_) { return null; }
+  let stage = openStage;
+  try { const j = JSON.parse(bytes.toString('utf8')); if (j && typeof j.stage === 'string') stage = j.stage; } catch (_) { /* the open stage names it */ }
+  if (!stage || !STAGE_RE.test(stage)) throw new Error('the record names no stage id to archive it under');
+  const dir = path.join(tree, '.claude', 'measurements', stage);
+  fs.mkdirSync(dir, { recursive: true });
+  for (let n = 0; ; n++) {
+    const p = path.join(dir, n === 0 ? APPROVAL_FILE : `approval-${n}.json`);
+    let fd;
+    try { fd = fs.openSync(p, 'wx'); } catch (e) { if (e && e.code === 'EEXIST') continue; throw e; }
+    try { fs.writeSync(fd, bytes); } finally { fs.closeSync(fd); }
+    fs.rmSync(f, { force: true });
+    return p;
+  }
+}
+
+// Case 4: the approved scope section against HEAD. The blob equal is the fast answer; a new blob
+// re-slices the section (read-ledger stageSectionAt, the one reader) and compares its sha256, so an
+// unrelated section's edit is not a scope change. -> null (unchanged, or nothing recorded) | the line
+function scopeChange(tree, stage, scope, kind) {
+  if (!scope || typeof scope !== 'object' || typeof scope.doc !== 'string') return null;
+  if (git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${scope.doc}`]) === scope.blob) return null;
+  const line = `channel: ${kind} refused - the approved scope changed: the ${stage} section of ${scope.doc} is not the one the RED was approved against; that is scope: the orchestrator /sends the amended scope and the owner runs /approve-red`;
+  let rl;
+  try { rl = require(path.join(__dirname, 'read-ledger.cjs')); } catch (_) {
+    return `channel: ${kind} refused - the approved scope cannot be compared (scripts/lib/read-ledger.cjs did not load) - repair: node scripts/kit-update.cjs --adopt`;
+  }
+  const sec = rl.stageSectionAt(tree, stage);
+  if (!sec.ok) return line;
+  return crypto.createHash('sha256').update(sec.text, 'utf8').digest('hex') === scope.section_sha256 ? null : line;
+}
+// The test files changed since the approval's base (committed or not, never a deletion) plus the
+// untracked ones, sorted.
+function testFilesSince(tree, base) {
+  const out = new Set(changedTestFiles(tree));
+  const raw = base ? git(tree, ['diff', '--name-only', '-z', base]) : null;
+  if (raw !== null) {
+    const res = testGlobs(tree);
+    for (const p of raw.split(NUL).filter(Boolean)) {
+      const rel = p.replace(/\\/g, '/');
+      if (res.some((re) => re.test(rel)) && fs.existsSync(path.join(tree, rel))) out.add(rel);
+    }
+  }
+  return Array.from(out).sort();
+}
+// The stage-end publish's checks (cases 3 and 4) against the open stage's v2 record; a legacy record,
+// no record or another stage's record leaves the stage end as it was. -> { ok } | { ok: false, line }
+function stageEndCheck(res) {
+  const rec = readApproval(res.root);
+  const open = stageOf(res.tree);
+  if (!rec || rec.legacy || rec.stage !== open) return { ok: true };
+  const cur = currentApproval(rec);
+  if (!cur) return { ok: true };
+  const sc = scopeChange(res.tree, open, cur.row.scope, 'stage-end');
+  if (sc) return { ok: false, line: sc };
+  const added = testFilesSince(res.tree, cur.row.base).filter((p) => !cur.latest.has(p));
+  // M34.1.B (Y-3; §M34.C C.2 item 6 (3) as amended): each file the approval recorded is at its path.
+  // Missing is found by path; renamed by its recorded bytes among the added test files.
+  for (const [p, f] of cur.latest) {
+    let here = false;
+    try { here = fs.statSync(path.join(res.tree, p)).isFile(); } catch (_) { here = false; }
+    if (here) continue;
+    const to = added.find((q) => fileSha(res.tree, q) === f.sha256);
+    return { ok: false, line: to
+      ? `channel: stage-end refused - ${p}, a test file the RED approval recorded, is at ${to} now (the same bytes); that is scope: the owner's /approve-red`
+      : `channel: stage-end refused - ${p} is a test file the RED approval recorded and it is not in the working tree; that is scope: the owner's /approve-red` };
+  }
+  if (added.length) return { ok: false, line: `channel: stage-end refused - ${added[0]} is a test file added after the RED approval with no re-approval; that is scope: the owner's /approve-red` };
+  return { ok: true };
+}
+
+// Case 5's evidence: a line diff of the approved (or acked) bytes against the amended ones. Common
+// head and tail trimmed, the rest by longest common subsequence. -> { hunks, added, removed }
+function lineDiff(a, b) {
+  const L = (t) => { const x = String(t).replace(/\r\n?/g, '\n').split('\n'); if (x.length && x[x.length - 1] === '') x.pop(); return x; };
+  const A = L(a); const B = L(b);
+  let s = 0; while (s < A.length && s < B.length && A[s] === B[s]) s++;
+  let e = 0; while (e < A.length - s && e < B.length - s && A[A.length - 1 - e] === B[B.length - 1 - e]) e++;
+  const X = A.slice(s, A.length - e); const Y = B.slice(s, B.length - e);
+  if (!X.length && !Y.length) return { hunks: 0, added: 0, removed: 0 };
+  if (X.length * Y.length > 4e6) return { hunks: 1, added: Y.length, removed: X.length };
+  const n = X.length; const m = Y.length;
+  const dp = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = X[i] === Y[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  let i = 0; let j = 0; let hunks = 0; let added = 0; let removed = 0; let open = false;
+  while (i < n || j < m) {
+    if (i < n && j < m && X[i] === Y[j]) { i++; j++; open = false; continue; }
+    if (!open) { hunks++; open = true; }
+    if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { added++; j++; } else { removed++; i++; }
+  }
+  return { hunks, added, removed };
+}
+// An assertion line with its literals blanked: two lines that differ only in a number or a string
+// are the same assertion with a literal changed.
+const skeleton = (l) => l.replace(/(["'`])(?:\\.|(?!\1)[^\\])*\1/g, '""').replace(/\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/gi, '0');
+function multisetMinus(a, b) { const left = new Map(); for (const x of b) left.set(x, (left.get(x) || 0) + 1); return a.filter((x) => { const n = left.get(x) || 0; if (n) { left.set(x, n - 1); return false; } return true; }); }
+// Case 5: one amended file against the bytes the approval (or an ack) named, counted by the
+// test-honesty validator's own counters. The four reasons, in this order (C6): the assertion count
+// went down; a skip or todo marker was added; an existing assertion line is gone and a line differing
+// only in its literals stands in its place; an existing assertion line is gone with no such line.
+// -> { reason, summary } | { missing: <the bytes the store lost> } | { broken: <the counter did not load> }
+function classifyAmendment(tree, before, f) {
+  if (!before || !before.blob) return { missing: `the approved bytes of ${f.path} (blob ${before && before.blob ? before.blob : 'none recorded'}) are not in the object store` };
+  const oldBuf = blobBytes(tree, before.blob);
+  if (!oldBuf) return { missing: `the approved bytes of ${f.path} (blob ${before.blob}) are not in the object store` };
+  let newText = '';
+  if (f.sha256) {
+    const nb = blobBytes(tree, f.blob);
+    if (!nb) return { missing: `the amended bytes of ${f.path} (blob ${f.blob || 'none recorded'}) are not in the object store` };
+    newText = nb.toString('utf8');
+  }
+  const oldText = oldBuf.toString('utf8');
+  const d = lineDiff(oldText, newText);
+  const head = `${d.hunks} hunk(s), +${d.added} -${d.removed} lines`;
+  let counter = null;
+  try { counter = require(path.join(tree, 'validators', 'validate-test-honesty.cjs')).countAssertions; } catch (_) { counter = null; }
+  if (typeof counter !== 'function') return { broken: 'the assertion counter validators/validate-test-honesty.cjs did not load' };
+  const a = counter(f.path, oldText); const b = counter(f.path, newText);
+  if (!a || !b) return { reason: null, summary: `${head}, assertions not evaluated (${path.extname(f.path) || 'no extension'})` };
+  let reason = null;
+  if (b.count < a.count) reason = `assertions ${a.count} -> ${b.count}`;
+  if (!reason) for (const name of Object.keys(b.skips)) if ((b.skips[name] || 0) > (a.skips[name] || 0)) { reason = `${name} added`; break; }
+  if (!reason) {
+    const gone = multisetMinus(a.lines, b.lines); const fresh = multisetMinus(b.lines, a.lines);
+    if (gone.length) reason = gone.some((o) => fresh.some((n) => skeleton(n) === skeleton(o))) ? 'a literal changed in an existing assertion' : 'an assertion rewritten';
+  }
+  return { reason, summary: `${head}, assertions ${a.count} -> ${b.count}` };
+}
+
+// The publish's check on --kind amendment. -> { ok:true, amended:[{path, sha256, blob}], flags:[{path, reason}] } | { ok:false, line }
+// flags are the builder's notice of what the ack will refuse; the ack recounts and never trusts them.
 function amendment(res) {
   const rec = readApproval(res.root);
   if (!rec) return { ok: false, line: 'channel: amendment refused - no approval record for the open stage (/approve-red writes .claude/channel/approval.json); a test change before the release belongs in the red-stop' };
   const open = stageOf(res.tree);
   if (rec.stage !== open) return { ok: false, line: `channel: amendment refused - the open stage is ${open} and the approval was for ${rec.stage}; a new stage id is scope: the owner's /approve-red` };
-  const latest = new Map(rec.files.map((f) => [f.path, f.sha256]));
-  for (const a of rec.acks || []) for (const f of a.files || []) latest.set(f.path, f.sha256);
+  const cur = currentApproval(rec);
+  if (!cur) return { ok: false, line: 'channel: amendment refused - no approval record for the open stage (/approve-red writes .claude/channel/approval.json); a test change before the release belongs in the red-stop' };
+  if (!rec.legacy) { const sc = scopeChange(res.tree, open, cur.row.scope, 'amendment'); if (sc) return { ok: false, line: sc }; }
+  const latest = cur.latest;
   const added = changedTestFiles(res.tree).filter((p) => !latest.has(p));
   if (added.length) return { ok: false, line: `channel: amendment refused - it adds a test file ${added[0]}; that is scope: the owner's /approve-red` };
-  const amended = Array.from(latest.keys()).sort().map((p) => ({ path: p, sha256: fileSha(res.tree, p) })).filter((f) => f.sha256 !== latest.get(f.path));
-  if (!amended.length) return { ok: false, line: 'channel: amendment refused - no approved test file changed since the approval (nothing to amend)' };
-  return { ok: true, amended };
+  const changed = Array.from(latest.keys()).sort().map((p) => ({ path: p, sha256: fileSha(res.tree, p) })).filter((x) => x.sha256 !== latest.get(x.path).sha256);
+  if (!changed.length) return { ok: false, line: 'channel: amendment refused - no approved test file changed since the approval (nothing to amend)' };
+  const blobs = snapshotBlobs(res.tree, changed.filter((x) => x.sha256).map((x) => x.path));
+  const amended = changed.map((x) => ({ path: x.path, sha256: x.sha256, blob: x.sha256 ? (blobs.get(x.path) || null) : null }));
+  const flags = [];
+  if (!rec.legacy) for (const x of amended) { const c = classifyAmendment(res.tree, latest.get(x.path), x); if (c.reason) flags.push({ path: x.path, reason: c.reason }); }
+  return { ok: true, amended, flags };
 }
 // The orchestrator's ack: the ONE orchestrator publish with no /send token, and only in reply to
-// an amendment not yet acknowledged. It appends the amended hashes to the record.
+// an amendment not yet acknowledged. It recounts each amended file against the bytes the record
+// names (case 5: a loosening is refused, and so is an amendment whose bytes the object store no
+// longer holds), appends an ack row naming the amended bytes, and returns the diff summary the
+// orchestrator reads in the acking turn (M34.C). A legacy record is acked as before.
 function ackAmendment(cwd, res, seq) {
   const theirs = readLog(path.join(res.root, FILES.work), 'work', res.repo);
   if (theirs.fault) return { ok: false, line: theirs.fault.line.replace('pickup stopped', 'ack stopped') };
@@ -431,11 +690,24 @@ function ackAmendment(cwd, res, seq) {
   const prev = mine.msgs.find((x) => x.kind === 'ack' && x.reply_to === seq);
   if (prev) return { ok: false, line: `channel: amendment seq ${seq} is already acknowledged (seq ${prev.seq})` };
   const files = Array.isArray(m.amended) ? m.amended : [];
+  const rec = readApproval(res.root);
+  const cur = rec && !rec.legacy && rec.stage === m.stage ? currentApproval(rec) : null;
+  const summary = [];
+  if (cur) {
+    for (const f of files) {
+      const c = classifyAmendment(res.tree, cur.latest.get(f.path) || null, f);
+      if (c.broken) return { ok: false, line: `channel: ack refused - amendment seq ${seq}: ${c.broken}, so a loosened assertion cannot be told from an added one - repair: node scripts/kit-update.cjs --adopt, then ack again` };
+      if (c.missing) return { ok: false, line: `channel: ack refused - amendment seq ${seq}: ${c.missing}, so a loosened assertion cannot be told from an added one; the owner runs /approve-red` };
+      if (c.reason) return { ok: false, line: `channel: ack refused - amendment seq ${seq} is case 5: ${f.path} ${c.reason}; the owner runs /approve-red (an amendment that removes or loosens an assertion is never acked)` };
+      summary.push(`ack: ${f.path}: ${c.summary}`);
+    }
+  }
   const body = `ack: amendment seq ${seq} acknowledged - ${files.length} amended test file(s): ${files.map((f) => f.path).join(', ') || 'none'}`;
   const r = append(cwd, res, 'courier', 'ack', Buffer.from(body, 'utf8'), { replyTo: seq });
   if (!r.ok) return r;
-  const rec = readApproval(res.root);
-  if (rec) { rec.acks = (rec.acks || []).concat([{ seq, files }]); writeAtomic(path.join(res.root, APPROVAL_FILE), JSON.stringify(rec, null, 2) + '\n'); }
+  if (rec && rec.legacy) { const raw = rec.raw; raw.acks = (raw.acks || []).concat([{ seq, files }]); writeRecord(res.root, raw); }
+  else if (rec) { rec.rows.push(JSON.parse(JSON.stringify({ kind: 'ack', at: new Date().toISOString(), seq, ack_seq: r.msg.seq, files }))); writeRecord(res.root, rec); }
+  r.summary = summary;
   return r;
 }
 
@@ -457,5 +729,8 @@ module.exports = {
   unreadFor, append, sendGate, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
   stampLine, consumeApproval, emit, writeAtomic, pidAlive, trunkOf, aheadOf,
   LISTEN_FRESH_MS, watcherState, bellLine, peerFolder,
-  APPROVAL_FILE, TEST_GLOBS, changedTestFiles, readApproval, writeApproval, amendment, ackAmendment,
+  APPROVAL_FILE, OWN_FILES, TEST_GLOBS, changedTestFiles, redSet, readApproval, amendment, ackAmendment,
+  // the approval record cannot be weakened (M34.C)
+  canonicalJson, approvalRowHash, currentApproval, appendApproval, appendVoid, recordBytes, restoreRecord, archiveApproval,
+  snapshotBlobs, blobBytes, scopeChange, stageEndCheck, testFilesSince, lineDiff, classifyAmendment,
 };

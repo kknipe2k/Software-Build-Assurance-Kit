@@ -8,7 +8,7 @@
 
 ## Just get going
 
-In a hurry? One file, one word, then the kit drives **(you need Git, Node 22+, and Claude Code - §0)**:
+In a hurry? One file, one word, then the kit drives **(you need Git, Node 22+, and Claude Code 2.1.295 or newer, for the install and every upgrade - §0)**:
 
 1. Download `sbak-install.cjs` from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. The directory you run in is the directory that gets written to.
 2. Start `claude` there and type `sbak-install`. The script verifies what it downloads, asks before it writes anything, arms the hooks, and prints `Done` (§1 has the full walk-through, including the manual ZIP path).
@@ -33,7 +33,7 @@ You need three things installed before anything below works:
 |---|---|---|
 | **Git** | To clone the kit and because the framework commits per stage | `git --version` |
 | **Node.js 22+** | Claude Code requires it; the SessionStart hook and the validator are Node scripts. The floor is 22 rather than 18 because the test command this kit prescribes is a path-scoped glob (`node --test "tests/**/*.test.cjs"`), and glob positionals require Node 21 or newer - 22 is the lowest maintained line that runs it. CI pins 24 (Active LTS). | `node --version` |
-| **Claude Code** | This framework drives Claude Code. It is the CLI tool `claude` - *not* the claude.ai chat website. | `claude --version` |
+| **Claude Code 2.1.295+** | This framework drives Claude Code. It is the CLI tool `claude` - *not* the claude.ai chat website. The kit's settings carry a field (`onFailure`) older releases may reject, so the install and every upgrade of the kit need 2.1.295 or newer; `node scripts/kit-update.cjs --ready` checks it. | `claude --version` |
 
 If `claude` is missing, install Claude Code per the official instructions (typically `npm install -g @anthropic-ai/claude-code`, but follow the current official docs as the authoritative source). The web app at claude.ai/code can host the orchestrator session (see the "Two roles" section); build and verifier sessions run the fully enforced path in the terminal-launched CLI.
 
@@ -51,15 +51,22 @@ Download ONE file from the [releases page](https://github.com/kknipe2k/Software-
 sbak-install
 ```
 
-That is the whole job. The script carries its own instructions; Claude reads them and runs it one step at a time. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The script downloads the release ZIP, verifies it, and creates the git repo if there is none. It asks one thing at a time: first the download (it names the exact URL and where the ZIP will land, then shows you the checksum and attestation result), then the proceed - `OK to proceed? Type install, list, or no`, where `list` shows every file first; every question ends with the exact word to type, and the person types nothing else. On an existing repo the script hands Claude a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through with you before that proceed. Nothing is written before your word; the ZIP lands in `.sbak-install/` inside the folder (removed after a successful install) and a plain-text install log at `sbak/INSTALL.log`, versioned with the kit. Running the script by hand at a terminal does nothing but tell you to start claude here. **Upgrading** an installed kit is the same command: the report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), then a single proceed question - `OK to upgrade? Type upgrade, list, or no` - and nothing is written before you type `upgrade`. `sbak/` and the live kit files refresh; files you changed are kept and named; the bootstrap-filled files (your pre-commit hook and `verify-local`) stay at the version they were installed at and are named for you: commit the upgrade, then run `node scripts/kit-update.cjs --migrate`, which shows the change file by file and writes nothing until you re-run it with `--apply-all` (it merges those two files three ways and keeps your fills). If you changed a file inside `sbak/` itself, the upgrade stops and names it before anything is written: mark it `INTENTIONAL DIVERGENCE` near its top to keep it, or put it back. The previous version stays in git history. The script pins the release it installs, verifies the ZIP's checksum and, where `gh` is available, its attestation - and says plainly when it could not. It then runs the adopt step, so the hooks are live when it prints `Done`. Stay in this window: Claude reads the kit's `CLAUDE.md` and asks what you want to build in the same session, and the line under `Done` tells you to switch back to auto mode (Shift+Tab).
+That is the whole job. The script carries its own instructions; Claude reads them and runs it one step at a time. **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own; if your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click. The script downloads the release ZIP, verifies it, and creates the git repo if there is none. It asks one thing at a time: first the download (it names the exact URL and where the ZIP will land, then shows you the checksum and attestation result), then the proceed - `OK to proceed? Type install, list, or no`, where `list` shows every file first; every question ends with the exact word to type, and the person types nothing else. On an existing repo the script hands Claude a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through with you before that proceed. Nothing is written before your word; the ZIP lands in `.sbak-install/` inside the folder (removed after a successful install) and a plain-text install log at `sbak/INSTALL.log`, versioned with the kit. Running the script by hand at a terminal does nothing but tell you to start claude here. **Upgrading** an installed kit is the same command: the report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), then a single proceed question - `OK to upgrade? Type upgrade, list, or no` - and nothing is written before you type `upgrade`. `sbak/` and the live kit files refresh; files you changed are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block (the one below, at the end of bootstrap), one line per check and one next command; the bootstrap-filled files (your pre-commit hook and `verify-local`) stay at the version they were installed at and are named for you: commit the upgrade, then run `node scripts/kit-update.cjs --migrate`, which shows the change file by file and writes nothing until you re-run it with `--apply-all` (it merges those two files three ways and keeps your fills). If you changed a file inside `sbak/` itself, the upgrade stops and names it before anything is written: mark it `INTENTIONAL DIVERGENCE` near its top to keep it, or put it back. The previous version stays in git history. The script pins the release it installs and verifies the ZIP's checksum and its attestation. It then runs the adopt step, so the hooks are live when it prints `Done`. Stay in this window: Claude reads the kit's `CLAUDE.md` and asks what you want to build in the same session, and the line under `Done` tells you to switch back to auto mode (Shift+Tab).
+
+The attestation result is one of four:
+
+- **verified** - `gh attestation verify` confirmed the repository built this ZIP.
+- **unavailable** - `gh` is not installed, so the checksum alone stands; the install goes on.
+- **could not run** - `gh` is there but failed (not signed in, no network). You get one retry, then type `checksum only` to go on without it.
+- **REJECTED** - the asset is not the one the repository built. Nothing is installed, and only `re-download` or `abort` continue.
 
 ### Download the release ZIP - the manual fallback
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.8-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.9-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.8-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.8-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.8-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.8-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance).
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.9-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.9-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.9-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). An `HTTP 404` from it means the repository holds no attestation for that file: it is not the asset the repository built.
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -70,7 +77,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.8-starter.zip -d <projects-path>/my-project
+unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -81,7 +88,7 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -92,7 +99,7 @@ Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -202,13 +209,32 @@ At the end of bootstrap:
 
 - The kit's `CLAUDE.md` is **replaced** by your project's own `CLAUDE.md`.
 - The `origin` remote is reset - it pointed at the kit; you choose local-only, your own repo, or `gh repo create`.
+- The bootstrap commit lands, and `node scripts/kit-update.cjs --ready` prints the readiness block below: one line per check, then the READY line.
 - Bootstrap is done. The build loop begins.
+
+```
+modules: <n> kit scripts present (every scripts/*.cjs and scripts/lib/*.cjs the release's payload map names)
+state: project (the project files are present; no stage open)
+config: every placeholder in project-config.md is filled
+wiring: .claude/settings.json registers the session hooks, and every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved)
+hooks: core.hooksPath reads .githooks; .githooks/pre-commit, .githooks/pre-push are regular executable files
+read-first: the read-first lists pass the hook's own --check
+cli: claude <installed> (floor 2.1.295)
+payload: <n> files verified against sbak/release-manifest.json
+managed: <n> managed files at v<version>, <m> filled, 0 unfilled tokens
+HEAD: <sha> (the bootstrap commit has landed)
+tree: clean, ignoring .claude/channel/ (the channel's own logs, cursors and markers)
+migration: none pending (kit_version v<version> is this kit's version)
+READY. Project committed at <sha>. Next: open a fresh terminal as the orchestrator.
+```
+
+A failing check prints `NOT READY: <check> - <reason>` in its place, and the last line becomes `NOT READY: <k> of <n> rows. Next: <the one command that repairs the first>`. While an upgrade's migration is pending, that command is the migration, `--migrate`, through the script that can run it.
 
 ### Important: the two terminals, and the channel between them
 
 Before the build begins, Claude leads you through opening a **2nd Terminal** - this will house the build/verify agents. **The Orchestrator terminal 1 remains open through the entire build process**; in terminal 2 the build or verifier session is closed at the end of each stage, then reopened with a fresh session for the next.
 
-The two terminals talk over **the channel** - an append-only log inside your repository. Stage packets (the stage opening, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions, so you are not carrying blocks between windows. The verifier and refactor sessions use it too. **Approvals are never automated:** the red release and the commit approval are your keystrokes, and nothing reaches the build terminal until you type `/send`. Every turn in either terminal ends by saying what it moved to the channel and whether that session is still listening, so silence never has to be guessed at.
+The two terminals talk over **the channel** - an append-only log inside your repository. Stage packets (the stage opening, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions, so you are not carrying blocks between windows. The verifier and refactor sessions use it too. The orchestrator works in the main checkout; the builder, verifier and refactor sessions run in one builder-side worktree, and the roles rotate through it, because the channel needs exactly one builder tree. **Approvals are never automated:** the red release and the commit approval are your keystrokes, and nothing reaches the build terminal until you type `/send`. Every turn in either terminal ends by saying what it moved to the channel and whether that session is still listening, so silence never has to be guessed at.
 
 The channel starts at this split. Until then - the bootstrap session, and the first handoff into terminal 2 - anything that has to move between windows moves by hand.
 

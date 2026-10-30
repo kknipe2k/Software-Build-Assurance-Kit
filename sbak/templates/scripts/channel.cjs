@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //
@@ -29,6 +29,10 @@
 // other full-floor classes (a selector audit, an identity proof) under `<class>-run-reason:`.
 // Every send and publish prints the bell after its sent line when a peer worktree exists: the line
 // the session rings the peer with (M33.G; the jsonl stays the record, D3).
+// The approval record's materiality cases (M34.C, scripts/lib/channel.cjs): an amendment or
+// stage-end publish refuses a changed scope section (case 4); a stage-end publish refuses a test
+// file added after the RED approval (case 3); the ack refuses an amendment that removes or loosens
+// an assertion (case 5) and prints each amended file's diff summary.
 
 'use strict';
 
@@ -122,22 +126,29 @@ if (verb === 'publish' || verb === 'send') {
       const rs = longRuns(text, c);
       if (rs.length > 1 && !new RegExp(`^${c}-run-reason:[^\\S\\n]*\\S`, 'm').test(text)) die(`channel: this stage-end packet quotes ${rs.length} ${c} runs (${rs.join(', ')}) and no ${c}-run-reason: line - one long proof per stage, on the final bytes; a second run needs "${c}-run-reason: <why>" in the packet`);
     }
+    // M34.C: materiality cases 3 (a test file added after the approval) and 4 (the scope changed).
+    const se = ch.stageEndCheck(res);
+    if (!se.ok) die(se.line);
   }
   if (cls === 'stage-packet' && kind === 'gate-1') {
     const n = pinsTouched(body.toString('utf8'));
     if (n === null) die('channel: a gate-1 packet needs a "pins touched:" block - list every smoke label and validator this stage will change (grep -n over the test surface), one per line under a "pins touched:" line; nothing was sent');
     if (n === 0) die('channel: the gate-1 packet\'s "pins touched:" block lists nothing - list every smoke label and validator this stage will change (grep -n over the test surface), or "- none: <the grep that found none>"; nothing was sent');
   }
+  let flags = [];
   if (cls === 'stage-packet' && kind === 'amendment') {
     const a = ch.amendment(res);
     if (!a.ok) die(a.line);
     extra.amended = a.amended;
+    flags = a.flags || [];
   }
   const r = ch.append(cwd, res, cls, kind, body, { replyTo: replyTo === null ? undefined : parseInt(replyTo, 10), extra });
   if (!r.ok) die(r.line);
   const peer = ch.PEER_NAME[ch.PEER[res.role]];
   out(`channel: sent seq ${r.msg.seq} to ${peer} (${cls}, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
   bell(res, r.msg.seq);
+  // M34.C case 5: the builder learns now what the ack will refuse (the ack recounts on its own).
+  for (const f of flags) out(`channel: amendment seq ${r.msg.seq} is case 5 (${f.path} ${f.reason}) - the ack will refuse it; the owner's /approve-red re-approves`);
   process.exit(0);
 }
 
@@ -152,6 +163,8 @@ if (verb === 'ack') {
   if (!r.ok) die(r.line);
   out(`channel: sent seq ${r.msg.seq} to ${ch.PEER_NAME[ch.PEER[res.role]]} (courier, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
   bell(res, r.msg.seq);
+  // M34.C: the amendment's diff summary, one line per file - the read happens in the acking turn.
+  for (const l of r.summary || []) out(l);
   process.exit(0);
 }
 

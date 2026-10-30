@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.8-green" alt="Status: GA v1.0.8"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.9-green" alt="Status: GA v1.0.9"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -26,7 +26,7 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 - **[HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html)** - the visual overview. A few minutes, in your browser.
 - **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived from real commits, findings, and rework, not a staged demo.
 - **[WHY-THIS-KIT.md](WHY-THIS-KIT.md)** - deciding if it's worth your evening? Two pages, honest costs.
-- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.8 GA release: exactly what is claimed, what is not, and the notes for both.
+- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.9 GA release: exactly what is claimed, what is not, and the notes for both.
 
 ## How it works
 
@@ -73,7 +73,7 @@ Step-by-step detail is under [The stage loop](#full-documentation) below.
 
 ## Installation
 
-**Prerequisites, exactly:** **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent - Claude Code for the fully enforced path; GitHub Copilot works too, with one copy step creating the auto-load shim. `gh` only if you want the attestation check. The kit itself is stack-agnostic.
+**Prerequisites, exactly:** **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent - **Claude Code 2.1.295 or newer** for the fully enforced path (the kit's settings carry a field older releases may reject, so an upgrade of the kit needs it too); GitHub Copilot works too, with one copy step creating the auto-load shim. `gh` only if you want the attestation check. The kit itself is stack-agnostic.
 
 **Recommended:** download **`sbak-install.cjs`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. The script is attested with the release; its `.sha256` is beside it. The signed ZIP stays available as the manual path (below, under "Install and download, in full").
 
@@ -102,6 +102,13 @@ sbak-install
 
 **Result:** the script carries its own instructions; Claude reads them and runs it one step at a time. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks `OK to proceed? Type install, list, or no` - `list` shows every file first. Every question ends with the exact word to type. On an existing repo you get a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through before that proceed. Nothing is written before your word. It creates the git repo if there is none, runs the adopt step, and prints `Done` with the hooks live. Stay in this window: in the same session, Claude asks what you want to build. The protected writes are done, so switch back to auto mode (Shift+Tab).
 
+**The attestation result** is one of four:
+
+- **verified** - `gh attestation verify` confirmed the repository built this ZIP.
+- **unavailable** - `gh` is not installed, so the checksum alone stands; the install goes on.
+- **could not run** - `gh` is there but failed (not signed in, no network). You get one retry, then type `checksum only` to go on without it.
+- **REJECTED** - the asset is not the one the repository built. Nothing is installed, and only `re-download` or `abort` continue.
+
 **Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own. If your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click.
 
 **2. Say what you want.**
@@ -118,7 +125,7 @@ Your answer can simply be what you want - *"fix a bug"*, *"add a feature"*, *"bu
 
 If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed; exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe; a clean re-run changes nothing.
 
-**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in them, file by file, and merges it three ways from the version you were on, keeping your fills (a project that records no kit pin names the version it was built on once, with `--pin`).
+**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block, one line per check and one next command; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in them, file by file, and merges it three ways from the version you were on, keeping your fills (a project that records no kit pin names the version it was built on once, with `--pin`).
 
 **Need more detail?** Full documentation is below, or see [QUICKSTART.md](sbak/QUICKSTART.md) §1 - which also covers the manual ZIP path, adopting into an existing repo, and the clone alternate.
 
@@ -177,6 +184,8 @@ At start you open one window - the **bootstrap session**. It asks what you want 
 The first is the **orchestrator** - a long-lived coding partner that directs the work, builds each milestone doc and ensures adherence to the kit's policy. This terminal does not code or write (generally). You put it on listen for a stage with `/listen`, and the builder's packets wake it.
 
 The second is **the build terminal**, which hosts the short-lived working sessions: a fresh **builder** session per stage - **the coder/tester/writer** - and, when the stage work is done, a separate fresh **verifier** session that reviews it blind (the two never share a context). The verifier and refactorer sessions use the same channel.
+
+The orchestrator works in the main checkout; the builder, verifier and refactorer sessions run in one builder-side worktree, and the roles rotate through it, because the channel needs exactly one builder tree.
 
 **You sit between the terminals as the decision-maker**, not the courier: you adjudicate what the orchestrator surfaces, release each gate, and run any live testing the orchestrator directs.
 
@@ -305,12 +314,12 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 **Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing.
 
-**Manual:** download `sbak-v1.0.8-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.8-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
+**Manual:** download `sbak-v1.0.9-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.8-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
@@ -320,7 +329,7 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -331,7 +340,7 @@ Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.8-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt

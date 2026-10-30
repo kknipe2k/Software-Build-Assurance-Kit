@@ -40,7 +40,7 @@ jobs:
           # (no docs/app-map.md), load-bearing the moment a surface ships its entry.
           fetch-depth: 0
           persist-credentials: false   # CHG-601 — no GITHUB_TOKEN left in .git/config
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0  (adjust or remove for non-Node stacks)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0  (adjust or remove for non-Node stacks)
         # `id: setup` travels with the setup step: every gate step below guards on
         # steps.setup.outcome, so a non-Node stack that replaces setup-node moves this id to
         # its own setup step (or to the checkout step) rather than dropping it.

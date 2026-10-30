@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/stage-view.cjs
 //   (kit source of truth: templates/scripts/stage-view.cjs)
 //
@@ -25,7 +25,8 @@
 // is the stage id or `Stage <the id after the milestone>`, followed by neither a word character nor
 // a dot (`## §M33.F - ...`, `## Stage A — ...`), in the one Phase doc (docs/build-prompts/ or
 // proposals/, named M<nn>-*.md) that carries it; it runs to the next H2. A Phase doc with no stage
-// headings at all (the Lite shape: one task list) is the stage's section whole.
+// headings at all (one task list) is the stage's section whole. The one reader of that section is
+// scripts/lib/read-ledger.cjs stageSectionAt (M34.C): the approval record hashes the same text.
 //
 // Refused, exit 2, one `stage-view: refused - <why>` line, no view written: a missing or ambiguous
 // section, a scope section the prompt names that the doc lacks, a named id no ledger carries (all of
@@ -68,7 +69,6 @@ if (role === null) {
 }
 if (ROLES.indexOf(role) === -1) refuse(`no ${JSON.stringify(role)} view - one of ${ROLES.join(', ')}`);
 const msNum = Number(/^M(\d+)/.exec(stage)[1]);
-const rest = stage.slice(stage.indexOf('.') + 1);
 
 // ---- HEAD, the only source (R-68 Q6: never the working tree) ----
 function git(args, input) {
@@ -80,81 +80,29 @@ function lsTree(dirs) {
   const r = git(['ls-tree', '--name-only', 'HEAD'].concat(dirs.map((d) => `./${d}/`)));
   return r.status === 0 ? String(r.stdout).split(/\r?\n/).filter(Boolean) : [];
 }
-// path -> { blob, text } | null, one `git cat-file --batch` per call
+// path -> { blob, text } | null, one `git cat-file --batch` per call (read-ledger's reader)
 function headRead(paths) {
-  const out = new Map();
-  if (!paths.length) return out;
   if (role === 'verifier' && paths.some((p) => /^retrospectives\//i.test(p))) refuse('the verifier view reads no retrospectives/ file (the bias guard)');
-  const r = git(['cat-file', '--batch'], paths.map((p) => `HEAD:./${p}`).join('\n') + '\n');
-  if (r.status !== 0) refuse(`git cat-file failed (${String(r.stderr).trim()})`);
-  const buf = r.stdout;
-  let at = 0;
-  for (const p of paths) {
-    const nl = buf.indexOf(10, at);
-    const head = buf.slice(at, nl).toString('utf8');
-    at = nl + 1;
-    const m = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) (\w+) (\d+)$/.exec(head);
-    if (!m) { out.set(p, null); continue; }
-    const size = Number(m[3]);
-    out.set(p, m[2] === 'blob' ? { blob: m[1], text: buf.slice(at, at + size).toString('utf8').replace(/\r\n/g, '\n') } : null);
-    at += size + 1;
-  }
-  return out;
+  const r = rl.headReadAt(root, paths);
+  if (!r.ok) refuse(r.why);
+  return r.map;
 }
 
-// ---- markdown slices (fence-aware) ----
-function lines(text) { return String(text).split('\n'); }
-function trimTail(arr) { const a = arr.slice(); while (a.length && /^\s*(---)?\s*$/.test(a[a.length - 1])) a.pop(); return a; }
-// headings outside fences: [{ i, level, text }]
-function headings(ls) {
-  const out = []; let fence = false;
-  ls.forEach((l, i) => {
-    if (/^\s*```/.test(l)) { fence = !fence; return; }
-    const m = fence ? null : /^(#{1,6})\s+(.*)$/.exec(l);
-    if (m) out.push({ i, level: m[1].length, text: m[2].trim() });
-  });
-  return out;
-}
-// the slice from heading h to the next heading of its level or higher
-function sliceFrom(ls, hs, h) {
-  const next = hs.find((x) => x.i > h.i && x.level <= h.level);
-  return trimTail(ls.slice(h.i, next ? next.i : ls.length)).join('\n');
-}
-const STAGE_HEAD = new RegExp(`^§?\\s*(?:${esc(stage)}|Stage\\s+${esc(rest)})(?![\\w.])`);
-const ANY_STAGE_HEAD = /^§?\s*(?:M\d+(?:\.[0-9A-Za-z]+)+|Stage\s+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)(?![\w.])/;
+// ---- markdown slices (fence-aware): read-ledger's, the ones the stage section is cut with ----
+const lines = rl.mdLines;
+const trimTail = rl.mdTrimTail;
+const headings = rl.mdHeadings;
+const sliceFrom = rl.mdSliceFrom;
 
 const sources = new Map(); // path -> blob, in first-use order
 const use = (p, rec) => { if (!sources.has(p)) sources.set(p, rec.blob); };
 
-// ---- 1. the Phase doc and the stage section ----
-const docPaths = lsTree(['docs/build-prompts', 'proposals']).filter((p) => {
-  const m = /^(?:docs\/build-prompts|proposals)\/M(\d+)-[^/]*\.md$/.exec(p);
-  return m && Number(m[1]) === msNum;
-});
-if (!docPaths.length) refuse(`no Phase doc for M${String(msNum).padStart(2, '0')} at HEAD (docs/build-prompts/ or proposals/, named M<nn>-*.md)`);
-const docs = headRead(docPaths);
-const hits = []; const lite = [];
-for (const p of docPaths) {
-  const d = docs.get(p);
-  if (!d) continue;
-  const ls = lines(d.text); const hs = headings(ls);
-  const h2 = hs.filter((h) => h.level === 2);
-  const match = h2.filter((h) => STAGE_HEAD.test(h.text));
-  for (const h of match) hits.push({ p, d, ls, hs, h });
-  if (!h2.some((h) => ANY_STAGE_HEAD.test(h.text))) lite.push({ p, d, ls, hs });
-}
-let doc; let section;
-if (hits.length === 1) {
-  doc = hits[0];
-  section = sliceFrom(doc.ls, doc.hs.filter((h) => h.level <= 2), doc.h);
-} else if (hits.length > 1) {
-  refuse(`${hits.length} sections match ${stage}: ${hits.map((x) => `${x.p}:${x.h.i + 1}`).join(', ')}`);
-} else if (lite.length === 1 && docPaths.length === 1) {
-  doc = lite[0];
-  section = trimTail(doc.ls).join('\n'); // the Lite shape: no stage headings, the doc whole
-} else {
-  refuse(`no section for ${stage} in ${docPaths.join(', ')} (an H2 "## §${stage} ..." or "## Stage ${rest} ...")`);
-}
+// ---- 1. the Phase doc and the stage section (M34.C: read-ledger stageSectionAt, the one reader
+//      the approval record hashes and the channel's publishes compare) ----
+const sec = rl.stageSectionAt(root, stage);
+if (!sec.ok) refuse(sec.why);
+const doc = { p: sec.doc, d: { blob: sec.blob, text: sec.docText } };
+const section = sec.text;
 use(doc.p, doc.d);
 
 // ---- 2. the stage prompt: what it names ----

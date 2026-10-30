@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -57,6 +57,7 @@ const EVENTS = Object.freeze([
   'mode_set',                 // scripts/set-mode.cjs
   'stage_opened',             // scripts/stage-active.cjs
   'red_approved',             // scripts/approve-red.cjs
+  'red_voided',               // scripts/approve-red.cjs --void (M34.C: the human's un-approve)
   'stage_cleared',            // scripts/stage-active.cjs --clear
   'orientation_stamped',      // SessionStart hook (session-start-read-first.cjs) — the stamp layer ran (M30.G)
   'file_read',                // PostToolUse hook — a Read-tool or Bash read of a repo file, as a hashed read_ref (M30.G)
@@ -126,6 +127,7 @@ const EVENT_EMITTERS = Object.freeze({
   stage_opened: ['stage-active'],
   stage_cleared: ['stage-active'],
   red_approved: ['approve-red'],
+  red_voided: ['approve-red'],
   orientation_stamped: ['SessionStart'],
   file_read: ['PostToolUse'],
   channel_published: ['channel'],
@@ -140,7 +142,7 @@ const TOOL_CATEGORY_MAP = Object.freeze({
   Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit',
   Read: 'read',
   Glob: 'search', Grep: 'search',
-  Bash: 'exec', BashOutput: 'exec', KillShell: 'exec',
+  Bash: 'exec', BashOutput: 'exec', KillShell: 'exec', PowerShell: 'exec', // M34.B: the native PowerShell tool is a shell
   WebFetch: 'web', WebSearch: 'web',
   Agent: 'agent', Task: 'agent',
 });
@@ -176,7 +178,17 @@ const ALLOWED_FIELDS = Object.freeze([
   'seq', 'channel_class', // M30.H: the channel events carry the message seq + its bounded class - never a body, hash or path
   'approval_seq', 'prompt_at', // M32.1.B (R-35 b): red_approved binds the orchestrator's word (the approval-request seq) to the human's click (the permission prompt's time)
   'view_sources', // M33.F: a file_read of a stage view carries the view header's HEAD blob ids, in order - hashes, never paths
+  'repo', // M34.C: the gate word's "where" on red_approved and red_voided - the repository identity the stamp prints (<project>@<8 hex>), never a path
 ]);
+// M34.C: the gate word recorded whole. At append, a red_approved or red_voided row must carry each
+// of these keys; a null records "absent" (no git, no session, no prompt, no pending request), a
+// missing key is a refusal. Readers keep reading the rows written before this rule.
+const GATE_WORD_FIELDS = Object.freeze({
+  red_approved: ['stage', 'role', 'repo', 'session', 'prompt_at', 'approval_seq'],
+  red_voided: ['stage', 'role', 'repo', 'session', 'prompt_at'],
+});
+const GATE_WORD_ROLES = Object.freeze(['work', 'verifier', 'orchestrator', 'refactor']);
+const REPO_RE = /^[^/\\:\x00-\x1f]{1,96}@[0-9a-f]{8}$/;
 const VIEW_SOURCE_RE = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const MAX_VIEW_SOURCES = 24;
 // The channel's class vocabulary (M30.H) - closed, mirrors scripts/lib/channel.cjs CLASSES.
@@ -190,7 +202,9 @@ const READ_REF_RE = /^[0-9a-f]{16}$/;
 
 // Returns { ok:true, event, notes } (event = the allowlisted projection;
 // notes name every dropped/coerced field) or { ok:false, reason, notes }.
-function validateEvent(raw) {
+// opts.append (the sink's call, M34.C): a red_approved or red_voided row must carry the whole gate
+// word (GATE_WORD_FIELDS) with a role from the four, or it is refused. A reader passes no opts.
+function validateEvent(raw, opts) {
   const notes = [];
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return { ok: false, reason: 'event refused: not an object', notes };
@@ -223,11 +237,13 @@ function validateEvent(raw) {
   if (EVENT_EMITTERS[event.event].indexOf(event.emitter) === -1) {
     return { ok: false, reason: `event refused: emitter ${event.emitter} is not a permitted boundary for ${event.event}`, notes };
   }
+  const gateWord = GATE_WORD_FIELDS[event.event] || null;
   if (!('role' in event) || SESSION_ROLES.indexOf(event.role) === -1) {
     if ('role' in event) notes.push('field coerced: role outside the canonical enum -> unknown (unknown stays unknown, never guessed)');
     event.role = 'unknown';
   }
-  if ('session' in event && (typeof event.session !== 'string' || !ID_RE.test(event.session))) {
+  // A null session is recorded as absent (M34.C): the row lands in the unattributed ledger.
+  if ('session' in event && event.session !== null && (typeof event.session !== 'string' || !ID_RE.test(event.session))) {
     return { ok: false, reason: 'event refused: session id fails the format check (path-safe opaque id required — confinement guard)', notes };
   }
   if ('stage' in event && (typeof event.stage !== 'string' || !STAGE_RE.test(event.stage))) {
@@ -270,13 +286,18 @@ function validateEvent(raw) {
     delete event.view_sources;
     notes.push('field dropped (not 1-24 blob ids, or view_sources on a non-file_read event): view_sources');
   }
-  if ('approval_seq' in event && (event.event !== 'red_approved' || !Number.isInteger(event.approval_seq) || event.approval_seq < 1)) {
+  // A null on a gate-word row is recorded as absent (M34.C); any other bad value is dropped as before.
+  if ('approval_seq' in event && !(event.event === 'red_approved' && event.approval_seq === null) && (event.event !== 'red_approved' || !Number.isInteger(event.approval_seq) || event.approval_seq < 1)) {
     delete event.approval_seq;
     notes.push('field dropped (not a positive integer, or approval_seq on a non-red_approved event): approval_seq');
   }
-  if ('prompt_at' in event && (event.event !== 'red_approved' || typeof event.prompt_at !== 'string' || !AT_RE.test(event.prompt_at))) {
+  if ('prompt_at' in event && !(gateWord && event.prompt_at === null) && (!gateWord || typeof event.prompt_at !== 'string' || !AT_RE.test(event.prompt_at))) {
     delete event.prompt_at;
-    notes.push('field dropped (not an ISO-8601 timestamp, or prompt_at on a non-red_approved event): prompt_at');
+    notes.push('field dropped (not an ISO-8601 timestamp, or prompt_at on an event other than red_approved and red_voided): prompt_at');
+  }
+  if ('repo' in event && !(gateWord && (event.repo === null || (typeof event.repo === 'string' && REPO_RE.test(event.repo))))) {
+    delete event.repo;
+    notes.push('field dropped (not <project>@<8 hex>, or repo on an event other than red_approved and red_voided): repo');
   }
   if ('seq' in event && (CHANNEL_EVENTS.indexOf(event.event) === -1 || !Number.isInteger(event.seq) || event.seq < 1)) {
     delete event.seq;
@@ -288,6 +309,12 @@ function validateEvent(raw) {
   }
   if (event.event === 'file_read' && !('read_ref' in event)) {
     return { ok: false, reason: 'event refused: file_read without a read_ref is not a read', notes };
+  }
+  // Judged on the projection, after every drop above, so a malformed value is a missing one.
+  if (gateWord && opts && opts.append) {
+    const missing = gateWord.filter((k) => !(k in event));
+    if (missing.length) return { ok: false, reason: `event refused: ${event.event} without ${missing.join(', ')} - the gate word is recorded whole`, notes };
+    if (GATE_WORD_ROLES.indexOf(event.role) === -1) return { ok: false, reason: `event refused: ${event.event} with role ${event.role} - the gate word names the session's role`, notes };
   }
   return { ok: true, event, notes };
 }
@@ -334,10 +361,10 @@ function resolveScriptSession(env) {
 // ---------------------------------------------------------------------------
 
 function appendEvent(receiptsDir, raw) {
-  const v = validateEvent(raw);
+  const v = validateEvent(raw, { append: true });
   if (!v.ok) return v;
   const e = v.event;
-  const file = ('session' in e) ? ledgerFileFor(e.session) : ledgerFileFor(null, e.at.slice(0, 10));
+  const file = (typeof e.session === 'string') ? ledgerFileFor(e.session) : ledgerFileFor(null, e.at.slice(0, 10));
   fs.mkdirSync(receiptsDir, { recursive: true });
   // Fail-closed: the target must resolve BELOW the receipts dir (assert-before-
   // mutate; symlinks/junctions resolved by the shared primitive).
@@ -447,7 +474,7 @@ function mergeLedgers(input) {
     }
     let lastAt = null;
     g.events.forEach((e, ei) => {
-      const key = ('session' in e) ? e.session : `~script:${base}`;
+      const key = (typeof e.session === 'string') ? e.session : `~script:${base}`; // a null session is recorded as absent (M34.C)
       if (lastAt !== null && e.at < lastAt) {
         notes.push(`clock skew flagged (never re-written): ${base}:${ei + 1} steps backwards (${e.at} after ${lastAt})`);
       }
@@ -503,7 +530,7 @@ function computeIntervals(merged) {
   const notes = [];
   const bySession = new Map();
   for (const e of events) {
-    const key = ('session' in e) ? e.session : 'unattributed';
+    const key = (typeof e.session === 'string') ? e.session : 'unattributed';
     if (!bySession.has(key)) bySession.set(key, []);
     bySession.get(key).push(e);
   }

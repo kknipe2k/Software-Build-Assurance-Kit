@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/build-receipts.cjs
 //
 // The build-receipts CLI — diagnostics (M20.6.A) + collectors (M20.6.C) + the
@@ -1344,6 +1344,13 @@ function runLogTokens(args) {
 // all-roles model. Omitted/empty → the default single-dir path, byte-identical
 // to the pre-M22.F behavior.
 function buildModel(cwd, range, ledgerDirs) {
+  return normalize(gatherModelInput(cwd, range, ledgerDirs));
+}
+// gatherModelInput — everything a model reads from disk and git (the arc, the event ledgers, the
+// token declarations, the identity), read ONCE into one snapshot (M34.A): runCheck
+// normalizes both of its models from it, so a session appending to a ledger mid-check cannot
+// make two reads disagree.
+function gatherModelInput(cwd, range, ledgerDirs) {
   const arc = collect.collectArc({ cwd: cwd, range: range || 'HEAD' });
   let events = [];
   const extraCoverage = [];
@@ -1406,7 +1413,7 @@ function buildModel(cwd, range, ledgerDirs) {
   for (const n of td.notes) extraCoverage.push(n);
   const modelInput = { identity: identity, records: arc.records, events: events, coverage: arc.coverage.concat(extraCoverage) };
   if (td.tokens) modelInput.tokens = td.tokens;
-  return normalize(modelInput);
+  return modelInput;
 }
 
 function printCoverage(model, cap) {
@@ -1492,8 +1499,11 @@ function runRender(args) {
 // .claude/receipts is GREEN with its note (report-unavailable over invented).
 function runCheck() {
   const cwd = process.cwd();
-  const a = buildModel(cwd, 'HEAD');
-  const b = buildModel(cwd, 'HEAD');
+  // One snapshot, two builds (M34.A): each model is normalized from its own deep copy of the one
+  // gathered input, so the byte-compare still catches a nondeterministic normalize or render.
+  const input = gatherModelInput(cwd, 'HEAD');
+  const a = normalize(structuredClone(input));
+  const b = normalize(structuredClone(input));
   // All THREE rendered surfaces byte-compare — JSON, HTML, AND the sanitized Markdown
   // export — so an MD-only determinism regression (an unsanitized path, an injected
   // timestamp) REDs the preflight instead of shipping silently.

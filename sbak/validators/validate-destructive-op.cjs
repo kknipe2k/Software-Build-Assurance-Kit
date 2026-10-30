@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // validators/validate-destructive-op.cjs
 //
 // The G12 destructive-op gate, shipped framework-wide so
@@ -264,7 +264,10 @@ function stagedFiles() {
     );
     process.exit(2);
   }
-  return out.split(/\r?\n/).filter((f) => f && inScope(f));
+  // M34.1.B: .claude/measurements/ is a stage's evidence (a verifier's drivers beside their
+  // transcripts), not product - never a destructive surface, with or without the kit's pre-commit
+  // filter in front of this run.
+  return out.split(/\r?\n/).filter((f) => f && !/^\.claude\/measurements\//.test(f.replace(/\\/g, '/')) && inScope(f));
 }
 
 main();

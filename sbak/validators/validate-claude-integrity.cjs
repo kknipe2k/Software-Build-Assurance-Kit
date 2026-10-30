@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // validators/validate-claude-integrity.cjs
 //
 // The project's CLAUDE.md self-integrity gate (M30.I) - the one check that would
@@ -18,8 +18,10 @@
 //      (session-start-read-first, receipts-lifecycle, user-prompt-submit-mode-check,
 //      pretooluse-red-gate). A present settings file missing one BLOCKS naming the hook
 //      (the M30.G row-2 filed gap: the stampless check needs the hooks PRESENT; this is
-//      the commit-time owner of that gap). An ABSENT settings file is a visible note, not
-//      a block (honor-system hosts carry no session layer at all).
+//      the commit-time owner of that gap). In these two modes every project script a
+//      registered command names must also exist (M34.D: a missing one BLOCKS naming it).
+//      An ABSENT settings file is a visible note, not a block (honor-system hosts carry no
+//      session layer at all).
 //
 // Honest scope: the shrink half is a byte-count tripwire, not a semantic diff - a rewrite
 // that keeps the size but guts the rules passes it; the human review is the wall. The
@@ -62,7 +64,7 @@ function collectCommands(node, out) {
   }
 }
 
-function checkSettings(file, { absentIsNote }) {
+function checkSettings(file, { absentIsNote, resolveScripts }) {
   let raw;
   try { raw = fs.readFileSync(file, 'utf8'); } catch (_) {
     if (absentIsNote) {
@@ -80,6 +82,19 @@ function checkSettings(file, { absentIsNote }) {
   const missing = SESSION_HOOKS.filter((h) => !cmds.some((c) => c.indexOf(h) !== -1));
   if (missing.length > 0) {
     die(`FAIL  claude-integrity: ${file} does not register the session hook(s): ${missing.join(', ')} - the session layer is dormant while looking installed. Restore the wiring: node scripts/kit-update.cjs --adopt`, 1);
+  }
+  // M34.D: a registered command whose script file is gone fails at every event while the names
+  // above still read as wired, so each project-relative script a command names must exist.
+  if (resolveScripts) {
+    const root = path.basename(path.dirname(path.resolve(file))) === '.claude' ? path.dirname(path.dirname(path.resolve(file))) : process.cwd();
+    const gone = [];
+    for (const c of cmds) {
+      const m = /(?:\$\{?CLAUDE_PROJECT_DIR\}?[\\/]|^node\s+["']?)((?:\.claude|scripts|validators)[\\/][^"'\s]+\.c?js)/.exec(c);
+      if (m && !fs.existsSync(path.join(root, m[1])) && gone.indexOf(m[1]) === -1) gone.push(m[1].replace(/\\/g, '/'));
+    }
+    if (gone.length > 0) {
+      die(`FAIL  claude-integrity: ${file} registers hook command(s) whose script is missing: ${gone.join(', ')} - every event that runs it fails while the registration reads as wired. Restore the wiring: node scripts/kit-update.cjs --adopt`, 1);
+    }
   }
   return 0;
 }
@@ -123,11 +138,11 @@ function main() {
   if (si !== -1) {
     const file = args[si + 1];
     if (!file) die('usage: validate-claude-integrity.cjs --staged | --settings <settings.json> | <file>...', 2);
-    process.exit(checkSettings(file, { absentIsNote: false }));
+    process.exit(checkSettings(file, { absentIsNote: false, resolveScripts: true }));
   }
   if (args.length === 1 && args[0] === '--staged') {
     checkShrink();
-    checkSettings(path.join(process.cwd(), '.claude', 'settings.json'), { absentIsNote: true });
+    checkSettings(path.join(process.cwd(), '.claude', 'settings.json'), { absentIsNote: true, resolveScripts: true });
     process.exit(0);
   }
   // FILE MODE (positional args - how the template-policing floor drives every validator over

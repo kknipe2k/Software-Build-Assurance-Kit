@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //
@@ -36,8 +36,9 @@
 // hook-then-fade with the incident named: the V104 field test proved instruction-skipping
 // is real (a builder silently skipped the spec's IRL/HITL section), and the SessionStart
 // hook's eager inline of 176-289 KB per session was the only defence. That inline faded;
-// this adapter now records every Read-tool read and every Bash command that names a repo
-// file (PostToolUse, matcher `.*` - no matcher change) as a `file_read` event carrying a
+// this adapter now records every Read-tool read, every Bash command that names a repo file
+// and every PowerShell read command (Get-Content and its aliases, M34.B) (PostToolUse, matcher
+// `.*` - no matcher change) as a `file_read` event carrying a
 // hashed `read_ref` (never the path - the privacy floor holds), and the boundary's gate
 // (approve-red for stage-open; read-ledger --check for verify/closeout) refuses when a
 // required read is unrecorded. Derivation + tokenizer: scripts/lib/read-ledger.cjs.
@@ -187,10 +188,13 @@ function main() {
   // persisted (same shape as tool_name → tool_category, J4). Opening a stage
   // (stage-active.cjs WITHOUT --clear) is not a release. A red_approved /
   // stage_cleared script event with NO such marker = the human's outside shell.
-  if (hookName === 'PreToolUse' && payload.tool_name === 'Bash'
-      && payload.tool_input && typeof payload.tool_input.command === 'string') {
+  // M34.B: the native PowerShell tool carries the same command string (tool_input.command), so a
+  // release clicked through it classifies the same way. M34.C: the void form (--void) takes an
+  // approval away, so it is not a release and carries no release field.
+  if (hookName === 'PreToolUse' && (payload.tool_name === 'Bash' || payload.tool_name === 'PowerShell')
+      && payload.tool_input && typeof payload.tool_input === 'object' && typeof payload.tool_input.command === 'string') {
     const cmd = payload.tool_input.command;
-    if (/^\s*node scripts[\/\\]approve-red\.cjs(\s|$)/.test(cmd)) raw.release = 'approve-red';
+    if (/^\s*node scripts[\/\\]approve-red\.cjs(\s|$)/.test(cmd) && !/\s--void(\s|$)/.test(cmd)) raw.release = 'approve-red';
     else if (/^\s*node scripts[\/\\]stage-active\.cjs\s/.test(cmd) && /(^|\s)--clear(\s|$)/.test(cmd)) raw.release = 'stage-clear';
   }
 
@@ -232,7 +236,8 @@ function main() {
   // rule) lands one `file_read` per distinct file, carrying the hashed read_ref and the same
   // session / role / stage stamps. The path itself is read here at observation and never
   // persisted (the J4 shape). Both readers on purpose: a builder in auto mode reads through
-  // Bash, so a Read-only ledger would be a false floor.
+  // Bash, so a Read-only ledger would be a false floor. A PowerShell command is read by its own
+  // rule (read-ledger.cjs readPathsFromPowerShell), never the Bash parser.
   if (hookName === 'PostToolUse' && readLedger && payload.tool_input && typeof payload.tool_input === 'object') {
     let reads = [];
     try {
@@ -244,6 +249,10 @@ function main() {
       } else if (payload.tool_name === 'Bash' && typeof payload.tool_input.command === 'string') {
         reads = typeof readLedger.readPathsFromBash === 'function' ? readLedger.readPathsFromBash(root, payload.tool_input.command)
           : readLedger.readRefsFromBash(root, payload.tool_input.command).map((ref) => ({ ref }));
+      } else if (payload.tool_name === 'PowerShell' && typeof payload.tool_input.command === 'string'
+          && typeof readLedger.readPathsFromPowerShell === 'function') {
+        // M34.B: a PowerShell read (Get-Content and its aliases) by its own exact-file-token rule.
+        reads = readLedger.readPathsFromPowerShell(root, payload.tool_input.command);
       }
     } catch (_) { reads = []; }
     for (const rd of reads) {

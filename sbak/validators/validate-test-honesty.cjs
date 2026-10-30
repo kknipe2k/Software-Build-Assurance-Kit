@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // validators/validate-test-honesty.cjs
 //
 // The G9 test-honesty gate, shipped framework-wide so every
@@ -412,9 +412,37 @@ function main() {
   process.exit(1);
 }
 
+// THE COUNTERS (M34.C, materiality case 5). The channel's ack counts an amendment against the bytes
+// the RED approval named with this validator's own patterns and comment strippers, per language, so
+// "an assertion removed" means what G9 means by an assertion. One line holding an assertion call
+// counts once (whitespace collapsed, so a re-indent changes nothing); the skip and todo markers are
+// counted on the same stripped text. Not a G9 verdict: main() never calls it.
+// -> null (a language G9 does not evaluate) | { lang, count, lines, skips: { <marker>: n } }
+const SKIP_MARKERS = Object.freeze([
+  ['.skip', /\.skip\b/g], ['xit', /\bxit\s*\(/g], ['xdescribe', /\bxdescribe\s*\(/g], ['.todo', /\.todo\b/g],
+  ['@pytest.mark.skip', /@pytest\.mark\.skip/g], ['pytest.skip', /\bpytest\.skip\s*\(/g],
+  ['t.Skip', /\bt\.Skip\w*\s*\(/g], ['#[ignore]', /#\[ignore\]/g],
+]);
+const COUNTER_LANGS = {
+  js: { strip: stripSlashComments, patterns: ASSERTION_PATTERNS },
+  py: { strip: stripHashComments, patterns: PY_ASSERTION_PATTERNS },
+  go: { strip: stripSlashComments, patterns: GO_ASSERTION_PATTERNS },
+  rs: { strip: stripSlashComments, patterns: [RS_ASSERTION_RE] },
+};
+function countAssertions(file, text) {
+  const lang = Object.keys(EVALUATED_LANGS).find((k) => EVALUATED_LANGS[k].match(file));
+  if (!lang) return null;
+  const c = COUNTER_LANGS[lang];
+  const src = c.strip(String(text).replace(/\r\n?/g, '\n'));
+  const lines = src.split('\n').map((l) => l.trim().replace(/\s+/g, ' ')).filter((l) => l && c.patterns.some((re) => re.test(l)));
+  const skips = {};
+  for (const [name, re] of SKIP_MARKERS) skips[name] = (src.match(re) || []).length;
+  return { lang, count: lines.length, lines, skips };
+}
+
 // Export the evaluated-language table for the stack_coverage derivation. The
 // require.main guard makes the module require-safe — before it, a bare
 // require() executed main() against the requirer's argv.
-module.exports = { EVALUATED_LANGS };
+module.exports = { EVALUATED_LANGS, SKIP_MARKERS, countAssertions };
 
 if (require.main === module) main();

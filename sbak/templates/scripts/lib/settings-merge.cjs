@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/lib/settings-merge.cjs
 //
 // The VERIFIED .claude/settings.json merge (M27.B, KF-56; rider §4 + owner
@@ -61,6 +61,10 @@
 //      weakened by any kit action. Wiredness everywhere in this module is
 //      PARSED-registration inspection — a hook name that appears only in
 //      metadata counts for nothing.
+//   4a. SUPERSEDED KIT FORMS (M34.C): a kit registration the kit replaced by a widened
+//      matcher (the red gate on `Bash`, now `Bash|PowerShell`) is replaced by its successor when
+//      the command is byte-equal - archived and reported as `replaced`, never kept beside it; any
+//      other entry in that group stays.
 //   5. IDEMPOTENCY: a semantic no-op re-run writes nothing and creates NO new
 //      archive. The merged file is serialized deterministically (2-space
 //      indent + trailing newline), so a clean second run is byte-stable.
@@ -157,11 +161,13 @@ function flattenRegistrations(parsed) {
       if (!grp || typeof grp !== 'object') continue;
       for (const h of Array.isArray(grp.hooks) ? grp.hooks : []) {
         if (h && h.type === 'command' && typeof h.command === 'string') {
-          out.push({
+          const reg = {
             event: ev,
             matcher: typeof grp.matcher === 'string' ? grp.matcher : null,
             command: normalizeCommand(h.command),
-          });
+          };
+          if (typeof h.onFailure === 'string') reg.onFailure = h.onFailure; // M34.D: the red gate's "block"
+          out.push(reg);
         }
       }
     }
@@ -192,11 +198,13 @@ function deriveKitSettings(kitRoot) {
 function archiveStamp(date) {
   return date.toISOString().replace(/[:.]/g, '-'); // 2026-07-21T23-41-12-123Z (rider §4.3 shape)
 }
-function writeArchive(archiveDir, buf, date) {
+// `suffix` names what is archived (M34.D: kit-update --place-read-first archives a list as
+// <stamp>.<list name>); the settings archive keeps its .settings.json.
+function writeArchive(archiveDir, buf, date, suffix) {
   fs.mkdirSync(archiveDir, { recursive: true, mode: 0o700 });
   const stamp = archiveStamp(date);
   for (let n = 0; ; n++) {
-    const name = stamp + (n === 0 ? '' : '-' + n) + '.settings.json';
+    const name = stamp + (n === 0 ? '' : '-' + n) + (suffix || '.settings.json');
     const p = path.join(archiveDir, name);
     let fd;
     try {
@@ -215,6 +223,16 @@ function writeMeta(archivePath, meta) {
   return p;
 }
 
+// ── the kit's superseded registrations (M34.C) ────────────────────────────────
+// A kit registration whose matcher widened is a new identity (event + matcher + command), so the
+// old group would be kept as the user's and the successor added beside it: the red gate on matcher
+// `Bash` (v1.0.7) beside `Bash|PowerShell` (M33.A). The merge knows the kit's own superseded forms
+// and replaces one with its successor when the command is byte-equal (commandIdentity), archived and
+// reported like every other change; any other entry in that group (the user's) stays.
+const SUPERSEDED = Object.freeze([
+  { event: 'PreToolUse', matcher: 'Bash', successor: 'Bash|PowerShell', script: '.claude/hooks/pretooluse-red-gate.cjs' },
+]);
+
 // ── the pure merge (no filesystem) ────────────────────────────────────────────
 function mergeSettings(opts) {
   const live = opts.live;
@@ -222,7 +240,7 @@ function mergeSettings(opts) {
   const merged = JSON.parse(JSON.stringify(live));
   const res = {
     merged,
-    addedRegs: [], dedupedRegs: [],
+    addedRegs: [], dedupedRegs: [], replacedRegs: [], fieldSet: [],
     addedDeny: [], addedAsk: [],
     conflicts: { hooks: [], permissions: [] },
     changed: false,
@@ -232,6 +250,20 @@ function mergeSettings(opts) {
   // groups (existing registrations run alongside kit registrations, rider §4.4).
   if (!merged.hooks || typeof merged.hooks !== 'object' || Array.isArray(merged.hooks)) merged.hooks = {};
   const hooksObj = merged.hooks;
+  // M34.C: a superseded kit registration leaves its old group before the kit's set lands,
+  // only when the kit carries its successor with the byte-equal command.
+  for (const s of SUPERSEDED) {
+    const succ = kit.registrations.find((r) => r.event === s.event && r.matcher === s.successor && kitScriptPath(r.command) === s.script);
+    if (!succ || !Array.isArray(hooksObj[s.event])) continue;
+    for (const g of hooksObj[s.event]) {
+      if (!g || typeof g !== 'object' || g.matcher !== s.matcher || !Array.isArray(g.hooks)) continue;
+      const keep = g.hooks.filter((h) => !(h && h.type === 'command' && typeof h.command === 'string' && commandIdentity(h.command) === commandIdentity(succ.command)));
+      if (keep.length === g.hooks.length) continue;
+      res.replacedRegs.push({ event: s.event, matcher: s.matcher, successor: s.successor, command: normalizeCommand(succ.command) });
+      g.hooks = keep;
+    }
+    hooksObj[s.event] = hooksObj[s.event].filter((g) => !(g && typeof g === 'object' && g.matcher === s.matcher && Array.isArray(g.hooks) && g.hooks.length === 0));
+  }
   // M32.I (a): decided once, on the file as found, before any kit group is added.
   const ssKitCommands = kit.registrations.filter((r) => r.event === 'SessionStart' && r.matcher === null).map((r) => r.command);
   const ssLegacy = legacySessionStartWired(hooksObj, ssKitCommands);
@@ -240,12 +272,22 @@ function mergeSettings(opts) {
       g && typeof g === 'object'
       && (reg.matcher === null ? typeof g.matcher !== 'string' : g.matcher === reg.matcher));
     const existing = [];
+    const same = [];
     for (const g of groups) {
       for (const h of Array.isArray(g.hooks) ? g.hooks : []) {
-        if (h && h.type === 'command' && typeof h.command === 'string') existing.push(normalizeCommand(h.command));
+        if (h && h.type === 'command' && typeof h.command === 'string') {
+          existing.push(normalizeCommand(h.command));
+          if (commandIdentity(h.command) === commandIdentity(reg.command)) same.push(h);
+        }
       }
     }
-    if (existing.some((c) => commandIdentity(c) === commandIdentity(reg.command))) { res.dedupedRegs.push(reg); continue; }
+    if (same.length) {
+      // M34.D: the kit's onFailure lands on a registration that predates it, archived and
+      // reported like every other change (a project wired before the field existed).
+      if (reg.onFailure) for (const h of same) if (h.onFailure !== reg.onFailure) { h.onFailure = reg.onFailure; res.fieldSet.push(reg); }
+      res.dedupedRegs.push(reg);
+      continue;
+    }
     const everySource = reg.event === 'SessionStart' && reg.matcher === null;
     if (everySource && ssLegacy) { res.dedupedRegs.push(reg); continue; } // M32.I (a): old four == new one
     const script = kitScriptPath(reg.command);
@@ -267,7 +309,7 @@ function mergeSettings(opts) {
       hooksObj[reg.event].push(g);
     }
     if (!Array.isArray(g.hooks)) g.hooks = [];
-    g.hooks.push({ type: 'command', command: reg.command });
+    g.hooks.push(reg.onFailure ? { type: 'command', command: reg.command, onFailure: reg.onFailure } : { type: 'command', command: reg.command });
     res.addedRegs.push(reg);
   }
 
@@ -298,7 +340,7 @@ function mergeSettings(opts) {
     res.addedAsk.push(rule);
   }
 
-  res.changed = (res.addedRegs.length + res.addedDeny.length + res.addedAsk.length) > 0;
+  res.changed = (res.addedRegs.length + res.replacedRegs.length + res.fieldSet.length + res.addedDeny.length + res.addedAsk.length) > 0;
   return res;
 }
 
@@ -310,7 +352,13 @@ function verifyMerged(candidate, expect) {
   for (const r of expect.addedRegs) {
     if (!cset.has(regKey(r))) errs.push('kit registration missing: ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
   }
+  const field = new Set(flattenRegistrations(candidate).filter((r) => r.onFailure).map((r) => regKey(r) + '\u0000' + r.onFailure));
+  for (const r of (expect.addedRegs || []).concat(expect.fieldSet || [])) {
+    if (r.onFailure && !field.has(regKey(r) + '\u0000' + r.onFailure)) errs.push('kit registration without its "onFailure": "' + r.onFailure + '": ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
+  }
+  const replaced = expect.replacedRegs || [];
   for (const r of flattenRegistrations(expect.original)) {
+    if (replaced.some((x) => x.event === r.event && x.matcher === r.matcher && commandIdentity(x.command) === commandIdentity(r.command))) continue; // a superseded kit form, replaced on purpose (M34.C)
     if (!cset.has(regKey(r))) errs.push('an ORIGINAL user registration went missing: ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
   }
   const cperms = (candidate.permissions && typeof candidate.permissions === 'object') ? candidate.permissions : {};
@@ -404,8 +452,12 @@ function applySettingsMerge(opts) {
     };
   }
 
+  const fieldLine = (r) => 'field      ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' "onFailure": "' + r.onFailure + '" set on the kit registration "' + r.command + '" (the red gate blocks the call when it cannot run)';
+  const replacedLine = (r) => 'replaced   ' + r.event + '/' + r.matcher + ' -> ' + r.event + '/' + r.successor + ' (a superseded kit registration, the same command "' + r.command + '"; any other entry in that group stays)';
   if (dryRun) {
     log('would-archive ' + SETTINGS_REL + ' → ' + ARCHIVE_REL + '/ (byte-exact original before any merge)');
+    for (const r of m.replacedRegs) log('would-' + replacedLine(r).replace(/^replaced {3}/, 'replace '));
+    for (const r of m.fieldSet) log('would-' + fieldLine(r).replace(/^field {6}/, 'set '));
     log('would-merge ' + SETTINGS_REL + ' — ' + m.addedRegs.length + ' kit registration(s) to add ('
       + m.dedupedRegs.length + ' already present); your hooks, permission rules, and unknown keys are preserved');
     for (const r of m.addedDeny) log('  + deny    ' + r + ' (kit floor — shown before adding)');
@@ -417,7 +469,7 @@ function applySettingsMerge(opts) {
   log('archived   ' + relArchive(archivePath) + ' (byte-exact original; restrictive mode where supported; contents never printed; keep until you no longer need rollback)');
 
   const serialized = JSON.stringify(m.merged, null, 2) + '\n';
-  const expect = { addedRegs: m.addedRegs, addedDeny: m.addedDeny, addedAsk: m.addedAsk, original };
+  const expect = { addedRegs: m.addedRegs, replacedRegs: m.replacedRegs, fieldSet: m.fieldSet, addedDeny: m.addedDeny, addedAsk: m.addedAsk, original };
   const tmp = livePath + '.kit-update.tmp';
   fs.writeFileSync(tmp, serialized);
   let preErrs;
@@ -465,6 +517,8 @@ function applySettingsMerge(opts) {
     preMergeSha256: sha256(originalBuf), postMergeSha256: sha256(Buffer.from(serialized)),
     result: conflictCount > 0 ? 'merged-with-conflicts' : 'merged',
   });
+  for (const r of m.replacedRegs) log(replacedLine(r));
+  for (const r of m.fieldSet) log(fieldLine(r));
   log('merged     ' + SETTINGS_REL + ' — ' + m.addedRegs.length + ' kit registration(s) added ('
     + m.dedupedRegs.length + ' already present, deduplicated); your hooks, permission rules, and unknown keys are preserved');
   for (const r of m.addedDeny) log('  + deny    ' + r + ' (kit floor — shown before adding)');
@@ -478,6 +532,7 @@ function applySettingsMerge(opts) {
 module.exports = {
   SETTINGS_REL,
   ARCHIVE_REL,
+  SUPERSEDED,
   normalizeCommand,
   commandIdentity,
   flattenRegistrations,

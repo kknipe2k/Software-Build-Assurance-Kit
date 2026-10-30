@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -166,7 +166,8 @@ function pasteShell(top) {
   const dflt = process.platform === 'win32' ? 'cmd' : 'bash';
   const why = `${dflt}, the ${process.platform === 'win32' ? 'win32' : 'POSIX'} default.`;
   let text = '';
-  try { text = fs.readFileSync(path.join(top, 'project-config.md'), 'utf8').replace(/<!--[\s\S]*?-->/g, ''); } catch (_) { /* no config yet */ }
+  // The row is read outside HTML comments only, through the one stripper (M34.A).
+  try { text = require('./lib/read-ledger.cjs').stripHtmlComments(fs.readFileSync(path.join(top, 'project-config.md'), 'utf8')); } catch (_) { /* no config yet */ }
   const m = /^\|\s*shell\s*\|\s*([^|]+?)\s*\|/mi.exec(text) || /^shell:\s*(\S+)/mi.exec(text);
   const v = m ? m[1].replace(/`/g, '').trim().toLowerCase() : null;
   if (v !== null && SHELL_FORMS[v]) return { shell: v, note: null };

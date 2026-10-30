@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // validators/validate-app-map.cjs
 //
 // The App-Map currency primitive (M04) — sibling to check-append-only.cjs in
@@ -93,6 +93,23 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { escapeRegExp } = require('./lib/escape-regexp.cjs'); // M29.C: the shared payload escape
+
+// The one HTML-comment stripper (M34.A): read-ledger's stripHtmlComments, found by layout -
+// scripts/lib/ beside validators/ (the kit tree, a rendered project), then templates/scripts/lib/
+// (an installed sbak/). Never a local copy: a second stripper is the one-pass bug's way back in.
+// The require keeps its literal tail (lib/read-ledger.cjs) so the release's require graph can
+// certify the module present in both layouts.
+function loadCommentStripper() {
+  for (const scriptsDir of [path.join(__dirname, '..', 'scripts'), path.join(__dirname, '..', 'templates', 'scripts')]) {
+    if (!fs.existsSync(path.join(scriptsDir, 'lib', 'read-ledger.cjs'))) continue;
+    try {
+      const strip = require(path.join(scriptsDir, 'lib', 'read-ledger.cjs')).stripHtmlComments;
+      if (typeof strip === 'function') return strip;
+    } catch (_) { /* named below */ }
+  }
+  console.error('validate-app-map: cannot load the HTML-comment stripper (scripts/lib/read-ledger.cjs, stripHtmlComments) - repair the install with node scripts/kit-update.cjs --adopt.');
+  process.exit(2);
+}
 
 const USAGE =
   'usage: validate-app-map.cjs [options] [<map-path>]\n' +
@@ -382,7 +399,7 @@ function main() {
   // Rows inside an HTML comment are not visible rows: the template's row shape and its worked
   // examples live there, so a fresh map with an empty entries table passes its own PR check.
   if (entries.length === 0) {
-    const looksVerified = normalize(mapText).replace(/<!--[\s\S]*?-->/g, '').split('\n').some((l) => {
+    const looksVerified = loadCommentStripper()(normalize(mapText)).split('\n').some((l) => {
       const t = l.trim();
       return t.startsWith('|') && !isSeparatorRow(splitRow(t)) && /\bverified\b/i.test(t);
     });

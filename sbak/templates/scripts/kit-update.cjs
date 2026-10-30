@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.8
+// @kit-version 1.0.9
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -8,8 +8,9 @@
 //
 // WHAT IT DOES (read-only by default — a plain run never writes):
 //   • For every kit-MANAGED enforcement file (validators/ · .claude/hooks/ ·
-//     .claude/commands/ · .claude/skills/ · scripts/ · .githooks/ — the row-set-derived bounded list
-//     below), diff the LIVE copy against the kit's template:
+//     .claude/commands/ · .claude/skills/ · scripts/ · .githooks/ · the two generated
+//     .github/workflows/ — the row-set-derived bounded list below), diff the LIVE copy against
+//     the kit's template:
 //       clean      — byte-identical after LF normalization
 //       note       — line-endings differ only (normalized-identical; the .gitattributes
 //                    eol=lf discipline makes this a checkout artifact, not drift)
@@ -57,8 +58,8 @@
 //     ledgers are append-only, so a re-run never duplicates an entry. --adopt
 //     runs it automatically (not under --dry-run).
 //
-// M32.J adds `--ready`: the end-of-bootstrap readiness check that prints the one READY line
-// (or a NOT READY line per failed check); see cmdReady below.
+// M32.J adds `--ready`: the end-of-bootstrap readiness check; M34.D makes it one readiness result,
+// a line per row and one verdict with one next command; see cmdReady below.
 //
 // M33.D adds `--migrate`: the update path for a project built on an older kit - the per-file
 // table first, then `--apply-all`, merging the bootstrap-filled wiring rows three ways from the
@@ -96,11 +97,39 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 // The confinement primitive travels with the tool (red ruling D2 — extend, don't fork).
-const { assertInside, classifyDestination } = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
-const { repairHookModes } = require(path.join(__dirname, 'lib', 'hook-chmod.cjs'));
-const { applySettingsMerge, deriveKitSettings, flattenRegistrations } = require(path.join(__dirname, 'lib', 'settings-merge.cjs'));
-// The one project-config reader (CFI-17): kit_version is read through it, never a parser of our own.
-const { readConfigValue } = require(path.join(__dirname, 'lib', 'read-ledger.cjs'));
+// THE THREE LIBRARIES, LOADED WHERE THEY ARE USED (M34.1.B, Y-6): lib/sandbox.cjs, hook-chmod.cjs
+// and settings-merge.cjs are required by the functions that call them, never at load, so --ready
+// runs with any of them missing and its modules row names the file. A live copy that is absent is
+// read from the template source this run installs from (--kit, the project's templates/, or
+// sbak/templates/): --adopt walks .claude/ before scripts/ and calls the sandbox on every file, so
+// without it --adopt could not restore the module the modules row names. Those three only, and only
+// when the live copy (or a sibling it requires) is absent; with every module present nothing changes.
+// `load` and `fromKit` hold the literal requires (the live copy, and the template source's copy by
+// its literal tail), so every module this script needs is named in its source.
+let KIT_SOURCE = null; // --kit, set by main
+const LIB_DIR = path.join(__dirname, 'lib');
+function lib(load, fromKit) {
+  try { return load(); } catch (e) {
+    const miss = e && e.code === 'MODULE_NOT_FOUND' ? /Cannot find module '([^']+)'/.exec(String(e.message)) : null;
+    const inLib = miss && path.dirname(path.resolve(miss[1])).toLowerCase() === LIB_DIR.toLowerCase();
+    if (!inLib) throw e;
+    for (const r of [KIT_SOURCE, process.cwd(), path.join(process.cwd(), KIT_DIR)].filter(Boolean)) {
+      try { return fromKit(path.join(r, 'templates', 'scripts')); } catch (e2) { if (!e2 || e2.code !== 'MODULE_NOT_FOUND') throw e2; }
+    }
+    throw e;
+  }
+}
+const sandboxLib = () => lib(() => require(path.join(__dirname, 'lib', 'sandbox.cjs')), (dir) => require(path.join(dir, 'lib', 'sandbox.cjs')));
+const hookChmodLib = () => lib(() => require(path.join(__dirname, 'lib', 'hook-chmod.cjs')), (dir) => require(path.join(dir, 'lib', 'hook-chmod.cjs')));
+const settingsMergeLib = () => lib(() => require(path.join(__dirname, 'lib', 'settings-merge.cjs')), (dir) => require(path.join(dir, 'lib', 'settings-merge.cjs')));
+function assertInside(...a) { return sandboxLib().assertInside(...a); }
+function classifyDestination(...a) { return sandboxLib().classifyDestination(...a); }
+function repairHookModes(...a) { return hookChmodLib().repairHookModes(...a); }
+function applySettingsMerge(...a) { return settingsMergeLib().applySettingsMerge(...a); }
+function deriveKitSettings(...a) { return settingsMergeLib().deriveKitSettings(...a); }
+function flattenRegistrations(...a) { return settingsMergeLib().flattenRegistrations(...a); }
+function commandIdentity(...a) { return settingsMergeLib().commandIdentity(...a); }
+function writeArchive(...a) { return settingsMergeLib().writeArchive(...a); }
 
 // ── the MANAGED set (rows-derived, smoke-locked against rows.json BOTH directions) ──────
 // Every enforcement-class row of the golden row-set (scripts/fixtures/golden-bootstrap/
@@ -167,6 +196,10 @@ const MANAGED = [
   { file: 'scripts/build-receipts.cjs', template: 'templates/scripts/build-receipts.cjs', render: 'copy' },
   { file: '.githooks/pre-commit', template: 'templates/dot-githooks/pre-commit', render: 'wiring' },
   { file: '.githooks/pre-push', template: 'templates/dot-githooks/pre-push', render: 'copy' },
+  // M34.D: the two generated workflows are bootstrap-filled like verify-local.cjs, so --migrate
+  // merges them three ways; LICENSE stays out by rule (the project's paperwork).
+  { file: '.github/workflows/pr-smoke.yml', template: 'templates/dot-github/workflows/pr-smoke.yml', render: 'wiring' },
+  { file: '.github/workflows/release.yml', template: 'templates/dot-github/workflows/release.yml', render: 'wiring' },
 ];
 
 // The ARC-007 convention (M09.D): a live file declaring itself intentionally divergent.
@@ -195,13 +228,17 @@ function usage(msg) {
   process.stderr.write(
     'usage: node scripts/kit-update.cjs [--kit <kit-checkout>] [--apply <live-file>]\n' +
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
-    '                                   [--place-project-claude <filled-file>] [--ready]\n' +
+    '                                   [--place-project-claude <filled-file>] [--place-settings <filled-file>] [--ready]\n' +
+    '                                   [--place-read-first <role> <staged-list>] [--upgrade-check <new-tree>]\n' +
     '                                   [--migrate [--pin <v>] [--base <dir>] [--apply-all [--release <file>]...]]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
-    '  --migrate shows the per-file table to take the kit at --kit (replace / merge / keep), then\n' +
-    '  writes it with --apply-all, merging bootstrap-filled files from the pinned version;\n' +
-    '  --ready prints the one READY line after the bootstrap commit (or a NOT READY line per\n' +
-    '  failed check, exit 1);\n' +
+    '  --migrate shows the per-file table to take the kit at --kit (replace / merge / retire / keep),\n' +
+    '  then writes it with --apply-all, merging bootstrap-filled files from the pinned version;\n' +
+    '  --ready prints one readiness result after the bootstrap commit: a line per row, then READY\n' +
+    '  or NOT READY with one next command (exit 1); --place-settings places a filled copy of\n' +
+    '  .claude/settings.json after checking the kit\'s hook registrations and permissions floor (the\n' +
+    '  old bytes archived); --place-read-first places a staged read-first list the same way;\n' +
+    '  --upgrade-check names the sbak/ files you changed that unzipping a new release would overwrite;\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
     '  enforcement wiring from templates/ (collisions reported, never overwritten; an existing\n' +
     '  .claude/settings.json is MERGED with a byte-exact archive + rollback, KF-56); --ingest\n' +
@@ -255,58 +292,364 @@ function cmdDetect(projRoot) {
   return 0;
 }
 
-// ── --ready: the one READY line (M32.J) ─────────────────────────────────────────────────
-// Bootstrap's Phase 5 runs this right after the bootstrap commit. Five checks, in order, and
-// ALL of them run, so the person sees every reason at once:
-//   state      - the --detect classifier (detectRepoState, reused) says `project`;
-//   wiring     - the project's own validators/validate-claude-integrity.cjs --settings passes
-//                (reused, never re-implemented; a validator that cannot run is a failure,
-//                never a skipped check);
-//   read-first - the read-first hook's own --check passes (stdin closed: the hook reads stdin
-//                when it is not given --check, and an open pipe hangs it);
+// ── --ready: one readiness result (M32.J; M34.D) ────────────────────────────────────────────
+// Bootstrap's Phase 5 runs this right after the bootstrap commit, and the installer's upgrade
+// relays it at its end. One row per check, in this order, and ALL of them run, so the person sees
+// every reason at once. A row passes with `<row>: <what was checked>` or fails with
+// `NOT READY: <row> - <reason>`. The last line is the verdict: the READY line (exit 0), or
+// `NOT READY: <k> of <n> rows. Next: <the first failing row's repair>` (exit 1) - one next
+// command. The order puts the tree before migration, because --migrate refuses a dirty tree. A
+// throw inside a row is that row's NOT READY line naming the module (M34.1.B): no row prints a stack.
+// A PENDING MIGRATION (M34.2.B, Y-11): while the migration row fails with --migrate and the project's
+// kit files show an older release (the kit pin recorded, or the managed row's stale stamps), Next is
+// --migrate, after only the rows --migrate needs first (state, payload, HEAD, tree): it brings the
+// modules and the stamps the other rows ask for, and the old script's --adopt cannot. Every
+// kit-update command this block prints names a script that can run it (kuCommand).
+//   modules    - every scripts/*.cjs and scripts/lib/*.cjs the release's payload map names (the
+//                MANAGED scripts rows when there is no map) is present; first, so a missing kit
+//                module is the first repair, --adopt (M34.1.B, Y-6). A module the pinned release
+//                never shipped (the migration table's add row) is the migration's, named on the pass
+//                line, never this row's finding (M34.2.B, Y-11);
+//   state      - the --detect classifier (detectRepoState, reused) says `project`, and the red gate's
+//                three markers read as its probe reads them (readyMarkers): a fault (a link, a
+//                directory, an empty or unreadable marker) is NOT READY naming the clear, because
+//                the gate refuses every call in that state (M34.1.B, V-2);
+//   config     - project-config.md carries no unfilled {{TOKEN}} (the kit pin named first);
+//   wiring     - the project's own validators/validate-claude-integrity.cjs --settings passes: the
+//                session hooks registered and every script a node command names under .claude/,
+//                scripts/ or validators/ present (reused, never re-implemented; a validator that
+//                cannot run is a failure, never a skipped check). Other commands are not resolved,
+//                and the pass line says so (M34.1.B, Y-5);
+//   hooks      - core.hooksPath reads back .githooks and each managed .githooks file is a regular
+//                file, executable where the filesystem has modes (a clone carries no hooksPath);
+//   read-first - the read-first hook's own --check passes (stdin closed: the hook reads stdin when
+//                it is not given --check, and an open pipe hangs it);
+//   cli        - `claude --version` is at least the claudeCodeFloor release-manifest.json pins: the
+//                settings carry onFailure, which an older CLI may reject. Absent, unparseable, or no
+//                floor to read is not ready - the unknown is never a pass;
+//   payload    - every sbak/ file sbak/release-manifest.json's payload map names hashes to it (a file
+//                whose head declares INTENTIONAL DIVERGENCE is named as kept, never failed);
+//   managed    - each present MANAGED copy row's @kit-version stamp equals its template's, and each
+//                present wiring row carries no {{TOKEN}} (the drift report's own rules; a wiring
+//                row's older stamp is the migration row's);
 //   HEAD       - the bootstrap commit exists;
-//   tree       - nothing uncommitted except the channel's own traffic under .claude/channel/.
-// Pass: exactly one stdout line, exit 0. Any failure: one `NOT READY: <check> - <reason>`
-// line per failed check on stdout, no READY line, exit 1. The root is the cwd, as --detect.
-function readyReason(r) {
-  const lines = normalize(`${r.stderr || ''}\n${r.stdout || ''}`).split('\n')
+//   tree       - nothing uncommitted but the channel's own files (lib/channel.cjs OWN_FILES);
+//   migration  - --migrate's own table from the recorded kit_version: no file pending.
+// The root is the cwd, as --detect.
+const READY_ROWS = ['modules', 'state', 'config', 'wiring', 'hooks', 'read-first', 'cli', 'payload', 'managed', 'HEAD', 'tree', 'migration'];
+const MIGRATE_PENDING = ['replace', 'add', 'merge', 'conflict', 'retire'];
+// A path as the person's repository names it (forward slashes), or its basename when it lies outside.
+function relOf(projRoot, p) {
+  const r = path.relative(projRoot, path.resolve(String(p))).split(path.sep).join('/');
+  return r && !r.startsWith('..') && !path.isAbsolute(r) ? r : path.basename(String(p));
+}
+// A missing module, from a require's error message: its repo path, or null.
+function missingModule(projRoot, msg) {
+  const m = /Cannot find module '([^']+)'/.exec(String(msg || ''));
+  return m ? relOf(projRoot, m[1]) : null;
+}
+// A child check's output as one reason. A Node stack is never relayed (M34.1.B, Y-6): a missing
+// module is named by its repo path, any other crash by its error line.
+const READY_LOAD_FAIL = 'is missing, so the check could not load it';
+function readyReason(r, projRoot) {
+  const all = normalize(`${r.stderr || ''}\n${r.stdout || ''}`);
+  const stack = /^\s+at\s.+:\d+:\d+\)?\s*$/m.test(all) || /node:internal/.test(all) || /Require stack/.test(all);
+  if (stack) {
+    const mod = missingModule(projRoot || process.cwd(), all);
+    if (mod) return `${mod} ${READY_LOAD_FAIL}`;
+    const em = /^\s*(?:[A-Za-z]*Error|Error)\b[^\n]*$/m.exec(all);
+    return `the check crashed: ${em ? em[0].trim().slice(0, 300) : `exit ${r.status}`}`;
+  }
+  const lines = all.split('\n')
     .map((l) => l.replace(/^(FAIL|NOTE)\s+claude-integrity:\s*/, '').trim()).filter(Boolean);
   const s = lines.join('; ');
   return s.length > 400 ? s.slice(0, 397) + '...' : (s || `exit ${r.status}`);
 }
+// A throw inside a row, as that row's reason: the missing module by its repo path, else the module
+// that threw (the stack's first frame) and the message's first line - never the stack.
+function readyThrew(projRoot, e) {
+  const msg = String((e && e.message) || e).split('\n')[0];
+  const mod = missingModule(projRoot, msg);
+  if (mod) return `${mod} is missing (the check needs it)`;
+  const frame = /\(?((?:[A-Za-z]:)?[^\s()]+\.c?js):\d+:\d+\)?/.exec(String((e && e.stack) || '').split('\n').slice(1).join('\n'));
+  return `the check threw in ${frame ? relOf(projRoot, frame[1]) : 'scripts/kit-update.cjs'}: ${msg}`;
+}
+// The red gate's three markers, read as its probe reads them (pretooluse-red-gate.cjs probeMarker
+// and probeState, M34.1.A): absent only by lstat ENOENT of the path itself; a link of any kind, a
+// directory, a non-regular file, an unreadable or empty marker a fault with the probe's own words;
+// the value decoded as the probe decodes it. Its own copy, never a shared module: the hook's probe
+// must not require a library that may be missing, and a lockstep pin (fail-closed, M34.1.B pin 5)
+// keeps the two one. -> { kind: 'inactive' } | { kind: 'active', stage, role, approved } |
+// { kind: 'unknown', fault }
+const READY_STAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+function readyMarker(root, name) {
+  const p = path.join(root, '.claude', name);
+  let st;
+  try { st = fs.lstatSync(p); } catch (e) {
+    if (e && (e.code === 'ENOENT' || e.code === 'ENOTDIR')) return { absent: true };
+    return { fault: `.claude/${name} is unreadable (${(e && e.code) || 'lstat failed'})` };
+  }
+  if (st.isSymbolicLink()) return { fault: `.claude/${name} is a link` };
+  if (st.isDirectory()) return { fault: `.claude/${name} is a directory` };
+  if (!st.isFile()) return { fault: `.claude/${name} is not a regular file` };
+  let b;
+  try { b = fs.readFileSync(p); } catch (e) { return { fault: `.claude/${name} is unreadable (${(e && e.code) || 'read failed'})` }; }
+  const t = b.length >= 2 && b[0] === 0xff && b[1] === 0xfe ? b.toString('utf16le', 2)
+    : b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf ? b.toString('utf8', 3) : b.toString('utf8');
+  const v = t.split(String.fromCharCode(0)).join('').trim();
+  return v ? { value: v } : { fault: `.claude/${name} is empty` };
+}
+function readyMarkers(root) {
+  const sa = readyMarker(root, 'stage-active');
+  if (sa.absent) return { kind: 'inactive' };
+  if (sa.fault) return { kind: 'unknown', fault: sa.fault };
+  if (!READY_STAGE_ID.test(sa.value)) return { kind: 'unknown', fault: '.claude/stage-active does not hold a stage id' };
+  const sr = readyMarker(root, 'stage-role');
+  if (sr.fault) return { kind: 'unknown', fault: sr.fault };
+  const ra = readyMarker(root, 'red-approved');
+  if (ra.fault) return { kind: 'unknown', fault: ra.fault };
+  let approved = null;
+  if (!ra.absent) {
+    const parts = ra.value.split(/\r?\n/).map((l) => l.trim());
+    if (parts.length > 2 || (parts.length === 2 && !/^record [0-9a-f]{64}$/.test(parts[1]))) return { kind: 'unknown', fault: '.claude/red-approved carries a second line that is not "record <sha256>"' };
+    approved = parts[0];
+  }
+  return { kind: 'active', stage: sa.value, role: sr.absent ? null : sr.value, approved };
+}
+function versionCmp(a, b) {
+  const x = a.split('.').map(Number); const y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  return 0;
+}
+// The Claude Code floor: release-manifest.json at the root (a kit checkout), else under sbak/.
+function readFloor(projRoot) {
+  for (const rel of ['release-manifest.json', `${KIT_DIR}/release-manifest.json`]) {
+    const m = readJsonIf(path.join(projRoot, rel));
+    if (m && typeof m.claudeCodeFloor === 'string' && /^\d+\.\d+\.\d+$/.test(m.claudeCodeFloor)) return m.claudeCodeFloor;
+  }
+  return null;
+}
+function claudeVersion(projRoot) {
+  const opts = { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 };
+  let r = spawnSync('claude', ['--version'], opts);
+  // claude installed through npm is a .cmd shim on Windows, which spawn resolves only through cmd
+  let viaCmd = false;
+  if (r.error && r.error.code === 'ENOENT' && process.platform === 'win32') { viaCmd = true; r = spawnSync('cmd.exe', ['/d', '/s', '/c', 'claude --version'], opts); }
+  const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+  const v = /\b(\d+\.\d+\.\d+)\b/.exec(r.status === 0 ? out : '');
+  if (v) return { version: v[1] };
+  if ((r.error && r.error.code === 'ENOENT') || (viaCmd && (r.status === 9009 || /not recognized/i.test(out)))) return { absent: true };
+  return { unparsed: (out.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || `exit ${r.status}`).slice(0, 120) };
+}
+// The kit-update command --ready prints (M34.2.B, Y-11): the live scripts/kit-update.cjs when it
+// carries this script's @kit-version stamp (always so when --ready runs as the live script), else
+// this script by its path in the project - an interrupted upgrade leaves the live script at the old
+// release, which may not know the command at all, and a missing one cannot run.
+function kuCommand(projRoot) {
+  const LIVE = 'node scripts/kit-update.cjs';
+  const self = path.relative(projRoot, __filename).split(path.sep).join('/');
+  if (!self || self.startsWith('..') || path.isAbsolute(self) || self === 'scripts/kit-update.cjs') return LIVE;
+  const mine = stampOf(readIf(__filename));
+  const live = readIf(path.join(projRoot, 'scripts', 'kit-update.cjs'));
+  return live !== null && mine !== null && stampOf(live) === mine ? LIVE : `node ${self}`;
+}
+// The rows --migrate needs passing before it runs: it refuses a broken marker and a dirty tree, needs
+// the commit, and merges from the payload the payload row verifies.
+const MIGRATE_FIRST = ['state', 'payload', 'HEAD', 'tree'];
 function cmdReady(projRoot) {
   const run = (cmd, args) => spawnSync(cmd, args, { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const fails = [];
-  const state = detectRepoState(projRoot).state;
-  if (state !== 'project') fails.push(['state', `--detect says state=${state}, not project (none of ${PROJECT_FILES.join(', ')} is present)`]);
-  const integrity = path.join(projRoot, 'validators', 'validate-claude-integrity.cjs');
-  if (!fs.existsSync(integrity)) {
-    fails.push(['wiring', 'validators/validate-claude-integrity.cjs is absent, so the session-hook wiring cannot be checked']);
-  } else {
+  const rows = [];
+  const pass = (row, what) => rows.push({ row, ok: true, line: `${row}: ${what}` });
+  const fail = (row, why, repair) => rows.push({ row, ok: false, line: `NOT READY: ${row} - ${why}`, repair });
+  const KU = kuCommand(projRoot);
+  const READY_AGAIN = `${KU} --ready`;
+  const ADOPT = `${KU} --adopt`;
+  const MIGRATE = `${KU} --migrate`;
+  // M34.1.B (Y-6): a throw inside a row is that row's NOT READY line, never a stack.
+  const guard = (row, fn) => { try { fn(); } catch (e) { fail(row, readyThrew(projRoot, e), ADOPT); } };
+  // M34.2.B (Y-11): the migration is read once, first - the modules row needs the modules new since
+  // the pinned release (they arrive with the migration), the verdict whether one is pending. The
+  // migration row still prints last, from this.
+  const kitRoot = fs.existsSync(path.join(projRoot, 'templates')) ? projRoot : (fs.existsSync(path.join(projRoot, KIT_DIR, 'templates')) ? path.join(projRoot, KIT_DIR) : null);
+  let cur = null;
+  try { cur = kitRoot ? versionAt(kitRoot) : null; } catch (_) { cur = null; }
+  const mig = { pin: null, pinErr: null, table: null, threw: null, added: new Set() };
+  if (kitRoot && cur) {
+    try {
+      try { mig.pin = readPin(projRoot).value; } catch (e) { mig.pinErr = missingModule(projRoot, e && e.message) ? `${missingModule(projRoot, e.message)} is missing` : String(e && e.message || e).split('\n')[0]; }
+      if (!mig.pinErr && mig.pin && VERSION_RE.test(mig.pin) && mig.pin !== cur) {
+        mig.table = migrationTable(projRoot, kitRoot, mig.pin, null, []);
+        if (!mig.table.refuse) for (const r of mig.table.rows) if (r.cls === 'add') mig.added.add(r.row.file);
+      }
+    } catch (e) { mig.threw = e; }
+  }
+  let staleStamps = false;
+  // modules
+  guard('modules', () => {
+    const man = readJsonIf(path.join(projRoot, KIT_DIR, 'release-manifest.json'));
+    const map = man && man.payload && typeof man.payload === 'object' ? man.payload : null;
+    const pre = `${KIT_DIR}/templates/scripts/`;
+    const want = map
+      ? Object.keys(map).filter((k) => k.indexOf(pre) === 0 && /^(lib\/)?[^/]+\.cjs$/.test(k.slice(pre.length))).map((k) => `scripts/${k.slice(pre.length)}`)
+      : MANAGED.filter((r) => /^scripts\/(lib\/)?[^/]+\.cjs$/.test(r.file)).map((r) => r.file);
+    const missing = want.filter((rel) => { try { return !fs.statSync(path.join(projRoot, rel)).isFile(); } catch (_) { return true; } });
+    const arrive = missing.filter((rel) => mig.added.has(rel));
+    const gone = missing.filter((rel) => !mig.added.has(rel));
+    const tail = arrive.length ? `; ${arrive.length} new since v${mig.pin} ${arrive.length === 1 ? 'arrives' : 'arrive'} with the migration, first: ${arrive[0]}` : '';
+    if (gone.length) fail('modules', `${gone.length} kit module(s) missing, first: ${gone[0]}`, ADOPT);
+    else pass('modules', `${want.length - arrive.length} kit scripts present (every scripts/*.cjs and scripts/lib/*.cjs ${map ? 'the release\'s payload map names' : 'the kit\'s managed list names'})${tail}`);
+  });
+  // state
+  guard('state', () => {
+    const state = detectRepoState(projRoot).state;
+    if (state !== 'project') { fail('state', `--detect says state=${state}, not project (none of ${PROJECT_FILES.join(', ')} is present)`, 'finish the bootstrap (Phase 3 writes project-config.md), then ' + READY_AGAIN); return; }
+    const mk = readyMarkers(projRoot);
+    if (mk.kind === 'unknown') fail('state', `${mk.fault}, so the red gate reads the state as unknown and refuses every edit and command`, 'node scripts/stage-active.cjs --clear, from your own terminal (the gate refuses the agent\'s call while the state is unknown), then open the stage again');
+    else pass('state', mk.kind === 'active' ? `project (the project files are present; stage ${mk.stage} open, its markers read as the red gate reads them)` : 'project (the project files are present; no stage open)');
+  });
+  // config
+  guard('config', () => {
+    const cfg = readIf(path.join(projRoot, 'project-config.md'));
+    if (cfg === null) { fail('config', 'project-config.md is absent', 'write project-config.md (bootstrap Phase 1), commit it, then ' + READY_AGAIN); return; }
+    const toks = [];
+    for (const t of cfg.match(/\{\{[A-Z0-9_]+\}\}/g) || []) if (toks.indexOf(t) === -1) toks.push(t);
+    toks.sort((a, b) => (b === '{{KIT_VERSION}}') - (a === '{{KIT_VERSION}}'));
+    if (toks.length) {
+      const named = toks.slice(0, 3).map((t) => (t === '{{KIT_VERSION}}' ? `${t} (the kit pin)` : t));
+      fail('config', `${toks.length} unfilled {{TOKEN}}${toks.length === 1 ? '' : 's'} in project-config.md, first: ${named.join(', ')}`, `fill ${toks[0]} in project-config.md, commit it, then ${READY_AGAIN}`);
+    } else pass('config', 'every placeholder in project-config.md is filled');
+  });
+  // wiring
+  guard('wiring', () => {
+    const integrity = path.join(projRoot, 'validators', 'validate-claude-integrity.cjs');
+    if (!fs.existsSync(integrity)) { fail('wiring', 'validators/validate-claude-integrity.cjs is absent, so the session-hook wiring cannot be checked', ADOPT); return; }
     const r = run(process.execPath, [integrity, '--settings', path.join('.claude', 'settings.json')]);
-    if (r.status !== 0) fails.push(['wiring', readyReason(r)]);
-  }
-  const hook = path.join(projRoot, '.claude', 'hooks', 'session-start-read-first.cjs');
-  if (!fs.existsSync(hook)) {
-    fails.push(['read-first', '.claude/hooks/session-start-read-first.cjs is absent, so the read-first lists cannot be checked']);
-  } else {
+    if (r.status !== 0) fail('wiring', readyReason(r, projRoot), ADOPT);
+    else pass('wiring', '.claude/settings.json registers the session hooks, and every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved)');
+  });
+  // hooks
+  guard('hooks', () => {
+    const hookFiles = MANAGED.filter((r) => r.file.startsWith('.githooks/')).map((r) => r.file);
+    const hp = String(run('git', ['config', 'core.hooksPath']).stdout || '').trim();
+    if (hp !== '.githooks') { fail('hooks', `core.hooksPath ${hp ? `reads ${hp}` : 'is unset'}, not .githooks (a clone does not carry it), so the commit and push gates are not armed`, ADOPT); return; }
+    const bad = [];
+    for (const f of hookFiles) {
+      let st = null; try { st = fs.lstatSync(path.join(projRoot, f)); } catch (_) { st = null; }
+      if (!st) bad.push(`${f} is absent`);
+      else if (!st.isFile()) bad.push(`${f} is not a regular file`);
+      else if (process.platform !== 'win32' && !(st.mode & 0o111)) bad.push(`${f} is not executable`);
+    }
+    if (bad.length) fail('hooks', `core.hooksPath reads .githooks, but ${bad.join('; ')}`, ADOPT);
+    else pass('hooks', `core.hooksPath reads .githooks; ${hookFiles.join(', ')} ${process.platform === 'win32' ? 'are regular files' : 'are regular executable files'}`);
+  });
+  // read-first
+  guard('read-first', () => {
+    const hook = path.join(projRoot, '.claude', 'hooks', 'session-start-read-first.cjs');
+    if (!fs.existsSync(hook)) { fail('read-first', '.claude/hooks/session-start-read-first.cjs is absent, so the read-first lists cannot be checked', ADOPT); return; }
     const r = run(process.execPath, [hook, '--check']);
-    if (r.status !== 0) fails.push(['read-first', readyReason(r)]);
-  }
+    if (r.status === 0) { pass('read-first', 'the read-first lists pass the hook\'s own --check'); return; }
+    const why = readyReason(r, projRoot);
+    fail('read-first', why, why.endsWith(READY_LOAD_FAIL) ? ADOPT : `correct the entry it names in a staged copy of the list, then place it: ${KU} --place-read-first <role> <staged copy>`);
+  });
+  // cli
+  guard('cli', () => {
+    const floor = readFloor(projRoot);
+    if (!floor) { fail('cli', `the Claude Code floor cannot be read (no claudeCodeFloor in release-manifest.json or ${KIT_DIR}/release-manifest.json), and this kit's settings need a known floor`, 'install a kit release that pins the floor (run sbak-install.cjs), then ' + READY_AGAIN); return; }
+    const c = claudeVersion(projRoot);
+    if (c.absent) fail('cli', `claude not found on PATH (floor ${floor}); run --ready from a shell where claude runs`, `run ${READY_AGAIN} from a shell where claude runs`);
+    else if (c.unparsed) fail('cli', `claude --version printed no version (${c.unparsed}); the floor is ${floor}`, `run ${READY_AGAIN} from a shell where claude --version answers`);
+    else if (versionCmp(c.version, floor) < 0) fail('cli', `claude ${c.version} is below the floor ${floor}: this kit's settings carry onFailure, which an older CLI may reject, and a rejected settings file drops every hook and deny rule; upgrade Claude Code`, `upgrade Claude Code (claude update), then ${READY_AGAIN}`);
+    else pass('cli', `claude ${c.version} (floor ${floor})`);
+  });
+  // payload
+  guard('payload', () => {
+    const man = readJsonIf(path.join(projRoot, KIT_DIR, 'release-manifest.json'));
+    const map = man && man.payload && typeof man.payload === 'object' ? man.payload : null;
+    if (!map) { pass('payload', `not checked - ${man ? `${KIT_DIR}/release-manifest.json carries no payload map (an older release ships none)` : `no ${KIT_DIR}/release-manifest.json (no kit installed under ${KIT_DIR}/)`}`); return; }
+    const differ = []; const kept = []; let n = 0;
+    for (const rel of Object.keys(map).filter((k) => k.indexOf(`${KIT_DIR}/`) === 0)) {
+      n++;
+      let b = null; try { b = fs.readFileSync(path.join(projRoot, rel)); } catch (_) { b = null; }
+      if (b === null) differ.push(`${rel} (absent)`);
+      else if (payloadSha256(b) !== map[rel]) (declaresDivergence(b.toString('utf8')) ? kept : differ).push(rel);
+    }
+    const keptNote = kept.length ? `; ${kept.length} kept (INTENTIONAL DIVERGENCE): ${kept.join(', ')}` : '';
+    if (differ.length) fail('payload', `${differ.length} of ${n} ${KIT_DIR}/ file(s) differ from the release's hashes in ${KIT_DIR}/release-manifest.json, first: ${differ.slice(0, 3).join(', ')}${keptNote}`, `put ${differ[0].replace(/ \(absent\)$/, '')} back from the release (git checkout, or re-run the installer), or mark it INTENTIONAL DIVERGENCE to keep it`);
+    else pass('payload', `${n - kept.length} files verified against ${KIT_DIR}/release-manifest.json${keptNote}`);
+  });
+  // managed
+  if (!kitRoot) fail('managed', `no template source (the kit's templates/ at the root or under ${KIT_DIR}/), so the kit files cannot be compared`, 'install the kit (run sbak-install.cjs), then ' + READY_AGAIN);
+  else guard('managed', () => {
+    const stale = []; const unfilled = []; const kept = []; let at = 0; let filled = 0;
+    for (const row of MANAGED) {
+      const live = readIf(path.join(projRoot, row.file)); const tpl = readIf(path.join(kitRoot, row.template));
+      if (live === null || tpl === null) continue;
+      if (declaresDivergence(live)) { kept.push(row.file); continue; }
+      if (row.render === 'wiring') {
+        const s = live.match(/\{\{[A-Za-z0-9_]+\}\}/g);
+        if (s) unfilled.push({ file: row.file, tok: s[0] }); else filled++;
+        continue;
+      }
+      const ls = stampOf(live); const ts = stampOf(tpl);
+      if (ls !== null && ts !== null && ls !== ts) stale.push({ file: row.file, stamp: ls }); else at++;
+    }
+    const keptNote = kept.length ? `; ${kept.length} kept (INTENTIONAL DIVERGENCE): ${kept.join(', ')}` : '';
+    const why = [];
+    if (stale.length) why.push(`${stale.length} kit file(s) not at v${cur}: ${stale.slice(0, 3).map((s) => `${s.file} @${s.stamp}`).join(', ')}`);
+    if (unfilled.length) why.push(`${unfilled.length} bootstrap-filled file(s) with an unfilled {{TOKEN}}: ${unfilled.slice(0, 3).map((u) => `${u.file} (${u.tok})`).join(', ')}`);
+    if (stale.length) staleStamps = true;
+    if (why.length) fail('managed', why.join('; ') + keptNote, stale.length ? `${KU} --apply ${stale[0].file} (or mark it INTENTIONAL DIVERGENCE to keep it)` : `fill ${unfilled[0].tok} in ${unfilled[0].file}, commit it, then ${READY_AGAIN}`);
+    else pass('managed', `${at} managed files at v${cur}, ${filled} filled, 0 unfilled tokens${keptNote}`);
+  });
+  // HEAD
   const head = run('git', ['rev-parse', '--verify', '--short', 'HEAD']);
   const sha = head.status === 0 ? String(head.stdout).trim() : '';
-  if (!sha) fails.push(['HEAD', 'no commit yet - the bootstrap commit has not landed (git rev-parse --verify HEAD failed)']);
-  const ps = run('git', ['status', '--porcelain', '--untracked-files=all']);
-  if (ps.status !== 0) {
-    fails.push(['tree', `git status failed: ${readyReason(ps)}`]);
-  } else {
-    const dirty = normalize(ps.stdout).split('\n').filter(Boolean)
-      .map((l) => l.slice(3).replace(/^.* -> /, '').replace(/^"|"$/g, ''))
-      .filter((p) => !p.startsWith('.claude/channel/'));
-    if (dirty.length) fails.push(['tree', `${dirty.length} uncommitted path(s), first: ${dirty.slice(0, 3).join(', ')}`]);
-  }
-  if (fails.length) {
-    for (const [check, why] of fails) process.stdout.write(`NOT READY: ${check} - ${why}\n`);
+  if (!sha) fail('HEAD', 'no commit yet - the bootstrap commit has not landed (git rev-parse --verify HEAD failed)', 'make the bootstrap commit (git add -A, then git commit), then ' + READY_AGAIN);
+  else pass('HEAD', `${sha} (the bootstrap commit has landed)`);
+  // tree
+  guard('tree', () => {
+    let own = null;
+    try { own = require(path.join(__dirname, 'lib', 'channel.cjs')).OWN_FILES; } catch (e) { own = { error: missingModule(projRoot, e && e.message) ? `${missingModule(projRoot, e.message)} is missing` : String(e && e.message || e).split('\n')[0] }; }
+    const ps = run('git', ['status', '--porcelain', '--untracked-files=all']);
+    if (!Array.isArray(own)) fail('tree', `the channel's own-file list cannot be read from scripts/lib/channel.cjs (${own && own.error ? own.error : 'no OWN_FILES'}), so its files cannot be told from yours`, ADOPT);
+    else if (ps.status !== 0) fail('tree', `git status failed: ${readyReason(ps, projRoot)}`, 'run --ready inside the project\'s Git repository');
+    else {
+      const CH = '.claude/channel/';
+      const dirty = normalize(ps.stdout).split('\n').filter(Boolean)
+        .map((l) => l.slice(3).replace(/^.* -> /, '').replace(/^"|"$/g, ''))
+        .filter((p) => !(p.indexOf(CH) === 0 && own.some((re) => re.test(p.slice(CH.length)))));
+      if (dirty.length) fail('tree', `${dirty.length} uncommitted path(s), first: ${dirty.slice(0, 3).join(', ')}`, `commit or discard them (git status lists them), then ${READY_AGAIN}`);
+      else pass('tree', 'clean, ignoring .claude/channel/ (the channel\'s own logs, cursors and markers)');
+    }
+  });
+  // migration
+  if (!kitRoot || !cur) fail('migration', kitRoot ? `the kit at ${path.relative(projRoot, kitRoot) || '.'} has no release-manifest.json version to migrate to` : 'no template source, so nothing can be compared', 'install the kit (run sbak-install.cjs), then ' + READY_AGAIN);
+  else guard('migration', () => {
+    if (mig.threw) throw mig.threw;
+    const pin = mig.pin;
+    if (mig.pinErr) fail('migration', `the kit pin cannot be read (${mig.pinErr})`, ADOPT);
+    else if (!pin || !VERSION_RE.test(pin)) fail('migration', 'project-config.md records no kit_version, so what this project would take from the kit is unknown', MIGRATE);
+    else if (pin === cur) pass('migration', `none pending (kit_version v${pin} is this kit's version)`);
+    else {
+      const t = mig.table;
+      if (t.refuse) fail('migration', t.refuse.replace(/^kit-update: --migrate refused - /, ''), MIGRATE);
+      else {
+        const pending = t.rows.filter((r) => MIGRATE_PENDING.indexOf(r.cls) !== -1 || r.unresolved);
+        if (pending.length) fail('migration', `${pending.length} kit file(s) pending from v${pin} to v${cur}, first: ${pending.slice(0, 3).map((r) => `${r.row.file} (${r.cls})`).join(', ')}`, MIGRATE);
+        else pass('migration', `none pending (kit_version v${pin}, this kit v${cur}; nothing to take)`);
+      }
+    }
+  });
+  for (const r of rows) process.stdout.write(`${r.line}\n`);
+  const failed = rows.filter((r) => !r.ok);
+  if (failed.length) {
+    // M34.2.B (Y-11): a pending migration's command comes before every repair it makes moot, after
+    // only the rows --migrate needs first. Pending: the migration row asks for --migrate and the kit
+    // files show an older release (the pin recorded, or stale stamps).
+    const m = failed.find((r) => r.row === 'migration' && r.repair === MIGRATE);
+    const pending = m && (VERSION_RE.test(String(mig.pin || '')) || staleStamps);
+    const next = pending ? (failed.find((r) => MIGRATE_FIRST.indexOf(r.row) !== -1) || m) : failed[0];
+    process.stdout.write(`NOT READY: ${failed.length} of ${READY_ROWS.length} rows. Next: ${next.repair}\n`);
     return 1;
   }
   process.stdout.write(`READY. Project committed at ${sha}. Next: open a fresh terminal as the orchestrator.\n`);
@@ -826,6 +1169,8 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
 //   node scripts/kit-update.cjs --migrate [--kit <new kit>] [--pin <v>] [--base <dir>]
 //     prints one row per MANAGED file and writes nothing;
 //   ... --apply-all [--release <path>]...  writes it.
+// M34.D: a retire row removes a live file the pinned version shipped and the current kit does not
+// (unchanged from the pinned bytes); changed, it is retire-kept, listed and never written.
 // Per file, in order: an INTENTIONAL DIVERGENCE head -> keep-divergent (never written). A wiring
 // row (bootstrap-filled) is merged three ways - base = the PINNED version's template, ours = the
 // live file, theirs = the current template - through `git merge-file`; a clean merge is `merge`, a
@@ -839,22 +1184,32 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
 // the oldest commit in this repository whose sbak/release-manifest.json reads it; a tag v<pin> in
 // the --kit checkout. Never a network fetch. Refused while a stage is open or the tree is dirty,
 // so a migration is one reviewable diff at a milestone boundary.
-const MIGRATE_ORDER = ['current', 'replace', 'add', 'merge', 'conflict', 'modified', 'keep-divergent', 'absent'];
+const MIGRATE_ORDER = ['current', 'replace', 'add', 'merge', 'conflict', 'retire', 'modified', 'retire-kept', 'keep-divergent', 'absent'];
+// Where a kit file lands live, for the retire class: adopt's three trees and the rendered validators.
+const RETIRE_ROUTES = ADOPT_TREES.concat([{ from: 'validators', to: 'validators' }]);
 const CONFLICT_MARKER_RE = /^<{7}( |$)/m;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
 
 // The release manifest's payload hash: sha256 over the bytes with CRLF read as LF (the same rule
-// scripts/build-release.cjs writes the map with; a copy, because the builder does not ship).
-function payloadSha256(text) {
-  return crypto.createHash('sha256').update(Buffer.from(String(text).replace(/\r\n/g, '\n'), 'utf8')).digest('hex');
+// scripts/build-release.cjs writes the map with; a copy, because the builder does not ship). A
+// Buffer is hashed byte for byte (a binary file must not round-trip through UTF-8); text as UTF-8.
+function payloadSha256(data) {
+  const b = Buffer.isBuffer(data) ? data : Buffer.from(String(data), 'utf8');
+  return crypto.createHash('sha256').update(Buffer.from(b.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')).digest('hex');
 }
 function readJsonIf(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; } }
 function versionAt(treeRoot) { const m = treeRoot ? readJsonIf(path.join(treeRoot, 'release-manifest.json')) : null; return m && m.version ? String(m.version) : null; }
 function gitAt(cwd, args) { return spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
 
+// The one project-config reader (CFI-17): kit_version is read through it, never a parser of our own.
+// Required HERE, not at load (M34.A): read-ledger.cjs requires scripts/lib/hook-root.cjs, and a
+// missing hook-root.cjs is the fault the red gate tells the person to repair with --ready and
+// --adopt - a load-time require crashed both before they could restore it. --ready never reaches
+// this; --adopt does, in its kit-pin block after the adopt loop, by which time the loop has put
+// scripts/lib/hook-root.cjs back (its managed copy row); --migrate reads the pin up front.
 function readPin(projRoot) {
   const text = readIf(path.join(projRoot, 'project-config.md'));
-  return { text, value: text === null ? null : readConfigValue(text, 'kit_version') };
+  return { text, value: text === null ? null : require(path.join(__dirname, 'lib', 'read-ledger.cjs')).readConfigValue(text, 'kit_version') };
 }
 // Write the pin: the existing line or row takes the value; else one line lands under the Tier line.
 function writePin(projRoot, version) {
@@ -889,8 +1244,15 @@ function stampEvidence(projRoot) {
 
 // The pinned version's kit tree, offline. Returns { label, read(rel) -> text|null, manifest } or
 // { refuse } or null (nothing found).
+// list() names the tree's templates/ and validators/ files (the retire class reads it when the
+// pinned release carries no payload map).
 function treeSource(treeRoot, label) {
-  return { label, read: (rel) => readIf(path.join(treeRoot, rel)), manifest: readJsonIf(path.join(treeRoot, 'release-manifest.json')) };
+  return { label, read: (rel) => readIf(path.join(treeRoot, rel)), manifest: readJsonIf(path.join(treeRoot, 'release-manifest.json')),
+    list: () => ['templates', 'validators'].filter((d) => fs.existsSync(path.join(treeRoot, d))).flatMap((d) => walkFiles(path.join(treeRoot, d)).map((r) => `${d}/${r}`)) };
+}
+function lsTree(cwd, ref, dirs, strip) {
+  const r = gitAt(cwd, ['ls-tree', '-r', '--name-only', ref, '--', ...dirs]);
+  return r.status === 0 ? String(r.stdout).split(/\r?\n/).filter(Boolean).map((p) => (strip && p.indexOf(strip) === 0 ? p.slice(strip.length) : p)) : [];
 }
 function kitTreeIn(dir) {
   if (fs.existsSync(path.join(dir, 'templates'))) return dir;
@@ -919,7 +1281,8 @@ function resolveBase(projRoot, kitRoot, pin, baseArg) {
       if (m.status === 0 && v === pin) {
         const show = (rel) => { const r = gitAt(projRoot, ['show', `${sha}:${KIT_DIR}/${rel}`]); return r.status === 0 ? r.stdout : null; };
         let manifest = null; try { manifest = JSON.parse(m.stdout); } catch (_) { manifest = null; }
-        return { label: `this repository's history (commit ${sha.slice(0, 12)}, v${pin})`, read: show, manifest };
+        return { label: `this repository's history (commit ${sha.slice(0, 12)}, v${pin})`, read: show, manifest,
+          list: () => lsTree(projRoot, sha, [`${KIT_DIR}/templates`, `${KIT_DIR}/validators`], `${KIT_DIR}/`) };
       }
     }
   }
@@ -929,9 +1292,31 @@ function resolveBase(projRoot, kitRoot, pin, baseArg) {
     const show = (rel) => { const r = gitAt(kitRoot, ['show', `v${pin}:./${rel}`]); return r.status === 0 ? r.stdout : null; };
     const m = show('release-manifest.json');
     let manifest = null; try { manifest = JSON.parse(m); } catch (_) { manifest = null; }
-    return { label: `tag v${pin} in ${kitRoot}`, read: show, manifest };
+    return { label: `tag v${pin} in ${kitRoot}`, read: show, manifest, list: () => lsTree(kitRoot, `v${pin}`, ['templates', 'validators'], null) };
   }
   return null;
+}
+
+// The project's fills: the pinned template read as a pattern over the live file, each {{TOKEN}} a
+// one-line value (the same token, the same value). -> { TOKEN: value } or null (no token, or the
+// live file is not the template filled).
+function readFills(tpl, live) {
+  const names = [];
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const rx = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+  let src = '^'; let last = 0; let m;
+  while ((m = rx.exec(tpl))) {
+    src += esc(tpl.slice(last, m.index)) + (names.indexOf(m[1]) === -1 ? `(?<${m[1]}>[^\\n]*?)` : `\\k<${m[1]}>`);
+    if (names.indexOf(m[1]) === -1) names.push(m[1]);
+    last = rx.lastIndex;
+  }
+  if (!names.length) return null;
+  let r = null;
+  try { r = new RegExp(src + esc(tpl.slice(last)) + '$').exec(live); } catch (_) { r = null; }
+  return r && r.groups ? Object.assign({}, r.groups) : null;
+}
+function fillTokens(text, fills) {
+  return text.replace(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g, (t, n) => (Object.prototype.hasOwnProperty.call(fills, n) ? fills[n] : t));
 }
 
 // One three-way merge through git (exit 0 clean, N > 0 conflicts left as markers).
@@ -993,16 +1378,58 @@ function cmdMigrate(projRoot, kitRoot, opts) {
   const cur = versionAt(kitRoot);
   if (!cur) { E(`kit-update: --migrate refused - the kit at ${kitRoot} has no release-manifest.json version to migrate to; nothing was written.`); return 2; }
   if (cur === pin) { W(`kit-update: --migrate - this project is already at v${cur}; nothing to migrate (the plain report, node scripts/kit-update.cjs, shows any drift).`); return 0; }
-  // 4. the base: the PINNED version's templates, offline
-  const base = resolveBase(projRoot, kitRoot, pin, opts.base);
-  if (base && base.refuse) { E(base.refuse); return 2; }
-  if (!base) {
-    E(`kit-update: --migrate refused - no v${pin} kit tree to merge from (tried: --base, ${KIT_DIR}/, this repo's history, tag v${pin} in --kit). Pass --base <path to a v${pin} kit tree>; nothing was written.`);
-    return 2;
+  // 4 and 5. the base and the table (the --ready migration row reads the same table)
+  const t = migrationTable(projRoot, kitRoot, pin, opts.base, opts.release);
+  if (t.refuse) { E(t.refuse); return 2; }
+  const { base, hashes, rows } = t;
+  // 6. the table
+  const unverified = hashes ? '' : `; base unverified: v${pin} ships no hashes`;
+  W(opts.apply
+    ? `kit-update --migrate --apply-all (v${pin} -> v${cur}; base: ${base.label}${unverified})`
+    : `kit-update --migrate - table only, nothing written (v${pin} -> v${cur}; base: ${base.label}${unverified})`);
+  rows.sort((a, b) => MIGRATE_ORDER.indexOf(a.cls) - MIGRATE_ORDER.indexOf(b.cls) || (a.row.file < b.row.file ? -1 : 1));
+  for (const r of rows) W(`  ${r.cls.padEnd(15)} ${r.row.file.padEnd(50)} ${r.detail}`.replace(/\s+$/, ''));
+  const count = (c) => rows.filter((r) => r.cls === c).length;
+  W(`=> ${MIGRATE_ORDER.map((c) => `${count(c)} ${c}`).join(', ')}`);
+  if (!opts.apply) {
+    W('Nothing was written. Re-run the same command with --apply-all to write it' + (recorded.value ? '.' : ` (keep --pin ${pin}).`));
+    return 0;
   }
+  // 7. the apply: the confirmed pin first (when it was answered with --pin), the files, the pin last
+  if (!recorded.value) writePin(projRoot, pin);
+  let replaced = 0; let added = 0; let merged = 0; let retired = 0;
+  const conflicts = [];
+  for (const r of rows) {
+    if (r.unresolved) { conflicts.push(r.row.file); continue; }
+    if (['replace', 'add', 'merge', 'conflict', 'retire'].indexOf(r.cls) === -1) continue;
+    let abs;
+    try { abs = assertInside(projRoot, r.row.file); } catch (e) { E(`  refused ${r.row.file} - ${e.message}`); conflicts.push(r.row.file); continue; }
+    if (r.cls === 'retire') { fs.unlinkSync(abs); retired++; }
+    else if (r.cls === 'add') { fs.mkdirSync(path.dirname(abs), { recursive: true }); writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); added++; }
+    else if (r.cls === 'replace') { writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); replaced++; }
+    else { writeKeepingMode(abs, r.text); if (r.cls === 'merge') merged++; else conflicts.push(r.row.file); }
+  }
+  W(`=> wrote ${replaced} replaced, ${added} added, ${merged} merged, ${retired} retired${conflicts.length ? `, ${conflicts.length} with conflicts` : ''}; ${count('modified')} modified, ${count('retire-kept')} retire-kept and ${count('keep-divergent')} keep-divergent left as they are.`);
+  if (conflicts.length) {
+    W(`=> CONFLICT in ${conflicts.join(', ')}: the markers are in the file. kit_version stays v${pin}. Resolve them, commit, then re-run with --apply-all.`);
+    return 1;
+  }
+  writePin(projRoot, cur);
+  W(`=> kit_version raised to v${cur}. Review the diff and commit it, then run: node scripts/kit-update.cjs --ready`);
+  return 0;
+}
+
+// The table --migrate prints and --ready's migration row reads: one row per MANAGED file, then the
+// retire class. Returns { refuse } or { base, cur, hashes, rows }; writes nothing.
+function migrationTable(projRoot, kitRoot, pin, baseArg, release) {
+  const cur = versionAt(kitRoot);
+  // the base: the PINNED version's templates, offline
+  const base = resolveBase(projRoot, kitRoot, pin, baseArg);
+  if (base && base.refuse) return { refuse: base.refuse };
+  if (!base) return { refuse: `kit-update: --migrate refused - no v${pin} kit tree to merge from (tried: --base, ${KIT_DIR}/, this repo's history, tag v${pin} in --kit). Pass --base <path to a v${pin} kit tree>; nothing was written.` };
   const hashes = base.manifest && base.manifest.payload && typeof base.manifest.payload === 'object' ? base.manifest.payload : null;
   const labels = ['live', `v${pin}`, `v${cur}`];
-  // 5. classify every MANAGED row
+  // classify every MANAGED row
   const rows = [];
   for (const row of MANAGED) {
     const liveAbs = path.join(projRoot, row.file);
@@ -1032,7 +1459,12 @@ function cmdMigrate(projRoot, kitRoot, opts) {
       if (CONFLICT_MARKER_RE.test(L)) { rows.push({ row, cls: 'conflict', unresolved: true, detail: 'unresolved conflict markers - resolve them, commit, then re-run' }); continue; }
       if (P === null) { rows.push({ row, cls: 'modified', detail: `no v${pin} template to merge from${baseNote}` }); continue; }
       if (P === C) { rows.push({ row, cls: 'current', detail: 'the template did not change' }); continue; }
-      const m = mergeThree(L, P, C, labels);
+      // M34.D: both templates are filled with the project's own fills, read back from the live file
+      // against the pinned template, so a fill on a line the template also changed (a comment that
+      // names the token) merges clean; a live file that no longer reads as the pinned template
+      // filled merges from the raw templates, as before.
+      const fills = readFills(P, L);
+      const m = fills ? mergeThree(L, fillTokens(P, fills), fillTokens(C, fills), labels) : mergeThree(L, P, C, labels);
       if (m.error) { rows.push({ row, cls: 'modified', detail: `the merge failed: ${m.error}` }); continue; }
       if (m.conflicts === 0 && m.text === L) { rows.push({ row, cls: 'current', detail: 'already carries the template change' }); continue; }
       rows.push(m.conflicts === 0
@@ -1044,49 +1476,38 @@ function cmdMigrate(projRoot, kitRoot, opts) {
     if (P !== null && L === P) { rows.push({ row, cls: 'replace', detail: `unchanged since v${pin}` }); continue; }
     rows.push({ row, cls: 'modified', detail: `changed here${P === null ? ` (no v${pin} copy to compare${baseNote})` : ''} - mark it INTENTIONAL DIVERGENCE to keep it, or re-run with --release ${row.file} to take the template` });
   }
+  // the retire class (M34.D): a live file the pinned version shipped whose template the current
+  // kit no longer ships. Unchanged from the pinned bytes it is retired (the apply removes it);
+  // changed here it is kept and named. The pinned list is its payload map when it carries one,
+  // else its tree's own file list - never guessed.
+  const shipped = hashes ? Object.keys(hashes).filter((k) => k.indexOf(`${KIT_DIR}/`) === 0).map((k) => k.slice(KIT_DIR.length + 1)) : (base.list ? base.list() : []);
+  const managedFiles = new Set(MANAGED.map((r) => r.file));
+  for (const rel of shipped.sort()) {
+    const route = RETIRE_ROUTES.find((t) => rel.indexOf(t.from + '/') === 0);
+    if (!route || rel === 'templates/dot-claude/README.md') continue;
+    const file = route.to + rel.slice(route.from.length);
+    if (managedFiles.has(file) || fs.existsSync(path.join(kitRoot, rel))) continue;
+    const abs = path.join(projRoot, file);
+    const live = readIf(abs);
+    if (live === null) continue;
+    const row = { file, template: rel, render: 'copy' };
+    if (classifyDestination(abs).kind === 'symlink') { rows.push({ row, cls: 'retire-kept', detail: `gone from v${cur}; a symlink - never removed through` }); continue; }
+    let P = base.read(rel);
+    const want = hashes ? hashes[`${KIT_DIR}/${rel}`] : null;
+    if (P !== null && want && payloadSha256(P) !== want) P = null;
+    rows.push(P !== null && normalize(live) === normalize(P) && !declaresDivergence(live)
+      ? { row, cls: 'retire', detail: `shipped by v${pin}, gone from v${cur}, unchanged - removed by --apply-all` }
+      : { row, cls: 'retire-kept', detail: `shipped by v${pin}, gone from v${cur}, changed here - kept` });
+  }
   // --release: only a file the table lists as modified (a copy row) can be released
-  for (const rel of opts.release) {
+  for (const rel of release) {
     const hit = rows.find((r) => r.row.file === rel.replace(/\\/g, '/'));
     if (!hit || hit.cls !== 'modified' || hit.row.render !== 'copy' || /symlink/.test(hit.detail)) {
-      E(`kit-update: --migrate refused - --release ${rel} names no modified kit file in this table (only a copy file listed "modified" can be released); nothing was written.`);
-      return 2;
+      return { refuse: `kit-update: --migrate refused - --release ${rel} names no modified kit file in this table (only a copy file listed "modified" can be released); nothing was written.` };
     }
     hit.cls = 'replace'; hit.detail = 'released by you (--release)';
   }
-  // 6. the table
-  const unverified = hashes ? '' : `; base unverified: v${pin} ships no hashes`;
-  W(opts.apply
-    ? `kit-update --migrate --apply-all (v${pin} -> v${cur}; base: ${base.label}${unverified})`
-    : `kit-update --migrate - table only, nothing written (v${pin} -> v${cur}; base: ${base.label}${unverified})`);
-  rows.sort((a, b) => MIGRATE_ORDER.indexOf(a.cls) - MIGRATE_ORDER.indexOf(b.cls) || (a.row.file < b.row.file ? -1 : 1));
-  for (const r of rows) W(`  ${r.cls.padEnd(15)} ${r.row.file.padEnd(50)} ${r.detail}`.replace(/\s+$/, ''));
-  const count = (c) => rows.filter((r) => r.cls === c).length;
-  W(`=> ${MIGRATE_ORDER.map((c) => `${count(c)} ${c}`).join(', ')}`);
-  if (!opts.apply) {
-    W('Nothing was written. Re-run the same command with --apply-all to write it' + (recorded.value ? '.' : ` (keep --pin ${pin}).`));
-    return 0;
-  }
-  // 7. the apply: the confirmed pin first (when it was answered with --pin), the files, the pin last
-  if (!recorded.value) writePin(projRoot, pin);
-  let replaced = 0; let added = 0; let merged = 0;
-  const conflicts = [];
-  for (const r of rows) {
-    if (r.unresolved) { conflicts.push(r.row.file); continue; }
-    if (r.cls !== 'replace' && r.cls !== 'add' && r.cls !== 'merge' && r.cls !== 'conflict') continue;
-    let abs;
-    try { abs = assertInside(projRoot, r.row.file); } catch (e) { E(`  refused ${r.row.file} - ${e.message}`); conflicts.push(r.row.file); continue; }
-    if (r.cls === 'add') { fs.mkdirSync(path.dirname(abs), { recursive: true }); writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); added++; }
-    else if (r.cls === 'replace') { writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); replaced++; }
-    else { writeKeepingMode(abs, r.text); if (r.cls === 'merge') merged++; else conflicts.push(r.row.file); }
-  }
-  W(`=> wrote ${replaced} replaced, ${added} added, ${merged} merged${conflicts.length ? `, ${conflicts.length} with conflicts` : ''}; ${count('modified')} modified and ${count('keep-divergent')} keep-divergent left as they are.`);
-  if (conflicts.length) {
-    W(`=> CONFLICT in ${conflicts.join(', ')}: the markers are in the file. kit_version stays v${pin}. Resolve them, commit, then re-run with --apply-all.`);
-    return 1;
-  }
-  writePin(projRoot, cur);
-  W(`=> kit_version raised to v${cur}. Review the diff and commit it, then run: node scripts/kit-update.cjs --ready`);
-  return 0;
+  return { base, cur, hashes, rows };
 }
 
 // ── hard rule 5, the MERGE form (M30.D; gate-1 ruling 2 2026-08-30) ─────────────────────
@@ -1118,14 +1539,209 @@ function cmdPlaceProjectClaude(projRoot, filledPath) {
   return 0;
 }
 
+// ── the settings door (M34.C) ───────────────────────────────────────────────────────────────
+// .claude/settings.json is a red-gate control file: the Edit(/.claude/settings.json) deny rule and
+// the hook's carve keep Claude's edit tools off it in every state. Phase 3 still fills it: the agent
+// copies the live file to a staging path outside .claude/, fills that copy with the edit tools, and
+// this door places it. The door is the kit's floor, never a merge: it refuses a file that is
+// unreadable, unparseable, still carries a {{TOKEN}}, lacks one of the template's hook registrations
+// or the onFailure one carries (M34.D: the red gate's "block"), lacks a deny rule of the template's floor, or lacks (or allows) one of the template's ask rules -
+// the same permissions floor settings-merge derives, so a placed file can never drop the click on a
+// release. Then it archives the live bytes (settings-merge's archive) and replaces the file
+// atomically. A script, so the agent may run it: the floor is what it cannot get past.
+function cmdPlaceSettings(projRoot, filledArg, kitArg) {
+  const refuse = (why) => { process.stderr.write(`kit-update: --place-settings refused - ${filledArg} ${why}; nothing was placed.\n`); return 2; };
+  const ARCHIVE_REL = settingsMergeLib().ARCHIVE_REL;
+  let text;
+  try { text = fs.readFileSync(path.resolve(projRoot, filledArg), 'utf8'); } catch (e) { return refuse(`is unreadable (${e.code || e.message})`); }
+  let filled;
+  try { filled = JSON.parse(text); } catch (e) { return refuse(`is not valid JSON (${String(e.message).split('\n')[0]})`); }
+  if (!filled || typeof filled !== 'object' || Array.isArray(filled)) return refuse('is not a settings object');
+  const token = /\{\{[A-Za-z0-9_]+\}\}/.exec(text);
+  if (token) return refuse(`still carries ${token[0]}; fill it, then place it`);
+  let kitRoot = kitArg ? path.resolve(kitArg) : null;
+  if (kitRoot === null && fs.existsSync(path.join(projRoot, 'templates', 'dot-claude', 'settings.json'))) kitRoot = projRoot;
+  if (kitRoot === null && fs.existsSync(path.join(projRoot, KIT_DIR, 'templates', 'dot-claude', 'settings.json'))) kitRoot = path.join(projRoot, KIT_DIR);
+  if (kitRoot === null) return refuse(`cannot be checked: no template source (the kit's templates/ at the root or under ${KIT_DIR}/, or --kit <path>)`);
+  let kit;
+  try { kit = deriveKitSettings(kitRoot); } catch (e) { return refuse(`cannot be checked: ${String(e.message).split('\n')[0]}`); }
+  const have = new Set(flattenRegistrations(filled).map((r) => `${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}`));
+  for (const r of kit.registrations) {
+    if (!have.has(`${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}`)) return refuse(`lacks the kit's hook registration ${r.event}/${r.matcher === null ? '-' : r.matcher} ${r.command}`);
+  }
+  // M34.D: the red gate's "onFailure": "block" is part of the floor - without it a gate that cannot
+  // run lets the call through
+  const fields = new Set(flattenRegistrations(filled).filter((r) => r.onFailure).map((r) => `${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}\u0000${r.onFailure}`));
+  for (const r of kit.registrations.filter((x) => x.onFailure)) {
+    if (!fields.has(`${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}\u0000${r.onFailure}`)) return refuse(`lacks "onFailure": "${r.onFailure}" on the kit's hook registration ${r.event}/${r.matcher === null ? '-' : r.matcher} ${r.command}`);
+  }
+  const perms = filled.permissions && typeof filled.permissions === 'object' ? filled.permissions : {};
+  const list = (k) => (Array.isArray(perms[k]) ? perms[k] : []);
+  for (const rule of kit.deny) if (list('deny').indexOf(rule) === -1) return refuse(`lacks the kit's deny rule ${rule}`);
+  for (const rule of kit.ask) {
+    if (list('allow').indexOf(rule) !== -1) return refuse(`allows the kit's ask rule ${rule} (it stays ask, or deny)`);
+    if (list('ask').indexOf(rule) === -1 && list('deny').indexOf(rule) === -1) return refuse(`lacks the kit's ask rule ${rule}`);
+  }
+  const live = path.join(projRoot, '.claude', 'settings.json');
+  let archived = null;
+  try {
+    let prior = null;
+    try { prior = fs.readFileSync(live); } catch (_) { prior = null; }
+    if (prior !== null) archived = writeArchive(path.join(projRoot, ARCHIVE_REL), prior, new Date());
+    fs.mkdirSync(path.dirname(live), { recursive: true });
+    fs.writeFileSync(live + '.tmp', text);
+    fs.renameSync(live + '.tmp', live);
+  } catch (e) {
+    try { fs.rmSync(live + '.tmp', { force: true }); } catch (_) { /* best effort */ }
+    return refuse(`could not be placed (${e.code || e.message})`);
+  }
+  process.stdout.write(`kit-update: .claude/settings.json placed from ${filledArg} (checked: parseable, no {{TOKEN}}, the kit's ${kit.registrations.length} hook registrations, ${kit.deny.length} deny rules and ${kit.ask.length} ask rules present${archived ? `; the prior bytes archived at ${ARCHIVE_REL}/${path.basename(archived)}` : ''}).\n`);
+  return 0;
+}
+
+// ── the read-first door (M34.D) ─────────────────────────────────────────────────────────────────
+// .claude/read-first-list*.txt are red-gate control files: the Edit(/.claude/read-first-list*.txt)
+// deny rule and the hook's carve keep Claude's edit tools off them in every state. A changed list is
+// staged outside .claude/ and placed here, in the --place-settings shape: the role names the list
+// (work is read-first-list.txt, any other role read-first-list-<role>.txt); every entry parses
+// through read-ledger.cjs parseListLine (one parser) with an explicit when: from its vocabulary; the
+// entries the loader caps fit read_first_cap (host, on-demand and phase-N sit outside it, as the
+// loader counts); every path exists at HEAD, a view: entry excepted and a * in the last segment
+// matching exactly one HEAD file (before the repository's first commit - a bootstrap places its
+// lists before its one commit - the working tree is read instead); no {{TOKEN}} remains. Then the
+// live bytes are archived under .claude/read-first.archive/ and the list replaced atomically. Each
+// failed check is one line naming it, and nothing is written.
+const LIST_ARCHIVE_REL = '.claude/read-first.archive';
+const LIST_UNCAPPED = ['host', 'on-demand', 'phase-0', 'phase-1', 'phase-3'];
+const LIST_CAPS = { small: 4, medium: 8, large: 12, unlimited: Number.MAX_SAFE_INTEGER };
+function cmdPlaceReadFirst(projRoot, role, stagedArg) {
+  const refuse = (why) => { process.stderr.write(`kit-update: --place-read-first refused - ${why}; nothing was placed.\n`); return 2; };
+  if (!/^[a-z]+(-[a-z]+)*$/.test(String(role))) return refuse(`"${role}" is not a role name (lowercase words joined by -: work, orchestrator, verifier, ...)`);
+  const listName = role === 'work' ? 'read-first-list.txt' : `read-first-list-${role}.txt`;
+  let text;
+  try { text = fs.readFileSync(path.resolve(projRoot, stagedArg), 'utf8'); } catch (e) { return refuse(`${stagedArg} is unreadable (${e.code || e.message})`); }
+  const token = /\{\{[A-Za-z0-9_]+\}\}/.exec(text);
+  if (token) return refuse(`${stagedArg} still carries ${token[0]}; fill it, then place it`);
+  let rl;
+  try { rl = require(path.join(__dirname, 'lib', 'read-ledger.cjs')); } catch (e) { return refuse(`the list parser cannot load (scripts/lib/read-ledger.cjs: ${String(e && e.message || e).split('\n')[0]})`); }
+  const entries = [];
+  const lines = normalize(text).split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const e = rl.parseListLine(lines[i]);
+    if (!e) continue;
+    if (!e.explicit) return refuse(`line ${i + 1} (${e.path}) has no when: - every entry names its boundary (${rl.WHEN_VOCAB.join(' | ')})`);
+    if (!e.valid) return refuse(`line ${i + 1} (${e.path}) ${e.reason || `has an unknown when: ${JSON.stringify(e.when)} (one of: ${rl.WHEN_VOCAB.join(', ')})`}`);
+    entries.push(e);
+  }
+  const capWord = rl.readConfigValue(readIf(path.join(projRoot, 'project-config.md')) || '', 'read_first_cap');
+  const cap = LIST_CAPS[capWord] || LIST_CAPS.medium;
+  const capped = entries.filter((e) => LIST_UNCAPPED.indexOf(e.when) === -1);
+  if (capped.length > cap) return refuse(`${capped.length} entries count toward the cap of ${cap} (read_first_cap ${capWord || 'medium'}; host, on-demand and phase-N entries sit outside it)`);
+  const atHead = gitAt(projRoot, ['rev-parse', '--verify', '-q', 'HEAD']).status === 0;
+  const where = atHead ? 'at HEAD' : 'in the working tree (no commit yet)';
+  for (const e of entries) {
+    if (e.kind === 'view') continue;
+    const p = e.path.replace(/\\/g, '/');
+    if (path.isAbsolute(p) || /^[A-Za-z]:/.test(p) || p.split('/').indexOf('..') !== -1) return refuse(`${p} escapes the project root`);
+    let dead = null;
+    if (!atHead) {
+      const r = rl.resolveListPath(projRoot, p);
+      dead = r.dead || (fs.existsSync(path.join(projRoot, r.rel)) ? null : 'resolves to no file');
+    } else if (p.indexOf('*') === -1) {
+      const t = gitAt(projRoot, ['cat-file', '-t', `HEAD:${p}`]);
+      dead = t.status === 0 && String(t.stdout).trim() === 'blob' ? null : 'is not a file';
+    } else {
+      const dir = path.posix.dirname(p);
+      if (dir.indexOf('*') !== -1) dead = 'carries a * outside its last path segment';
+      else {
+        const re = new RegExp('^' + path.posix.basename(p).split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*') + '$');
+        const ls = gitAt(projRoot, ['ls-tree', 'HEAD', '--', dir === '.' ? '.' : `${dir}/`]);
+        const hits = String(ls.status === 0 ? ls.stdout : '').split(/\r?\n/).filter(Boolean)
+          .map((l) => l.split('\t')).filter((x) => / blob /.test(x[0]) && re.test(path.posix.basename(x[1] || '')));
+        dead = hits.length === 1 ? null : `matches ${hits.length} files`;
+      }
+    }
+    if (dead) return refuse(`${p} ${dead} ${where}`);
+  }
+  const live = path.join(projRoot, '.claude', listName);
+  let archived = null;
+  try {
+    let prior = null;
+    try { prior = fs.readFileSync(live); } catch (_) { prior = null; }
+    if (prior !== null) archived = writeArchive(path.join(projRoot, LIST_ARCHIVE_REL), prior, new Date(), `.${listName}`);
+    fs.mkdirSync(path.dirname(live), { recursive: true });
+    fs.writeFileSync(live + '.tmp', text);
+    fs.renameSync(live + '.tmp', live);
+  } catch (e) {
+    try { fs.rmSync(live + '.tmp', { force: true }); } catch (_) { /* best effort */ }
+    return refuse(`.claude/${listName} could not be placed (${e.code || e.message})`);
+  }
+  process.stdout.write(`kit-update: .claude/${listName} placed from ${stagedArg} (checked: every entry parses with its when:, ${capped.length} of ${cap} capped, every path ${where}, no {{TOKEN}}${archived ? `; the prior bytes archived at ${LIST_ARCHIVE_REL}/${path.basename(archived)}` : ''}).\n`);
+  return 0;
+}
+
+// ── --upgrade-check (M34.D): before an extract-over ─────────────────────────────────────
+// The manual upgrade unzips a new release over sbak/. This names, first, every sbak/ file the person
+// changed since the installed release that the new tree would overwrite. Changed = its bytes (CRLF
+// read as LF) differ from the installed sbak/release-manifest.json payload hash; for a release that
+// carries no map, a file changed since the oldest commit whose sbak/release-manifest.json reads the
+// installed version. A file whose head declares INTENTIONAL DIVERGENCE is named too: an extract does
+// not read heads (the installer's upgrade does, and keeps it). Exit 1 when it names one, 0 when the
+// extract loses nothing, 2 when it cannot tell. Writes nothing.
+function cmdUpgradeCheck(projRoot, treeArg) {
+  const E = (s) => process.stderr.write(s + '\n');
+  const newKit = kitTreeIn(path.resolve(projRoot, treeArg));
+  if (!newKit) { E(`kit-update: --upgrade-check refused - ${treeArg} is not a kit tree (no templates/ there or under ${KIT_DIR}/)`); return 2; }
+  const man = readJsonIf(path.join(projRoot, KIT_DIR, 'release-manifest.json'));
+  if (!man || !man.version) { E(`kit-update: --upgrade-check refused - ${KIT_DIR}/release-manifest.json is missing or names no version, so what you changed cannot be told`); return 2; }
+  const installed = String(man.version);
+  const map = man.payload && typeof man.payload === 'object' ? man.payload : null;
+  let touched = null;
+  if (!map) {
+    const log = gitAt(projRoot, ['log', '--format=%H', '--reverse', '--', `${KIT_DIR}/release-manifest.json`]);
+    let sha = null;
+    for (const c of log.status === 0 ? String(log.stdout).split(/\r?\n/).filter(Boolean) : []) {
+      const m = gitAt(projRoot, ['show', `${c}:${KIT_DIR}/release-manifest.json`]);
+      let v = null; try { v = String(JSON.parse(m.stdout).version); } catch (_) { v = null; }
+      if (m.status === 0 && v === installed) { sha = c; break; }
+    }
+    if (!sha) { E(`kit-update: --upgrade-check refused - v${installed} carries no payload map and no commit here records ${KIT_DIR}/ at v${installed}; commit the installed ${KIT_DIR}/ first`); return 2; }
+    const d = gitAt(projRoot, ['diff', '--name-only', '--no-renames', sha, '--', KIT_DIR]);
+    touched = new Set(d.status === 0 ? String(d.stdout).split(/\r?\n/).filter(Boolean) : []);
+  }
+  const lose = [];
+  for (const rel of walkFiles(newKit)) {
+    const dest = `${KIT_DIR}/${rel}`;
+    if (dest === `${KIT_DIR}/release-manifest.json`) continue; // the release's own record, rewritten by every release
+    let mine = null; try { mine = fs.readFileSync(path.join(projRoot, dest)); } catch (_) { mine = null; }
+    if (mine === null) continue;
+    const changed = map ? (map[dest] === undefined || payloadSha256(mine) !== map[dest]) : touched.has(dest);
+    if (!changed) continue;
+    if (payloadSha256(mine) === payloadSha256(fs.readFileSync(path.join(newKit, rel)))) continue; // the new tree carries your bytes
+    lose.push(dest + (declaresDivergence(mine.toString('utf8')) ? ' (marked INTENTIONAL DIVERGENCE: an extract does not read it)' : ''));
+  }
+  const from = path.relative(projRoot, path.resolve(projRoot, treeArg)) || treeArg;
+  if (!lose.length) {
+    process.stdout.write(`kit-update --upgrade-check: nothing under ${KIT_DIR}/ you changed since v${installed} would be overwritten by ${from}; the extract loses nothing.\n`);
+    return 0;
+  }
+  process.stdout.write(`kit-update --upgrade-check: ${lose.length} file(s) under ${KIT_DIR}/ you changed since v${installed} would be overwritten by unzipping ${from}:\n`);
+  for (const l of lose) process.stdout.write(`  ${l}\n`);
+  process.stdout.write(`Keep each one before the extract: copy it aside, or upgrade through the installer (sbak-install.cjs), which keeps a file marked INTENTIONAL DIVERGENCE and refuses over any other you changed.\n`);
+  return 1;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const kitIdx = argv.indexOf('--kit');
   const applyIdx = argv.indexOf('--apply');
   const placeIdx = argv.indexOf('--place-project-claude');
+  const settingsIdx = argv.indexOf('--place-settings');
   if (kitIdx !== -1 && (!argv[kitIdx + 1] || argv[kitIdx + 1].startsWith('--'))) usage('--kit needs a directory');
+  if (kitIdx !== -1) KIT_SOURCE = path.resolve(argv[kitIdx + 1]);
   if (applyIdx !== -1 && (!argv[applyIdx + 1] || argv[applyIdx + 1].startsWith('--'))) usage('--apply needs a managed live-file path');
   if (placeIdx !== -1 && (!argv[placeIdx + 1] || argv[placeIdx + 1].startsWith('--'))) usage('--place-project-claude needs the filled project CLAUDE.md path');
+  if (settingsIdx !== -1 && (!argv[settingsIdx + 1] || argv[settingsIdx + 1].startsWith('--'))) usage('--place-settings needs the filled settings file path (a copy outside .claude/)');
   const detect = argv.includes('--detect');
   const adopt = argv.includes('--adopt');
   const ingest = argv.includes('--ingest');
@@ -1136,6 +1752,21 @@ function main() {
   // --place-project-claude is Phase-3 placement, not template comparison — dispatched
   // before template resolution AND before the kit-repo no-op (it acts on the project root).
   if (placeIdx !== -1) process.exit(cmdPlaceProjectClaude(projRoot, argv[placeIdx + 1]));
+  // --place-settings is Phase-3 placement too (M34.C), dispatched before the kit-repo no-op: it
+  // places the live file of the tree it runs in, the kit's workshop included.
+  if (settingsIdx !== -1) process.exit(cmdPlaceSettings(projRoot, argv[settingsIdx + 1], kitIdx !== -1 ? argv[kitIdx + 1] : null));
+  // --place-read-first is the same shape for the read-first lists (M34.D), dispatched here too.
+  const listIdx = argv.indexOf('--place-read-first');
+  if (listIdx !== -1) {
+    if (!argv[listIdx + 1] || argv[listIdx + 1].startsWith('--') || !argv[listIdx + 2] || argv[listIdx + 2].startsWith('--')) usage('--place-read-first needs a role and the staged list path (a copy outside .claude/)');
+    process.exit(cmdPlaceReadFirst(projRoot, argv[listIdx + 1], argv[listIdx + 2]));
+  }
+  // --upgrade-check reads sbak/ and a new tree and writes nothing (M34.D).
+  const upIdx = argv.indexOf('--upgrade-check');
+  if (upIdx !== -1) {
+    if (!argv[upIdx + 1] || argv[upIdx + 1].startsWith('--')) usage('--upgrade-check needs the new release\'s unzipped folder');
+    process.exit(cmdUpgradeCheck(projRoot, argv[upIdx + 1]));
+  }
   // --ready is the end-of-bootstrap readiness check - it inspects the project root and needs
   // no template source, so it is dispatched before the kit-repo no-op too (inside the kit
   // workshop it honestly reports NOT READY: the workshop is not a bootstrapped project).
@@ -1318,7 +1949,7 @@ function main() {
   process.exit(drifted.length ? 1 : 0);
 }
 
-module.exports = { MANAGED, DIVERGENCE_RE, declaresDivergence, STAMP_RE, normalize, detectRepoState, harvestKnownIssues };
+module.exports = { MANAGED, DIVERGENCE_RE, declaresDivergence, STAMP_RE, normalize, detectRepoState, harvestKnownIssues, READY_ROWS, readyMarkers };
 
 if (require.main === module) {
   try { main(); } catch (e) {

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.8
+# @kit-version 1.0.9
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
@@ -197,6 +197,8 @@ fi
 # advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only
 # fires when a test file or a destructive-basename code file is staged (ERR-012 conditional-spawn).
 staged_dop=$(printf '%s\n' "$staged_all" | grep -E '\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(restore|import|migrate|delete|replace|extract|unzip|backup)[^/]*\.([cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|cc|cpp|cxx|h|hpp|sh|bash|sql)$' || true)
+# .claude/measurements/ holds a stage's evidence, not product (the validator drops it too).
+staged_dop=$(printf '%s\n' "$staged_dop" | grep -v '^\.claude/measurements/' || true)
 if [ -n "$staged_dop" ]; then
   if [ -f validators/validate-destructive-op.cjs ]; then
     node validators/validate-destructive-op.cjs {{VALIDATOR_SEVERITY_FLAG}} --staged
@@ -249,6 +251,8 @@ fi
 # (extension-keyed), so the spawn filter routes all six. This filter lives in TWO pre-commits
 # (kit + template) — sweep both or ship a divergence.
 staged_tr=$(printf '%s\n' "$staged_all" | grep -E '\.(c|m)?[jt]sx?$|\.(py|go|rs)$|^(CHANGELOG\.md|docs/release-state\.md|docs/gap-analysis\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
+# .claude/measurements/ holds a stage's evidence, not product (a driver's fixture marker writes).
+staged_tr=$(printf '%s\n' "$staged_tr" | grep -v '^\.claude/measurements/' || true)
 if [ -n "$staged_tr" ]; then
   if [ -f validators/validate-transition.cjs ]; then
     node validators/validate-transition.cjs {{VALIDATOR_SEVERITY_FLAG}} $staged_tr
