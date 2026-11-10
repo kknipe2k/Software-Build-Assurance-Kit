@@ -47,7 +47,7 @@ with an explicit fail forcing the friction-heavy outcome.
 - **Four roles, fresh contexts.** An orchestrator reviews and routes (it never implements);
   builder, verifier, and refactorer sessions run per stage. From the two-terminal split on,
   their packets travel an append-only channel automatically, in both directions; approvals stay
-  yours, and nothing reaches a session until you type `/send`. The walls between roles are
+  yours, and the RED release reaches a session only when you type `/send --approval`. The walls between roles are
   hooks, not conventions.
 - **The stage loop is red-first.** A stage states its plan, writes failing tests, and stops:
   a human approves the RED set before implementation edits unlock, and the stage-end packet

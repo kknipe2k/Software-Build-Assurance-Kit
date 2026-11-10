@@ -178,7 +178,7 @@ There is no guarantee that a heavyweight process framework beats a concise `CLAU
 <details>
 <summary><strong>The stage loop, step by step</strong></summary>
 
-At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows**. They never share a context. They talk through **the channel** - an append-only log in your repository over which stage packets (stage open, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions. **Approvals are never automated:** the RED release and the commit approval are your keystrokes, and nothing is sent to the builder until you type `/send`.
+At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows**. They never share a context. They talk through **the channel** - an append-only log in your repository over which stage packets (stage open, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions. **Approvals are never automated:** the RED release and the commit approval are your keystrokes, and the RED release reaches the builder only when you type `/send --approval`.
 
 At start you open one window - the **bootstrap session**. It asks what you want to build, plans the project with you, and scaffolds the files - then it retires, and its last act is walking you through opening the two windows that run the build. The channel starts at that split; until then, anything that has to move between windows moves by hand.
 
@@ -190,14 +190,14 @@ The orchestrator works in the main checkout; the builder, verifier and refactore
 
 **You sit between the terminals as the decision-maker**, not the courier: you adjudicate what the orchestrator surfaces, release each gate, and run any live testing the orchestrator directs.
 
-**The relationship between user and orchestrator is best thought of as that between a lead engineer and CEO. The user is free to ask anything, change anything** - the orchestrator will adjudicate and prepare the prompt, and your `/send` carries it to the build terminal.
+**The relationship between user and orchestrator is best thought of as that between a lead engineer and CEO. The user is free to ask anything, change anything** - the orchestrator will adjudicate and prepare the prompt, and sends it to the build terminal.
 
 (At Lite tier the roles collapse into one session - no second terminal, and the channel commands do not ship.)
 
 After bootstrap each stage is generally run the same:
 
 1. **Read.** A session-start hook prints a short stamp naming the session's role and its reading list. The files themselves are read at the moment a step needs them, and each read is recorded; a stage cannot open its red gate on reads that never happened.
-2. **Stage Plan.** The build agent writes the plan for the entire stage. The plan travels the channel to the orchestrator for adjudication. Once approved, the orchestrator writes the approval prompt and your `/send` carries it to the build terminal to start.
+2. **Stage Plan.** The build agent writes the plan for the entire stage. The plan travels the channel to the orchestrator for adjudication. Once approved, the orchestrator sends the approval to the build terminal, and the stage starts.
 3. **Red.** The agent writes failing tests first. A hook blocks it from touching implementation files until the test summary has reached the orchestrator, been reviewed, and you have released the gate. This is the one control that stops a test being written to fit code that already exists.
 4. **Green.** The agent implements until the test passes and the gate line is clean.
 5. **Commit.** Once the stage is complete and clean, the orchestrator reviews and, once fully approved, recommends the commit. Once the build commits, that stage is done. That build session is complete and claude is exited from the terminal.
