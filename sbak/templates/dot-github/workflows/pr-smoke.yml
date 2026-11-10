@@ -38,6 +38,19 @@ jobs:
         id: setup
         with:
           node-version: '24'
+      - name: Evidence transport check
+        # M34.6.B: every stage commit in the pushed range (a single-parent commit whose diff touches
+        # .claude/evidence/<stage>/gate.json) must carry a committed lane_run.json for its own subject
+        # (the index fingerprint, one exclusion rule) with verdict pass; that is what a push with
+        # --no-verify leaves unchecked. Any other commit is covered by the steps below, as before. The
+        # range is bound through env (PKG-005: no expression in the shell line). An artifact store and a
+        # separate evidence ref are unsupported on this path.
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        shell: bash
+        env:
+          EVIDENCE_FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVIDENCE_TO: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/evidence.cjs --transport-check --range "$EVIDENCE_FROM..$EVIDENCE_TO"
       - name: Smoke check (fast suite)
         # fill {{SMOKE_COMMAND}} with the project's fast suite — e.g. npm ci && npm test
         # PATH-SCOPE it if the suite is Node's built-in runner: `node --test "tests/**/*.test.cjs"`,

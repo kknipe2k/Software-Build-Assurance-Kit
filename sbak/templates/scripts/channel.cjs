@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //
@@ -10,13 +10,26 @@
 //   node scripts/channel.cjs publish --class <stage-open|stage-packet|clarification> [--kind k]
 //                                   (--body "text" | --body-file f) [--reply-to n]      role=work
 //   node scripts/channel.cjs send [--approval] [--kind k] (--body "text" | --body-file f) [--reply-to n]
-//                                                                                        role=orchestrator
+//                                                       role=orchestrator; --approval (the release) needs
+//                                                       the /send keystroke, every other send does not
 //   node scripts/channel.cjs ack --reply-to <seq>       role=orchestrator, no /send: answers one amendment
 //   node scripts/channel.cjs pickup [--from <seq>]      surface the unread inbox; advance the cursor
 //   node scripts/channel.cjs watch [--poll-ms 750] [--liveness-ms 120000] [--max-ms 28800000]
 //                                                       block until the inbox grows, then exit (the wake)
 //   node scripts/channel.cjs status [--json]
 //   node scripts/channel.cjs replay [--stage <id>] [--json]
+//   node scripts/channel.cjs identity [--init]   (M34.6.A: the origin every row carries; --init writes .claude/channel/identity once)
+//   node scripts/channel.cjs accept --stage <id> --seq <the stage-end packet's seq> --stamp-file <f>
+//                                                       role=orchestrator (M34.6.B): the stamp transcribed
+//                                                       into the stage's gate.json, once
+//
+// THE EVIDENCE PATH (M34.6.B). On a stage on the evidence path (scripts/lib/evidence.cjs) every
+// refusal this CLI prints for publish, send, ack and pickup appends a row to
+// .claude/channel/refusals.jsonl, and every success of the first three an ok row; the stage-end
+// publish takes .claude/channel/publish.lock, runs the evidence checks (the completed prefix, the
+// GREEN and the lane on the candidate, the unresolved gate and channel refusals: a
+// "resolved:<identity> <why>" or "resolved:channel:<n> <why>" line in the packet resolves one) and
+// writes gate.json, the approval archive and the manifest before the packet is appended.
 //
 // Exit codes: 0 ok | 2 fault (fail loud: the one line names it and the human-courier fallback)
 //             | 3 liveness timeout (dead peer) | 4 backlog already present (watch) | 5 watch ceiling.
@@ -47,15 +60,34 @@ const verb = argv[0];
 
 function opt(name, dflt) { const i = argv.indexOf(name); return i === -1 || i === argv.length - 1 ? dflt : argv[i + 1]; }
 function flag(name) { return argv.indexOf(name) !== -1; }
-function die(line, code) { process.stderr.write(line + '\n'); process.exit(code === undefined ? 2 : code); }
+// M34.6.B (item 9): the verb's kind as its refusal row names it.
+const ROW_VERBS = ['publish', 'send', 'ack', 'pickup'];
+function rowKind() {
+  if (verb === 'publish') return opt('--kind', null) || (opt('--class', null) === 'stage-open' ? 'open' : opt('--class', null) || 'unknown');
+  if (verb === 'send') return opt('--kind', null) || (flag('--approval') ? 'approval-request' : 'message');
+  return verb;
+}
+const replyArg = () => { const v = opt('--reply-to', null); return v !== null && /^[1-9][0-9]{0,8}$/.test(v) ? parseInt(v, 10) : null; };
+function die(line, code) {
+  if (ROW_VERBS.indexOf(verb) !== -1) ch.refusalRow(cwd, { verb, kind: rowKind(), line, answers: replyArg() });
+  process.stderr.write(line + '\n'); process.exit(code === undefined ? 2 : code);
+}
 function out(s) { process.stdout.write(s + '\n'); }
 
 function bodyBuf() {
   const f = opt('--body-file', null);
-  if (f) { try { return fs.readFileSync(path.resolve(cwd, f)); } catch (e) { die(`channel: cannot read --body-file ${f} (${e.message})`); } }
-  const b = opt('--body', null);
-  if (b === null) die('channel: a body is required (--body "text" or --body-file <path>)');
-  return Buffer.from(b, 'utf8');
+  let buf = null;
+  if (f) { try { buf = fs.readFileSync(path.resolve(cwd, f)); } catch (e) { die(`channel: cannot read --body-file ${f} (${e.message})`); } }
+  else {
+    const b = opt('--body', null);
+    if (b === null) die('channel: a body is required (--body "text" or --body-file <path>)');
+    buf = Buffer.from(b, 'utf8');
+  }
+  // M34.6.E item 8: a body that does not decode as UTF-8 is refused here, before a stage-end's
+  // evidence or any log row is written (the log stores the decoded text and hashes the raw bytes).
+  const bad = ch.utf8Fault(buf);
+  if (bad) die(ch.utf8Refusal(bad));
+  return buf;
 }
 function resolved() { const r = ch.resolve(cwd); if (!r.ok) die(r.line); return r; }
 // One release lane per stage: each distinct release-lane run a stage-end packet quotes, derived from
@@ -110,9 +142,12 @@ if (verb === 'publish' || verb === 'send') {
     if (!cls) die(`channel: publish needs --class <${ch.BUILDER_CLASSES.join('|')}>`);
   } else {
     if (res.role !== 'orchestrator') die(`channel: only the orchestrator sends (this tree's role is ${res.role}) - builder packets publish automatically (node scripts/channel.cjs publish)`);
-    const gate = ch.sendGate(cwd);
-    if (!gate.ok) die(gate.line);
     cls = flag('--approval') ? 'approval-request' : 'courier';
+    // M34.6.E item 2 (R-144): only the release needs the owner's keystroke; every other send leaves on
+    // the orchestrator's authority, its hash, seq and log row the record. A /send token present is
+    // consumed by any send, so a keystroke typed for one message never stands for a later release.
+    const gate = ch.sendGate(cwd);
+    if (cls === 'approval-request' && !gate.ok) die(gate.line);
   }
   const kind = opt('--kind', null) || (cls === 'stage-open' ? 'open' : cls === 'courier' ? 'message' : cls);
   if (!ch.KIND_RE.test(kind)) die(`channel: --kind must match ${ch.KIND_RE}`);
@@ -126,9 +161,21 @@ if (verb === 'publish' || verb === 'send') {
       const rs = longRuns(text, c);
       if (rs.length > 1 && !new RegExp(`^${c}-run-reason:[^\\S\\n]*\\S`, 'm').test(text)) die(`channel: this stage-end packet quotes ${rs.length} ${c} runs (${rs.join(', ')}) and no ${c}-run-reason: line - one long proof per stage, on the final bytes; a second run needs "${c}-run-reason: <why>" in the packet`);
     }
-    // M34.C: materiality cases 3 (a test file added after the approval) and 4 (the scope changed).
-    const se = ch.stageEndCheck(res);
+    // M34.6.B (item 13): one stage-end publish at a time, the lock released however this ends.
+    const lock = ch.takePublishLock(res);
+    if (!lock.ok) die(lock.line);
+    process.on('exit', lock.release);
+    if (lock.note) process.stderr.write(lock.note + '\n');
+    // M34.C: materiality cases 3 (a test file added after the approval) and 4 (the scope changed);
+    // M34.6.B: on the evidence path, the evidence checks, then gate.json and the manifest written.
+    const se = ch.stageEndCheck(res, text);
     if (!se.ok) die(se.line);
+    if (se.prepare) {
+      let prep = null;
+      try { prep = se.prepare(); } catch (e) { die(`channel: stage-end refused - the stage's evidence could not be written (${(e && e.code) || 'error'}: ${String((e && e.message) || e).split('\n')[0].slice(0, 160)})`); }
+      for (const n of (prep && prep.notes) || []) process.stderr.write(`channel: ${n}\n`);
+    }
+    if (se.legacy) extra.__legacyLine = se.line;
   }
   if (cls === 'stage-packet' && kind === 'gate-1') {
     const n = pinsTouched(body.toString('utf8'));
@@ -142,11 +189,21 @@ if (verb === 'publish' || verb === 'send') {
     extra.amended = a.amended;
     flags = a.flags || [];
   }
+  const legacyLine = extra.__legacyLine || null;
+  delete extra.__legacyLine;
   const r = ch.append(cwd, res, cls, kind, body, { replyTo: replyTo === null ? undefined : parseInt(replyTo, 10), extra });
+  // M34.6.E item 9: a stage-open whose body is already a stage-open on this log (a replacement
+  // session, a later V iteration) is the open standing, not a ping-pong: nothing is sent, exit 0.
+  if (!r.ok && r.dup && cls === 'stage-open' && r.dup.class === 'stage-open') {
+    out(`channel: stage-open for ${body.toString('utf8').trim() || 'this stage'} is already on the log (seq ${r.dup.seq}) - the open stands; nothing was sent`);
+    process.exit(0);
+  }
   if (!r.ok) die(r.line);
+  ch.refusalRow(cwd, { verb, kind, ok: true, seq: r.msg.seq });
   const peer = ch.PEER_NAME[ch.PEER[res.role]];
   out(`channel: sent seq ${r.msg.seq} to ${peer} (${cls}, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
   bell(res, r.msg.seq);
+  if (legacyLine) process.stderr.write(legacyLine + '\n');
   // M34.C case 5: the builder learns now what the ack will refuse (the ack recounts on its own).
   for (const f of flags) out(`channel: amendment seq ${r.msg.seq} is case 5 (${f.path} ${f.reason}) - the ack will refuse it; the owner's /approve-red re-approves`);
   process.exit(0);
@@ -161,6 +218,7 @@ if (verb === 'ack') {
   if (rt === null || !/^[1-9][0-9]{0,8}$/.test(rt)) die('channel: ack needs --reply-to <the amendment\'s seq> - an ack answers one amendment and nothing else');
   const r = ch.ackAmendment(cwd, res, parseInt(rt, 10));
   if (!r.ok) die(r.line);
+  ch.refusalRow(cwd, { verb: 'ack', kind: 'ack', ok: true, seq: r.msg.seq });
   out(`channel: sent seq ${r.msg.seq} to ${ch.PEER_NAME[ch.PEER[res.role]]} (courier, ${r.msg.bytes} bytes, sha256 ${r.msg.hash.slice(7, 19)}) - turn: ${r.holder}`);
   bell(res, r.msg.seq);
   // M34.C: the amendment's diff summary, one line per file - the read happens in the acking turn.
@@ -232,7 +290,7 @@ if (verb === 'watch') {
   const touch = () => { try { const t = new Date(); fs.utimesSync(marker, t, t); } catch (_) { /* a missing marker is the exit path's */ } };
 
   // Liveness phase: something I published is not yet consumed by the peer.
-  const mine = ch.readLog(ch.outboxFile(res), res.role, res.repo);
+  const mine = ch.readLog(ch.outboxFile(res), res.role, res);
   const lastSeq = mine.fault ? 0 : (mine.msgs.length ? mine.msgs[mine.msgs.length - 1].seq : 0);
   if (lastSeq > 0 && ch.readCursor(res.root, peerRole) < lastSeq) {
     const t0 = Date.now();
@@ -262,6 +320,46 @@ if (verb === 'watch') {
       process.exit(0);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// M34.6.A: the repository's identity across clones. `identity` prints the origin this clone
+// stamps on its rows and where it comes from; `identity --init` writes .claude/channel/identity ONCE
+// (the main worktree's name and 8 random hex), the file every clone reads after it is committed.
+if (verb === 'identity') {
+  const res = resolved();
+  const file = path.join(res.tree, '.claude', 'channel', ch.IDENTITY_FILE);
+  const rel = `.claude/channel/${ch.IDENTITY_FILE}`;
+  if (flag('--init')) {
+    if (fs.existsSync(file)) die(`channel: identity --init refused - ${rel} already exists (${String(fs.readFileSync(file, 'utf8')).trim()}); an identity is written once`, 2);
+    const id = ch.repoIdentity(res.tree);
+    const name = `${String((id && id.project) || 'project').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project'}-${crypto.randomBytes(4).toString('hex')}`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${name}\n`);
+    out(`channel: wrote ${rel}: ${name} (the main worktree's name and 8 random hex) - commit it; every clone stamps and reads its rows by it`);
+    process.exit(0);
+  }
+  const o = ch.originOf(res.tree);
+  out(o.source === 'file' ? `origin ${o.origin} (from ${rel})` : o.source === 'root' ? `origin ${o.origin} (inferred from the root commit; no ${rel})` : `origin none (no ${rel} and no commit to infer from)`);
+  out(`repo ${res.repo} (this clone's local stamp, the git common directory's path)`);
+  process.exit(0);
+}
+
+// ---------------------------------------------------------------------------
+// M34.6.B (item 5, Q8): the orchestrator transcribes the owner's stamp into the stage's gate.json,
+// once, on the stage-end packet it answers; the evidence lives in the builder tree (the channel's root
+// tree, as the ack's record does). No owner word is added: this runs on the stamp already given.
+if (verb === 'accept') {
+  const res = resolved();
+  if (res.role !== 'orchestrator') die(`channel: only the orchestrator accepts (this tree's role is ${res.role}) - the stamp is the owner's word, transcribed by the orchestrator`);
+  const stage = opt('--stage', null); const seq = opt('--seq', null); const sf = opt('--stamp-file', null);
+  if (!stage || !ch.KIND_RE || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(stage) || !seq || !/^[1-9][0-9]{0,8}$/.test(seq) || !sf) die('channel: accept needs --stage <id> --seq <the stage-end packet\'s seq> --stamp-file <the stamp, verbatim>');
+  let stamp;
+  try { stamp = fs.readFileSync(path.resolve(cwd, sf), 'utf8'); } catch (e) { die(`channel: accept refused - cannot read --stamp-file ${sf} (${e.message})`); }
+  const r = require('./lib/evidence.cjs').accept(res.tree, stage, parseInt(seq, 10), stamp, { role: res.role, session: process.env.CLAUDE_CODE_SESSION_ID || null });
+  if (!r.ok) die(r.line);
+  out(r.line);
+  process.exit(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,7 +414,7 @@ if (verb === 'replay') {
   const all = [];
   for (const writer of ['work', 'orchestrator']) {
     const file = path.join(res.root, ch.FILES[writer]);
-    const { msgs, fault } = ch.readLog(file, writer, res.repo);
+    const { msgs, fault } = ch.readLog(file, writer, res);
     if (fault) die(fault.line.replace('pickup stopped', 'replay stopped'));
     for (const m of msgs) all.push(Object.assign({ file: path.basename(file, '.jsonl') }, m));
   }
@@ -327,4 +425,4 @@ if (verb === 'replay') {
   process.exit(0);
 }
 
-die('channel: unknown or missing command - the commands are publish | send | ack | pickup | watch | status | replay; ask in this session for the right invocation rather than guessing.');
+die('channel: unknown or missing command - the commands are publish | send | ack | accept | pickup | watch | status | replay | identity; ask in this session for the right invocation rather than guessing.');

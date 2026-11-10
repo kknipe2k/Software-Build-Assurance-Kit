@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // .claude/hooks/receipts-lifecycle.cjs
 //   (kit source of truth: templates/dot-claude/hooks/receipts-lifecycle.cjs)
 //

@@ -2,9 +2,226 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
-## v1.0.9 - 2026-10-30
+## v1.0.10 - 2026-11-10
 
-**The current release** - what breaks now stops instead of allowing: the hook on its own faults, the shell writes it can read, the approval record, the attestation and the readiness check each refuse and name the recovery where they used to stand down; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change; the install and every upgrade now need Claude Code 2.1.295 or newer.
+**The current release** - the gate attests itself: each stage's evidence becomes a record a later reader can check, the verifier's calibration is scored by someone other than the verifier, and the gate's own scripts and the PowerShell tool's reading are held more tightly; what the kit used to ask a person or an agent to remember, a program now does or refuses; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
+
+- **Capabilities.** Everything in v1.0.9.
+  - An upgrade keeps a CLAUDE.md the kit placed for you as yours.
+  - Each stage's RED and GREEN runs, the gate's judgments and the channel's refusals are written as records under the stage's evidence folder, bound to the tested bytes; the stage end, the pre-commit check and the push check read them; the orchestrator reviews them with a fixed procedure before it asks for the stamp.
+  - The verifier takes its calibration exam blind and writes verdicts only; the orchestrator scores them against the sealed answers.
+  - The gate's two scripts run only in their bare forms, and from a session the release and the clear need the permission prompt on record.
+  - Under the PowerShell tool the hook reads quoting as PowerShell does, refuses a command that names a gate script or a control file unless it is a bare form, treats a `>` as a redirect wherever PowerShell starts a token, and reads the stop-parsing token's line as literal text that it still judges; real PowerShell checks that reading on a corpus wherever it is installed.
+  - The orchestrator sends its ordinary messages on its own authority; only the release still needs the owner's keystroke and click.
+  - A stage opens only while the orchestrator listens; a recent prompt in its window no longer counts.
+  - `kit-update --ready --model <model>` prints the leaving-bootstrap block itself, filled from the project.
+  - The installer says before the download whether gh can check the build attestation (signed in, not found, or not signed in).
+  - A channel message that is not valid UTF-8 is refused before anything is written, and a stage-open already on the log stands instead of failing.
+- **Upgrading a v1.0.9 project.** Upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate`; the manual change below stays for a reader who prefers to make it by hand. One setting is yours to change: an upgrade never removes a rule you have, so the old ask rule on every orchestrator send stays and still asks for a click on each one. To keep the click on the release only, replace `Bash(node scripts/channel.cjs send *)` in the ask list of a staged copy of `.claude/settings.json` with `Bash(node scripts/channel.cjs send --approval*)` and `Bash(node scripts/channel.cjs send * --approval*)`, then place it with `node scripts/kit-update.cjs --place-settings <staged copy>`.
+- **Limitations.** Four added: the gate's own scripts are held by their form and by the recorded prompt, not by who runs them; the hook's reading of PowerShell is its own, checked against real PowerShell on a corpus; the evidence records are checked against each other and the commit, never against their author, on one supported host, test runner reading and transport; and the calibration seal is a check after the fact, not a file block. [RELEASE-NOTES.md](RELEASE-NOTES.md) and [docs/limitations.md](docs/limitations.md).
+- **Evidence.** Six fresh-context verifier iterations: 16 red findings over the first five, each closed by a fix stage and re-proven by execution, and one in the sixth (a pin gap; the code sound), closed by pins proven on the verifier's own plant; 17 in all. The calibration exam was scored by the orchestrator at 0 missed seeds in every iteration. The cut adds the release lane, the Windows and Linux runs and the attestation.
+
+### Manual change for a v1.0.9 project
+
+**First, upgrade the kit folder.** The edits below assume the new kit is in `sbak/`. Download the new release's `sbak-install.cjs` into your project folder, start `claude` there, type `sbak-install`, and answer `upgrade` (the same command as the install). The upgrade refreshes `sbak/` and the kit-managed scripts, leaves `scripts/verify-local.cjs` at v1.0.9 by design, and ends on the readiness block, whose last line names the one next command.
+
+**Or let the kit make it.** With the new kit in `sbak/` and the upgrade committed, run `node scripts/kit-update.cjs --migrate`: it shows the change file by file first, and with `--apply-all` it merges `scripts/verify-local.cjs` three ways from the v1.0.9 template, keeping your fills. The steps below are the same change by hand.
+
+A project bootstrapped from v1.0.9 runs its own copy of `scripts/verify-local.cjs`, filled with the project's test commands at bootstrap. `kit-update --apply` refuses that file by design, because restoring it from the template would wipe those fills, so the change below is made by hand.
+
+- **What it adds.** The evidence path's two records from the test step: `node scripts/verify-local.cjs --stage <id> --subject red|green` runs the native test step once and writes `.claude/evidence/<id>/tests_run.<red|green>.json`, and `--stage <id>` beside a lane writes `lane_run.json`. The release and the stage-end publish read them.
+- **What changes.** Nothing in a lane run without `--stage`: the lanes, their selection and their exit codes are as before.
+- **How.** Make the edits below in your project's `scripts/verify-local.cjs`. Each Find block appears exactly once in the v1.0.9 file. Edits 2 to 7 are required. Edit 1 is optional: it brings the header comment in line.
+
+**Edit 1 (optional): the header comment: the three new usage lines and the evidence path paragraph.** Find these lines:
+
+```js
+//
+// ── LANES ─────────────────────────────────────────────────────────────────────────────
+```
+
+Replace them with:
+
+```js
+//
+// ── THE EVIDENCE PATH ─────────────────────────────────────────────────────────────────
+//   node scripts/verify-local.cjs --stage <id> --subject red     # the RED run as a record
+//   node scripts/verify-local.cjs --stage <id> --subject green   # the GREEN run on the candidate
+//   node scripts/verify-local.cjs --lane fast --stage <id>       # the lane, and its lane_run record
+// --subject runs the native test step once and writes .claude/evidence/<stage>/tests_run.<red|green>
+// .json (scripts/lib/evidence.cjs): the command's sha256, the exit code, the subject (the index's
+// fingerprint, the one exclusion rule) and, for a node --test command that names no reporter of its
+// own, the counts, the failing labels and the failure's class, read from a tap reporter written to a
+// temporary file beside the spec reporter on stdout (the one runner adapter). Any other command
+// records its exit code and last line with adapter "none": its labels are not read, and the
+// orchestrator judges whether its failures are the approved tests. --stage beside a lane writes
+// .claude/evidence/<stage>/lane_run.json with the lane's verdict and the subject taken before its
+// first task. Both refuse, exit 2, while the working tree differs from the index outside the
+// excluded prefixes (stage the candidate with git add first), and when the record cannot be written.
+//
+// ── LANES ─────────────────────────────────────────────────────────────────────────────
+```
+
+**Edit 2 (required): the os module, for the temporary tap file.** Find these lines:
+
+```js
+const fs = require('fs');
+const path = require('path');
+```
+
+Replace them with:
+
+```js
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+```
+
+**Edit 3 (required): the RED or GREEN run as a record.** Find these lines:
+
+```js
+
+// ── CLI ───────────────────────────────────────────────────────────────────────────────
+```
+
+Replace them with:
+
+```js
+
+// ── the evidence path: the RED or GREEN run as a record ───────────────────────────────
+async function testsRunRecord(root, stage, kind) {
+  const ev = require(path.join(__dirname, 'lib', 'evidence.cjs'));
+  const d = ev.indexDiff(root);
+  if (d.error) { process.stderr.write(`evidence: refused - the working tree cannot be compared with the index (${d.error})\n`); return 2; }
+  if (d.path) { process.stderr.write(ev.UNSTAGED_LINE('evidence: refused', d.path) + '\n'); return 2; }
+  const s = ev.subject(root);
+  if (s.error) { process.stderr.write(`evidence: refused - the subject cannot be computed (${s.error})\n`); return 2; }
+  const command = CONFIG.nativeTestCommand;
+  if (unfilled(command)) { process.stderr.write('evidence: refused - the native test command is not filled (NATIVE_TEST_COMMAND)\n'); return 2; }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sbak-tap-'));
+  const tapFile = path.join(tmpDir, 'run.tap').split(path.sep).join('/');
+  const adapted = ev.adaptCommand(command, tapFile);
+  const reason = adapted ? null : (ev.NODE_TEST.test(command) ? 'the command names its own --test-reporter' : 'the command is not node --test');
+  const win = process.platform === 'win32';
+  const line = adapted || command;
+  // one shell for the tests and for the node they resolve (runner.node)
+  const shellFor = (l) => (win ? ['cmd', ['/d', '/s', '/c', `"${l}"`], { windowsVerbatimArguments: true }] : ['sh', ['-lc', l], {}]);
+  const [sh, args] = shellFor(line);
+  const testsNode = ev.testsNode(root, command, shellFor);
+  const run = await new Promise((resolve) => {
+    let out = '';
+    const dec = new StringDecoder('utf8');
+    const child = spawn(sh, args, { cwd: root, stdio: ['inherit', 'pipe', 'inherit'], windowsVerbatimArguments: win });
+    child.stdout.on('data', (b) => { process.stdout.write(b); out = (out + dec.write(b)).slice(-65536); });
+    child.on('error', () => resolve({ exitCode: 1, signal: null, stdout: out }));
+    child.on('close', (code, signal) => resolve({ exitCode: code, signal: signal || null, stdout: out + dec.end() }));
+  });
+  let tap = null;
+  if (adapted) { try { tap = fs.readFileSync(tapFile, 'utf8'); } catch (_) { tap = ''; } }
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* temporary */ }
+  const file = path.join(ev.stageDir(root, stage), `tests_run.${kind}.json`);
+  let w;
+  try { w = ev.recordTestsRun(root, stage, kind, { command, exitCode: run.exitCode, signal: run.signal, stdout: run.stdout, tap, adapter: adapted ? 'node-test' : 'none', reason, subject: s.subject, testsNode }); }
+  catch (e) { process.stderr.write(ev.writeFailLine(root, file, e) + '\n'); return 2; }
+  process.stdout.write(`\nevidence: wrote ${ev.EVIDENCE_REL}/${stage}/tests_run.${kind}.json - ${w.rec.adapter === 'none' ? `adapter none (${reason}), exit ${w.rec.exit_code}` : `${w.rec.classified || 'pass'}, ${w.rec.counts.total} test(s), ${w.rec.counts.fail} failed`}, subject ${s.subject}\n`);
+  return run.exitCode === 0 ? 0 : 1;
+}
+
+// ── CLI ───────────────────────────────────────────────────────────────────────────────
+```
+
+**Edit 4 (required): the two new arguments.** Find these lines:
+
+```js
+  const argv = process.argv.slice(2);
+  const KNOWN = ['--lane', '--list', '--json', '--summary', '--summary-only', '--reconcile', '--write'];
+  for (let i = 0; i < argv.length; i++) {
+    if (!KNOWN.includes(argv[i])) { process.stderr.write(`verify-local: unknown argument ${JSON.stringify(argv[i])} - known: ${KNOWN.join(', ')}\n`); process.exit(2); }
+    if (['--lane', '--summary', '--reconcile'].includes(argv[i])) i++;
+  }
+```
+
+Replace them with:
+
+```js
+  const argv = process.argv.slice(2);
+  const KNOWN = ['--lane', '--list', '--json', '--summary', '--summary-only', '--reconcile', '--write', '--stage', '--subject'];
+  for (let i = 0; i < argv.length; i++) {
+    if (!KNOWN.includes(argv[i])) { process.stderr.write(`verify-local: unknown argument ${JSON.stringify(argv[i])} - known: ${KNOWN.join(', ')}\n`); process.exit(2); }
+    if (['--lane', '--summary', '--reconcile', '--stage', '--subject'].includes(argv[i])) i++;
+  }
+```
+
+**Edit 5 (required): the --subject run.** Find these lines:
+
+```js
+
+  if (flag('--reconcile')) {
+```
+
+Replace them with:
+
+```js
+
+  const stageArg = value('--stage');
+  const subjectArg = value('--subject');
+  if ((flag('--stage') && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(stageArg))) || (flag('--subject') && ['red', 'green'].indexOf(subjectArg) === -1) || (flag('--subject') && !flag('--stage'))) {
+    process.stderr.write('verify-local: --subject red|green needs --stage <id> (the open stage\'s id); --stage beside a lane takes a stage id\n'); process.exit(2);
+  }
+  if (flag('--subject')) process.exit(await testsRunRecord(root, stageArg, subjectArg));
+
+  if (flag('--reconcile')) {
+```
+
+**Edit 6 (required): the lane's subject, taken before its first task.** Find these lines:
+
+```js
+
+  const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
+```
+
+Replace them with:
+
+```js
+
+  // The evidence path: --stage beside a lane - the candidate staged (the index is the subject), its subject
+  // taken before the first task; the lane_run record written after the summary.
+  let laneEv = null;
+  if (stageArg) {
+    const ev = require(path.join(__dirname, 'lib', 'evidence.cjs'));
+    const d = ev.indexDiff(root);
+    if (d.error) { process.stderr.write(`evidence: refused - the working tree cannot be compared with the index (${d.error})\n`); process.exit(2); }
+    if (d.path) { process.stderr.write(ev.UNSTAGED_LINE('evidence: refused', d.path) + '\n'); process.exit(2); }
+    const s = ev.subject(root);
+    if (s.error) { process.stderr.write(`evidence: refused - the subject cannot be computed (${s.error})\n`); process.exit(2); }
+    laneEv = { ev, subject: s.subject };
+  }
+  const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
+```
+
+**Edit 7 (required): the lane_run record, written after the summary.** Find these lines:
+
+```js
+  try { appendRunLine(root, summary); } catch (_) { /* the same */ }
+  if (value('--summary')) fs.writeFileSync(value('--summary'), JSON.stringify(summary, null, 2) + '\n', 'utf8');
+```
+
+Replace them with:
+
+```js
+  try { appendRunLine(root, summary); } catch (_) { /* the same */ }
+  if (laneEv) {
+    const file = path.join(laneEv.ev.stageDir(root, stageArg), 'lane_run.json');
+    try { laneEv.ev.recordLaneRun(root, stageArg, { lane, verdict: summary.verdict, durationMs: summary.totalDurationMs, taskCount: summary.taskCount, counts, subject: laneEv.subject }); }
+    catch (e) { process.stderr.write(laneEv.ev.writeFailLine(root, file, e) + '\n'); process.exit(2); }
+    if (!summaryOnly) process.stdout.write(`evidence: wrote ${laneEv.ev.EVIDENCE_REL}/${stageArg}/lane_run.json - lane ${lane}, verdict ${summary.verdict}, subject ${laneEv.subject}\n`);
+  }
+  if (value('--summary')) fs.writeFileSync(value('--summary'), JSON.stringify(summary, null, 2) + '\n', 'utf8');
+```
+
+## v1.0.9 - 2026-11-01
+
+What breaks now stops instead of allowing, superseded by v1.0.10: the hook on its own faults, the shell writes it can read, the approval record, the attestation and the readiness check each refuse and name the recovery where they used to stand down. The build loop does not change; the install and every upgrade now need Claude Code 2.1.295 or newer.
 
 - **Capabilities.** Everything in v1.0.8. The red gate works out one of three states before it judges anything and refuses every edit and command in the unknown state, with the fault and the recovery line. It judges shell commands that write through a recognised construct, up to eight levels of nesting deep, and refuses one whose target it cannot read; in every state it refuses a command that deletes, moves or writes one of its control files. `/approve-red` refuses without its evidence and records the approved test files by hash; an approval that stops standing is void, and `--void` takes one back. The installer reports one of four attestation outcomes and stops on REJECTED. `kit-update --ready` is one readiness result with one next command, and `--place-settings` is the door to `.claude/settings.json`.
 - **Upgrading a v1.0.6, v1.0.7 or v1.0.8 project.** Update Claude Code, upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate` (a v1.0.6 project adds `--pin 1.0.6`). It now merges the two generated workflows and retires what the release no longer ships; the manual change below remains for a reader who prefers to make it by hand.

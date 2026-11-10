@@ -478,10 +478,12 @@ Output: `retrospectives/M[NN].V-findings.md` using `sbak/templates/VERIFIER-FIND
     <!-- G14: the calibration self-test is REQUIRED and runs
          FIRST. The verifier opens by running its plan-challenge against the seeded-defect set
          (prompts/calibration/) and must catch every seed (FNR = 0) before any real finding counts;
-         record seeds-caught / FNR as the `calibration` block. A verifier_stage_prompt WITHOUT it
-         fails schema validation. Honest locus: the floor only checks the pass is WIRED; the catch
-         is the recorded FNR (judgment at V-time, not a pre-commit check). -->
-    <pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; record seeds-caught / FNR as the calibration block. Dogfoods G14: if YOU miss a seed, the verifier-proof works and the milestone has a real finding"/>
+         write the blind verdicts in the calibration-verdicts block; the orchestrator's scorer
+         records seeds-caught / FNR in the `calibration` block. A verifier_stage_prompt WITHOUT it
+         fails schema validation. Honest locus: the floor only checks the pass is WIRED; the
+         catch is agent judgment (the verifier's verdicts) and the rate is the scorer's (observed
+         evidence, written by the orchestrator's run, never by the verifier), not a pre-commit check. -->
+    <pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; write the blind verdicts in the calibration-verdicts block; the orchestrator's scorer records seeds-caught / FNR as the calibration block. Dogfoods G14: if YOU miss a seed, the verifier-proof works and the milestone has a real finding"/>
     <pass name="inventory"/>
     <pass name="hooks"/>
     <pass name="behavior" harness="{{Vitest+jsdom or equivalent}}" drive_script="docs/app-map.md (when app_map: on — a gesture that doesn't reproduce live is a finding)"/>
@@ -701,7 +703,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
 - **Milestone summary** — `retrospectives/M[NN]-summary.md`. Aggregate per-stage retrospectives; score axes across stages; mark verdict.
 - **Gap-analysis entry** — append to `docs/gap-analysis.md`. Six required sections. Carry-forward addresses prior milestones' open items.
 - **PR description** — draft only. Do not open the PR until user approves the three-artifact review.
-- **Off-track check (full path; gate G8)** — re-read `docs/backlog.md` against everything M[NN] shipped, re-confirm the ranking reflects the user's priorities (do not re-rank it yourself — flag a stale ranking for the user), and run the off-track check (`sbak/BUILD-PLAYBOOK.md` §3.5). A standing unjustified priority inversion (a lower-ranked story built ahead of a higher-ranked backlogged one with no build-sequence necessity logged in `docs/off-track-log.md`) **blocks the PR under `off_track_check: enforced` / warns under the Full default (`advisory`)**. Any resulting backlog edit is HITL co-authored — proposed by the agent, ratified by the human.
+- **Off-track check (full path; gate G8)** — re-read `docs/backlog.md` against everything M[NN] shipped, re-confirm the ranking reflects the user's priorities (do not re-rank it yourself — flag a stale ranking for the user), and run the off-track check (`sbak/BUILD-PLAYBOOK.md` §3.5). A standing unjustified priority inversion (a lower-ranked story built ahead of a higher-ranked backlogged one with no build-sequence necessity logged in `docs/off-track-log.md`) **is surfaced as a warning, judged by the agent and logged by a person** (the enforced setting is proposed for M36). Any resulting backlog edit is HITL co-authored — proposed by the agent, ratified by the human.
 
 ### E.4 Acceptance criteria
 
@@ -713,7 +715,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
 4. Three-artifact surface ready: cumulative diff + summary + gap-analysis entry
 5. PR description drafted, not yet pushed
 6. `docs/identity.md` Status section updated
-7. Off-track check run against `docs/backlog.md` (gate G8): no standing unjustified priority inversion — or one is surfaced (warning under the Full default `advisory` / PR-blocking under `enforced`), with any backlog edit human-ratified
+7. Off-track check run against `docs/backlog.md` (gate G8): no standing unjustified priority inversion — or one is surfaced (a warning, judged by the agent and logged by a person; the enforced setting is proposed for M36), with any backlog edit human-ratified
 
 ### E.5 CLI Prompt
 
@@ -789,7 +791,7 @@ Closeout aggregates the milestone's process record, evaluates the product agains
   <off_track_check gate="G8" ref="sbak/BUILD-PLAYBOOK.md" section="3.5">
     <step>re-read docs/backlog.md against everything M[NN] shipped; re-confirm the ranking reflects the user's priorities (do NOT re-rank it yourself — flag a stale ranking for the user)</step>
     <step>run the full off-track check: was the highest-priority unblocked, in-scope story the one M[NN] built?</step>
-    <on_standing_unjustified_inversion>blocks the PR under enforced / warns under the Full default (advisory); resolve via a human-ratified re-prioritization (override-logged) or a build-sequence justification appended to docs/off-track-log.md</on_standing_unjustified_inversion>
+    <on_standing_unjustified_inversion>surfaced as a warning, judged by the agent and logged by a person (the enforced setting is proposed for M36); resolve via a human-ratified re-prioritization (override-logged) or a build-sequence justification appended to docs/off-track-log.md</on_standing_unjustified_inversion>
     <hitl_co_authorship>any docs/backlog.md edit is proposed by the agent and ratified by the human — never folded silently into the closeout commit (G8 clause b)</hitl_co_authorship>
   </off_track_check>
 

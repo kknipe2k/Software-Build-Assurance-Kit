@@ -1,10 +1,10 @@
 ---
-description: Send the block you just surfaced to the builder over the channel (orchestrator only; the human's keystroke is the record)
+description: Send the release (the RED verdict) to the builder over the channel - the one send that needs the owner's keystroke (orchestrator only)
 argument-hint: [--approval]  — add --approval when the block is the RED verdict carrying the RED-RELEASE line
 disable-model-invocation: true
 ---
 
-You are the **orchestrator session**. The human just typed `/send`: that keystroke is the adjudication record, and the session's UserPromptSubmit hook has stamped it. Now carry the block you surfaced in your previous reply to the builder over the terminal channel - byte-identical, never re-worded.
+You are the **orchestrator session**. The owner just typed `/send`. Only the release needs that keystroke: `/send --approval` carries the RED verdict, and the session's UserPromptSubmit hook has stamped the keystroke the script requires for it. Every other block - the build prompt, an answer, a verdict without a release - leaves on this session's own authority with `node scripts/channel.cjs send --kind <kind> --body-file <file>` and no `/send`, its hash, seq and log row the record; the owner's words are four (the release, the stamp, commit and push). Now carry the block you surfaced in your previous reply to the builder over the terminal channel - byte-identical, never re-worded.
 
 Arguments: `$ARGUMENTS` - empty (a `courier` message: the build prompt, an answer, a verdict without a release) or `--approval` (an `approval-request`: the RED verdict packet whose last line is the RED-RELEASE line, `RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>`, with `<id>` the stage under review and `<n>` the seq this send will print; the builder's pickup surfaces it and WAITS for the human's `/approve-red`).
 
@@ -15,4 +15,4 @@ Steps:
 3. End the turn by arming the watcher in the background: `node scripts/channel.cjs watch` - it exits when the builder's next packet lands and wakes this session; say `listening: builder (<stage>)`.
 4. **End every turn with the channel status, two lines, then one loud last line.** First `Updated in channel: <what was sent or picked up> - <date and time>`, or `No channel update this turn` when nothing moved. Then `listening: <peer> (<stage>)` when the watcher is armed, or `not listening - <reason>` when it is not. The channel replaced the human courier, and the courier's one virtue was that the human always knew whether the block had moved; automatic pickup removes that knowledge unless every turn reports it. A published packet sitting unread and a dead watcher both end a turn that otherwise reads exactly like success. Then the third line, in bold: `YOU: <the exact thing to type or do>` when the person is needed, or `YOU: nothing - waiting on <what>` when they are not. The person must never have to read the turn to find out whether they are needed.
 
-If the script refuses (`channel: send refused - no human action behind it`), do not retry: the human types `/send` again. If it names a fault (cursor gap, unparseable line, role or hash mismatch, no builder worktree), surface the line and fall back to the human courier for this one block.
+If the script refuses an approval request (`channel: send refused - an approval request (the release) needs the owner's keystroke behind it`), do not retry: the owner types `/send --approval` again. If it names a fault (cursor gap, unparseable line, role or hash mismatch, no builder worktree), surface the line and fall back to the human courier for this one block.

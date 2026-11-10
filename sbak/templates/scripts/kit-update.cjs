@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -139,67 +139,70 @@ function writeArchive(...a) { return settingsMergeLib().writeArchive(...a); }
 // error. This list is DERIVED from rows.json at kit-build time and reconciled by the
 // kit's smoke suite — edit rows.json, not (only) this table.
 const MANAGED = [
-  { file: 'validators/validate-stage-prompts.cjs', template: 'validators/validate-stage-prompts.cjs', render: 'copy' },
-  { file: 'validators/validate-retrospective.cjs', template: 'validators/validate-retrospective.cjs', render: 'copy' },
-  { file: 'validators/validate-app-map.cjs', template: 'validators/validate-app-map.cjs', render: 'copy' },
-  { file: 'validators/validate-test-honesty.cjs', template: 'validators/validate-test-honesty.cjs', render: 'copy' },
-  { file: 'validators/validate-operating-mode.cjs', template: 'validators/validate-operating-mode.cjs', render: 'copy' },
-  { file: 'validators/validate-outcome-challenge.cjs', template: 'validators/validate-outcome-challenge.cjs', render: 'copy' },
-  { file: 'validators/validate-risk-escalation.cjs', template: 'validators/validate-risk-escalation.cjs', render: 'copy' },
-  { file: 'validators/validate-destructive-op.cjs', template: 'validators/validate-destructive-op.cjs', render: 'copy' },
-  { file: 'validators/validate-risk-matrix.cjs', template: 'validators/validate-risk-matrix.cjs', render: 'copy' },
-  { file: 'validators/validate-calibration.cjs', template: 'validators/validate-calibration.cjs', render: 'copy' },
-  { file: 'validators/validate-reconciliation.cjs', template: 'validators/validate-reconciliation.cjs', render: 'copy' },
-  { file: 'validators/validate-transition.cjs', template: 'validators/validate-transition.cjs', render: 'copy' },
-  { file: 'validators/validate-release-readiness.cjs', template: 'validators/validate-release-readiness.cjs', render: 'copy' },
-  { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy' },
-  { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy' },
-  { file: 'validators/validate-irl-plan.cjs', template: 'validators/validate-irl-plan.cjs', render: 'copy' },
-  { file: 'validators/validate-claude-integrity.cjs', template: 'validators/validate-claude-integrity.cjs', render: 'copy' },
-  { file: 'validators/validate-closeout-packet.cjs', template: 'validators/validate-closeout-packet.cjs', render: 'copy' },
-  { file: 'validators/validate-gate-manifest.cjs', template: 'validators/validate-gate-manifest.cjs', render: 'copy' },
-  { file: 'validators/check-append-only.cjs', template: 'validators/check-append-only.cjs', render: 'copy' },
-  { file: 'validators/lib/fenced-block.cjs', template: 'validators/lib/fenced-block.cjs', render: 'copy' },
-  { file: 'validators/lib/escape-regexp.cjs', template: 'validators/lib/escape-regexp.cjs', render: 'copy' },
-  { file: 'validators/lib/irl-plan.cjs', template: 'validators/lib/irl-plan.cjs', render: 'copy' },
-  { file: 'validators/README.md', template: 'validators/README.md', render: 'copy' },
-  { file: '.claude/hooks/session-start-read-first.cjs', template: 'templates/dot-claude/hooks/session-start-read-first.cjs', render: 'copy' },
-  { file: '.claude/hooks/user-prompt-submit-mode-check.cjs', template: 'templates/dot-claude/hooks/user-prompt-submit-mode-check.cjs', render: 'copy' },
-  { file: '.claude/hooks/pretooluse-red-gate.cjs', template: 'templates/dot-claude/hooks/pretooluse-red-gate.cjs', render: 'copy' },
-  { file: '.claude/hooks/receipts-lifecycle.cjs', template: 'templates/dot-claude/hooks/receipts-lifecycle.cjs', render: 'copy' },
-  { file: '.claude/commands/stage.md', template: 'templates/dot-claude/commands/stage.md', render: 'copy' },
-  { file: '.claude/commands/verify.md', template: 'templates/dot-claude/commands/verify.md', render: 'copy' },
-  { file: '.claude/commands/refactor.md', template: 'templates/dot-claude/commands/refactor.md', render: 'copy' },
-  { file: '.claude/skills/closeout/SKILL.md', template: 'templates/dot-claude/skills/closeout/SKILL.md', render: 'copy' },
-  { file: '.claude/commands/on-track.md', template: 'templates/dot-claude/commands/on-track.md', render: 'copy' },
-  { file: '.claude/skills/approve-red/SKILL.md', template: 'templates/dot-claude/skills/approve-red/SKILL.md', render: 'copy' },
-  { file: '.claude/skills/send/SKILL.md', template: 'templates/dot-claude/skills/send/SKILL.md', render: 'copy' },
-  { file: '.claude/commands/listen.md', template: 'templates/dot-claude/commands/listen.md', render: 'copy' },
-  { file: 'scripts/set-mode.cjs', template: 'templates/scripts/set-mode.cjs', render: 'copy' },
-  { file: 'scripts/stage-active.cjs', template: 'templates/scripts/stage-active.cjs', render: 'copy' },
-  { file: 'scripts/stage-view.cjs', template: 'templates/scripts/stage-view.cjs', render: 'copy' },
-  { file: 'scripts/approve-red.cjs', template: 'templates/scripts/approve-red.cjs', render: 'copy' },
-  { file: 'scripts/install-hooks.cjs', template: 'templates/scripts/install-hooks.cjs', render: 'copy' },
-  { file: 'scripts/verify-local.cjs', template: 'templates/scripts/verify-local.cjs', render: 'wiring' },
-  { file: 'scripts/kit-update.cjs', template: 'templates/scripts/kit-update.cjs', render: 'copy' },
-  { file: 'scripts/smoke-project.cjs', template: 'templates/scripts/smoke-project.cjs', render: 'copy' },
-  { file: 'scripts/lib/sandbox.cjs', template: 'templates/scripts/lib/sandbox.cjs', render: 'copy' },
-  { file: 'scripts/lib/hook-chmod.cjs', template: 'templates/scripts/lib/hook-chmod.cjs', render: 'copy' },
-  { file: 'scripts/lib/settings-merge.cjs', template: 'templates/scripts/lib/settings-merge.cjs', render: 'copy' },
-  { file: 'scripts/lib/stage-structure.cjs', template: 'templates/scripts/lib/stage-structure.cjs', render: 'copy' },
-  { file: 'scripts/lib/receipts.cjs', template: 'templates/scripts/lib/receipts.cjs', render: 'copy' },
-  { file: 'scripts/lib/read-ledger.cjs', template: 'templates/scripts/lib/read-ledger.cjs', render: 'copy' },
-  { file: 'scripts/lib/hook-root.cjs', template: 'templates/scripts/lib/hook-root.cjs', render: 'copy' },
-  { file: 'scripts/channel.cjs', template: 'templates/scripts/channel.cjs', render: 'copy' },
-  { file: 'scripts/lib/channel.cjs', template: 'templates/scripts/lib/channel.cjs', render: 'copy' },
-  { file: 'scripts/lib/receipts-collect.cjs', template: 'templates/scripts/lib/receipts-collect.cjs', render: 'copy' },
-  { file: 'scripts/build-receipts.cjs', template: 'templates/scripts/build-receipts.cjs', render: 'copy' },
-  { file: '.githooks/pre-commit', template: 'templates/dot-githooks/pre-commit', render: 'wiring' },
-  { file: '.githooks/pre-push', template: 'templates/dot-githooks/pre-push', render: 'copy' },
+  { file: 'validators/validate-stage-prompts.cjs', template: 'validators/validate-stage-prompts.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-retrospective.cjs', template: 'validators/validate-retrospective.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-app-map.cjs', template: 'validators/validate-app-map.cjs', render: 'copy', tiers: ['full'], app_map: true },
+  { file: 'validators/validate-test-honesty.cjs', template: 'validators/validate-test-honesty.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-operating-mode.cjs', template: 'validators/validate-operating-mode.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-outcome-challenge.cjs', template: 'validators/validate-outcome-challenge.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-risk-escalation.cjs', template: 'validators/validate-risk-escalation.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-destructive-op.cjs', template: 'validators/validate-destructive-op.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-risk-matrix.cjs', template: 'validators/validate-risk-matrix.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-calibration.cjs', template: 'validators/validate-calibration.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-reconciliation.cjs', template: 'validators/validate-reconciliation.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-transition.cjs', template: 'validators/validate-transition.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-release-readiness.cjs', template: 'validators/validate-release-readiness.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-irl-plan.cjs', template: 'validators/validate-irl-plan.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-claude-integrity.cjs', template: 'validators/validate-claude-integrity.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-closeout-packet.cjs', template: 'validators/validate-closeout-packet.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'validators/validate-gate-manifest.cjs', template: 'validators/validate-gate-manifest.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/check-append-only.cjs', template: 'validators/check-append-only.cjs', render: 'copy', tiers: ['full'], risk_armed: true },
+  { file: 'validators/lib/fenced-block.cjs', template: 'validators/lib/fenced-block.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/lib/escape-regexp.cjs', template: 'validators/lib/escape-regexp.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/lib/irl-plan.cjs', template: 'validators/lib/irl-plan.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/README.md', template: 'validators/README.md', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.claude/hooks/session-start-read-first.cjs', template: 'templates/dot-claude/hooks/session-start-read-first.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.claude/hooks/user-prompt-submit-mode-check.cjs', template: 'templates/dot-claude/hooks/user-prompt-submit-mode-check.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.claude/hooks/pretooluse-red-gate.cjs', template: 'templates/dot-claude/hooks/pretooluse-red-gate.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.claude/hooks/receipts-lifecycle.cjs', template: 'templates/dot-claude/hooks/receipts-lifecycle.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.claude/commands/stage.md', template: 'templates/dot-claude/commands/stage.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/commands/verify.md', template: 'templates/dot-claude/commands/verify.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/commands/refactor.md', template: 'templates/dot-claude/commands/refactor.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/skills/closeout/SKILL.md', template: 'templates/dot-claude/skills/closeout/SKILL.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/commands/on-track.md', template: 'templates/dot-claude/commands/on-track.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/skills/approve-red/SKILL.md', template: 'templates/dot-claude/skills/approve-red/SKILL.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/skills/send/SKILL.md', template: 'templates/dot-claude/skills/send/SKILL.md', render: 'copy', tiers: ['full'] },
+  { file: '.claude/commands/listen.md', template: 'templates/dot-claude/commands/listen.md', render: 'copy', tiers: ['full'] },
+  { file: 'scripts/set-mode.cjs', template: 'templates/scripts/set-mode.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/stage-active.cjs', template: 'templates/scripts/stage-active.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/stage-view.cjs', template: 'templates/scripts/stage-view.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/approve-red.cjs', template: 'templates/scripts/approve-red.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/install-hooks.cjs', template: 'templates/scripts/install-hooks.cjs', render: 'copy', tiers: ['lite', 'full'], locus: ['hybrid', 'local_first'] },
+  { file: 'scripts/verify-local.cjs', template: 'templates/scripts/verify-local.cjs', render: 'wiring', tiers: ['lite', 'full'], locus: ['hybrid', 'local_first'] },
+  { file: 'scripts/kit-update.cjs', template: 'templates/scripts/kit-update.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/smoke-project.cjs', template: 'templates/scripts/smoke-project.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/sandbox.cjs', template: 'templates/scripts/lib/sandbox.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/hook-chmod.cjs', template: 'templates/scripts/lib/hook-chmod.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/settings-merge.cjs', template: 'templates/scripts/lib/settings-merge.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/stage-structure.cjs', template: 'templates/scripts/lib/stage-structure.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/receipts.cjs', template: 'templates/scripts/lib/receipts.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/read-ledger.cjs', template: 'templates/scripts/lib/read-ledger.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/evidence.cjs', template: 'templates/scripts/lib/evidence.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/evidence.cjs', template: 'templates/scripts/evidence.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/calibration-score.cjs', template: 'templates/scripts/calibration-score.cjs', render: 'copy', tiers: ['full'] },
+  { file: 'scripts/lib/hook-root.cjs', template: 'templates/scripts/lib/hook-root.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/channel.cjs', template: 'templates/scripts/channel.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/channel.cjs', template: 'templates/scripts/lib/channel.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/lib/receipts-collect.cjs', template: 'templates/scripts/lib/receipts-collect.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'scripts/build-receipts.cjs', template: 'templates/scripts/build-receipts.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: '.githooks/pre-commit', template: 'templates/dot-githooks/pre-commit', render: 'wiring', tiers: ['lite', 'full'], locus: ['hybrid', 'local_first'] },
+  { file: '.githooks/pre-push', template: 'templates/dot-githooks/pre-push', render: 'copy', tiers: ['lite', 'full'], locus: ['hybrid', 'local_first'] },
   // M34.D: the two generated workflows are bootstrap-filled like verify-local.cjs, so --migrate
   // merges them three ways; LICENSE stays out by rule (the project's paperwork).
-  { file: '.github/workflows/pr-smoke.yml', template: 'templates/dot-github/workflows/pr-smoke.yml', render: 'wiring' },
-  { file: '.github/workflows/release.yml', template: 'templates/dot-github/workflows/release.yml', render: 'wiring' },
+  { file: '.github/workflows/pr-smoke.yml', template: 'templates/dot-github/workflows/pr-smoke.yml', render: 'wiring', tiers: ['full'], locus: ['hybrid'] },
+  { file: '.github/workflows/release.yml', template: 'templates/dot-github/workflows/release.yml', render: 'wiring', tiers: ['full'], locus: ['hybrid', 'local_first'] },
 ];
 
 // The ARC-007 convention (M09.D): a live file declaring itself intentionally divergent.
@@ -223,19 +226,48 @@ function declaresDivergence(text) {
 function readIf(p) { try { return fs.readFileSync(p, 'utf8'); } catch (_) { return null; } }
 function stampOf(text) { const m = STAMP_RE.exec(String(text)); return m ? m[1] : null; }
 
+// M34.6.A: which MANAGED rows this project renders - the row's rows.json conditions (the
+// tiers, app_map, risk_armed, locus, deliverable fields above) against project-config.md, read
+// through the one config reader (CFI-17, scripts/lib/read-ledger.cjs). An unreadable value reads the
+// way that requires more, never less (fail-closed): tier full, app_map on, a risk trigger declared,
+// any locus. -> { tier, why(row) -> { required, why } }
+function requiredSet(projRoot) {
+  let rl = null; try { rl = require(path.join(__dirname, 'lib', 'read-ledger.cjs')); } catch (_) { rl = null; }
+  const cfg = readIf(path.join(projRoot, 'project-config.md')) || '';
+  const val = (k) => (rl ? rl.readConfigValue(cfg, k) : null);
+  const t = val('tier'); const tier = t === 'lite' || t === 'full' ? t : 'full';
+  const appMap = val('app_map'); const locus = val('verification_locus'); const deliverable = val('deliverable_type');
+  const risk = rl && typeof rl.readConfigList === 'function' ? rl.readConfigList(cfg, 'risk_triggers') : null;
+  const why = (row) => {
+    if (!Array.isArray(row.tiers) || row.tiers.indexOf(tier) === -1) return { required: false, why: `tier ${tier} does not render it` };
+    if (row.app_map && appMap === 'skip') return { required: false, why: 'app_map skip' };
+    if (row.risk_armed && Array.isArray(risk) && risk.length === 0) return { required: false, why: 'no risk trigger declared' };
+    if (Array.isArray(row.locus) && locus && row.locus.indexOf(locus) === -1) return { required: false, why: `verification_locus ${locus}` };
+    if (row.deliverable && deliverable && row.deliverable !== deliverable) return { required: false, why: `deliverable_type ${deliverable}` };
+    const c = [`tier ${tier}`];
+    if (row.app_map) c.push(`app_map ${appMap || 'unread'}`);
+    if (row.risk_armed) c.push(Array.isArray(risk) ? 'risk trigger declared' : 'risk_triggers unread');
+    if (Array.isArray(row.locus)) c.push(`verification_locus ${locus || 'unread'}`);
+    if (row.deliverable) c.push(`deliverable_type ${deliverable || 'unread'}`);
+    return { required: true, why: c.join(', ') };
+  };
+  return { tier, why };
+}
+
 function usage(msg) {
   if (msg) process.stderr.write(`kit-update: ${msg}\n`);
   process.stderr.write(
     'usage: node scripts/kit-update.cjs [--kit <kit-checkout>] [--apply <live-file>]\n' +
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
-    '                                   [--place-project-claude <filled-file>] [--place-settings <filled-file>] [--ready]\n' +
+    '                                   [--place-project-claude <filled-file>] [--place-settings <filled-file>] [--ready [--model <m>]]\n' +
     '                                   [--place-read-first <role> <staged-list>] [--upgrade-check <new-tree>]\n' +
     '                                   [--migrate [--pin <v>] [--base <dir>] [--apply-all [--release <file>]...]]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
     '  --migrate shows the per-file table to take the kit at --kit (replace / merge / retire / keep),\n' +
     '  then writes it with --apply-all, merging bootstrap-filled files from the pinned version;\n' +
     '  --ready prints one readiness result after the bootstrap commit: a line per row, then READY\n' +
-    '  or NOT READY with one next command (exit 1); --place-settings places a filled copy of\n' +
+    '  or NOT READY with one next command (exit 1); after READY it names this window\'s role and,\n' +
+    '  in the bootstrap window, prints the leaving-bootstrap block for --model <m>; --place-settings places a filled copy of\n' +
     '  .claude/settings.json after checking the kit\'s hook registrations and permissions floor (the\n' +
     '  old bytes archived); --place-read-first places a staged read-first list the same way;\n' +
     '  --upgrade-check names the sbak/ files you changed that unzipping a new release would overwrite;\n' +
@@ -456,7 +488,7 @@ function kuCommand(projRoot) {
 // The rows --migrate needs passing before it runs: it refuses a broken marker and a dirty tree, needs
 // the commit, and merges from the payload the payload row verifies.
 const MIGRATE_FIRST = ['state', 'payload', 'HEAD', 'tree'];
-function cmdReady(projRoot) {
+function cmdReady(projRoot, opts) {
   const run = (cmd, args) => spawnSync(cmd, args, { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   const rows = [];
   const pass = (row, what) => rows.push({ row, ok: true, line: `${row}: ${what}` });
@@ -524,8 +556,28 @@ function cmdReady(projRoot) {
     const integrity = path.join(projRoot, 'validators', 'validate-claude-integrity.cjs');
     if (!fs.existsSync(integrity)) { fail('wiring', 'validators/validate-claude-integrity.cjs is absent, so the session-hook wiring cannot be checked', ADOPT); return; }
     const r = run(process.execPath, [integrity, '--settings', path.join('.claude', 'settings.json')]);
-    if (r.status !== 0) fail('wiring', readyReason(r, projRoot), ADOPT);
-    else pass('wiring', '.claude/settings.json registers the session hooks, and every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved)');
+    const HUMAN = (rel) => `remove the key from ${rel} in your own editor (the agent cannot edit it), then ${READY_AGAIN}`;
+    if (r.status !== 0) { const why = readyReason(r, projRoot); fail('wiring', why, /disableAllHooks/.test(why) ? HUMAN('.claude/settings.json') : ADOPT); return; }
+    // M34.6.A: the effective hook policy over the two project settings files. The kit's
+    // registrations (the set the door checks against) with their matchers and onFailure, and
+    // .claude/settings.local.json, which outranks the project file, switching nothing off. User,
+    // managed and command-line settings are outside what a project script can read, and the line says so.
+    const sm = settingsMergeLib();
+    let live = null; try { live = JSON.parse(readIf(path.join(projRoot, '.claude', 'settings.json'))); } catch (_) { live = null; }
+    let n = null;
+    if (kitRoot) {
+      const kit = sm.deriveKitSettings(kitRoot);
+      n = kit.registrations.length;
+      const f = sm.hookPolicyFindings(live, kit);
+      if (f.length) { fail('wiring', `.claude/settings.json ${f[0]}${f.length > 1 ? ` (and ${f.length - 1} more)` : ''}`, ADOPT); return; }
+    }
+    const localText = readIf(path.join(projRoot, '.claude', 'settings.local.json'));
+    if (localText !== null) {
+      let loc; try { loc = JSON.parse(localText); } catch (e) { fail('wiring', `.claude/settings.local.json is not valid JSON (${String(e.message).split('\n')[0]}), and it outranks .claude/settings.json`, `correct .claude/settings.local.json in your own editor, then ${READY_AGAIN}`); return; }
+      const off = sm.disablingFinding(loc);
+      if (off) { fail('wiring', `.claude/settings.local.json ${off}; it outranks .claude/settings.json`, HUMAN('.claude/settings.local.json')); return; }
+    }
+    pass('wiring', `.claude/settings.json registers ${n === null ? 'the session hooks (no kit template here to compare its registrations against)' : `the kit's ${n} hook registrations with their matchers, the red gate's onFailure block and the session hooks`}, every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved), and neither it nor .claude/settings.local.json sets disableAllHooks (user, managed and command-line settings are not read)`);
   });
   // hooks
   guard('hooks', () => {
@@ -581,9 +633,13 @@ function cmdReady(projRoot) {
   if (!kitRoot) fail('managed', `no template source (the kit's templates/ at the root or under ${KIT_DIR}/), so the kit files cannot be compared`, 'install the kit (run sbak-install.cjs), then ' + READY_AGAIN);
   else guard('managed', () => {
     const stale = []; const unfilled = []; const kept = []; let at = 0; let filled = 0;
+    // M34.6.A: a required row's absent live file is NOT READY; a row the tier or a toggle
+    // does not render stays a skip, and the pass line counts them
+    const req = requiredSet(projRoot); const absent = []; let notRendered = 0;
     for (const row of MANAGED) {
       const live = readIf(path.join(projRoot, row.file)); const tpl = readIf(path.join(kitRoot, row.template));
-      if (live === null || tpl === null) continue;
+      if (tpl === null) continue;
+      if (live === null) { const w = req.why(row); if (w.required) absent.push({ row, w }); else notRendered++; continue; }
       if (declaresDivergence(live)) { kept.push(row.file); continue; }
       if (row.render === 'wiring') {
         const s = live.match(/\{\{[A-Za-z0-9_]+\}\}/g);
@@ -595,11 +651,15 @@ function cmdReady(projRoot) {
     }
     const keptNote = kept.length ? `; ${kept.length} kept (INTENTIONAL DIVERGENCE): ${kept.join(', ')}` : '';
     const why = [];
+    if (absent.length) {
+      const extra = absent[0].w.why.replace(/^tier [a-z]+(, )?/, '');
+      why.push(`${absent[0].row.file} is absent, and this project's tier (${req.tier}) requires it${extra ? ` (${extra})` : ''}${absent.length > 1 ? `; ${absent.length - 1} more required kit file(s) absent: ${absent.slice(1, 4).map((a) => a.row.file).join(', ')}` : ''}`);
+    }
     if (stale.length) why.push(`${stale.length} kit file(s) not at v${cur}: ${stale.slice(0, 3).map((s) => `${s.file} @${s.stamp}`).join(', ')}`);
     if (unfilled.length) why.push(`${unfilled.length} bootstrap-filled file(s) with an unfilled {{TOKEN}}: ${unfilled.slice(0, 3).map((u) => `${u.file} (${u.tok})`).join(', ')}`);
     if (stale.length) staleStamps = true;
-    if (why.length) fail('managed', why.join('; ') + keptNote, stale.length ? `${KU} --apply ${stale[0].file} (or mark it INTENTIONAL DIVERGENCE to keep it)` : `fill ${unfilled[0].tok} in ${unfilled[0].file}, commit it, then ${READY_AGAIN}`);
-    else pass('managed', `${at} managed files at v${cur}, ${filled} filled, 0 unfilled tokens${keptNote}`);
+    if (why.length) fail('managed', why.join('; ') + keptNote, absent.length ? ADOPT : stale.length ? `${KU} --apply ${stale[0].file} (or mark it INTENTIONAL DIVERGENCE to keep it)` : `fill ${unfilled[0].tok} in ${unfilled[0].file}, commit it, then ${READY_AGAIN}`);
+    else pass('managed', `${at} managed files at v${cur}, ${filled} filled, 0 unfilled tokens, ${notRendered} not rendered by this project's tier or toggles${keptNote}`);
   });
   // HEAD
   const head = run('git', ['rev-parse', '--verify', '--short', 'HEAD']);
@@ -615,11 +675,16 @@ function cmdReady(projRoot) {
     else if (ps.status !== 0) fail('tree', `git status failed: ${readyReason(ps, projRoot)}`, 'run --ready inside the project\'s Git repository');
     else {
       const CH = '.claude/channel/';
+      // M34.6.B (R1, orchestrator seq 212): the OPEN stage's evidence directory rides the stage commit
+      // as the channel's logs do, so it is ignored here too; any other stage's uncommitted evidence is named.
+      const sa = readyMarker(projRoot, 'stage-active');
+      const EVO = sa.value && READY_STAGE_ID.test(sa.value) ? `.claude/evidence/${sa.value}/` : null;
       const dirty = normalize(ps.stdout).split('\n').filter(Boolean)
         .map((l) => l.slice(3).replace(/^.* -> /, '').replace(/^"|"$/g, ''))
-        .filter((p) => !(p.indexOf(CH) === 0 && own.some((re) => re.test(p.slice(CH.length)))));
+        .filter((p) => !(p.indexOf(CH) === 0 && own.some((re) => re.test(p.slice(CH.length)))))
+        .filter((p) => !(EVO && (p.indexOf(EVO) === 0 || `${p}/` === EVO)));
       if (dirty.length) fail('tree', `${dirty.length} uncommitted path(s), first: ${dirty.slice(0, 3).join(', ')}`, `commit or discard them (git status lists them), then ${READY_AGAIN}`);
-      else pass('tree', 'clean, ignoring .claude/channel/ (the channel\'s own logs, cursors and markers)');
+      else pass('tree', EVO ? `clean, ignoring .claude/channel/ (the channel's own logs, cursors and markers) and ${EVO} (the open stage's evidence, committed with the stage)` : 'clean, ignoring .claude/channel/ (the channel\'s own logs, cursors and markers)');
     }
   });
   // migration
@@ -652,8 +717,82 @@ function cmdReady(projRoot) {
     process.stdout.write(`NOT READY: ${failed.length} of ${READY_ROWS.length} rows. Next: ${next.repair}\n`);
     return 1;
   }
+  const hand = handoff(projRoot, opts || {});
+  process.stdout.write(`${hand.role}\n`);
   process.stdout.write(`READY. Project committed at ${sha}. Next: open a fresh terminal as the orchestrator.\n`);
+  if (hand.block) process.stdout.write(hand.block);
   return 0;
+}
+
+// ── the leaving-bootstrap block (M34.6.E item 6, R-173) ────────────────────────────────────────
+// A READY run names this window's role state (none, orchestrator, work, or another role) on the line
+// before the READY line, and at role none - the bootstrap window, before any set-mode - with --model
+// it prints the five steps itself after the READY line, filled from the project: its absolute path,
+// the person's shell (the project-config shell row; unset, cmd on win32 and bash elsewhere, named in
+// one line above the block), the tier (Lite starts the build session, Full the orchestrator) and the
+// model. The agent quotes this output and composes nothing (the v1.0.9 field test: a block composed
+// from memory dropped the set-mode line). Without --model no block is printed - a literal
+// placeholder would fail as a shell redirect - and the role line names the flag; the READY line then
+// stays the last line, as every caller that runs --ready without it (the installer's upgrade) reads.
+const READY_SHELLS = {
+  cmd: { label: 'cmd', other: 'cmd', cd: (p) => `cd /d ${p}`, launch: (m) => `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model ${m}` },
+  powershell: { label: 'PowerShell', other: 'PowerShell', cd: (p) => `cd "${p}"`, launch: (m) => `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model ${m}` },
+  bash: { label: 'bash', other: 'POSIX', cd: (p) => `cd "${p}"`, launch: (m) => `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model ${m}` },
+};
+const READY_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,63}$/;
+function readyRole(projRoot) {
+  let b = null;
+  try { b = fs.readFileSync(path.join(projRoot, '.claude', 'role')); } catch (e) { return e && e.code === 'ENOENT' ? 'none' : 'unresolved'; }
+  const t = b.toString('utf8').split(String.fromCharCode(0)).join('').trim().toLowerCase();
+  return ['work', 'orchestrator', 'verifier', 'refactor'].indexOf(t) === -1 ? 'unresolved' : t;
+}
+function readyShell(projRoot) {
+  const dflt = process.platform === 'win32' ? 'cmd' : 'bash';
+  const why = `${dflt}, the ${process.platform === 'win32' ? 'win32' : 'POSIX'} default.`;
+  const raw = readIf(path.join(projRoot, 'project-config.md')) || '';
+  let text = raw;
+  try { text = require(path.join(__dirname, 'lib', 'read-ledger.cjs')).stripHtmlComments(raw); } catch (_) { text = raw; }
+  const m = /^\|\s*shell\s*\|\s*([^|]+?)\s*\|/mi.exec(text) || /^shell:\s*(\S+)/mi.exec(text);
+  const v = m ? m[1].replace(/`/g, '').trim().toLowerCase() : null;
+  if (v !== null && READY_SHELLS[v]) return { shell: v, note: null };
+  if (v === null || /\{\{.*\}\}/.test(v)) return { shell: dflt, note: `shell: not set in project-config.md - ${why}` };
+  return { shell: dflt, note: `shell: "${v}" in project-config.md is not cmd, powershell or bash - ${why}` };
+}
+// -> { role: the line before READY, block: the text after it, or null }
+function handoff(projRoot, opts) {
+  const role = readyRole(projRoot);
+  if (role !== 'none') return { role: `role: ${role} - this window already carries a role, so bootstrap is over here and no leaving-bootstrap block is printed.`, block: null };
+  // The model: the project-config.md model setting first, when one exists (PHASES.md §Phase 5's order),
+  // then --model (gate-1 condition A).
+  let cfgModel = null;
+  try {
+    const v = require(path.join(__dirname, 'lib', 'read-ledger.cjs')).readConfigValue(readIf(path.join(projRoot, 'project-config.md')) || '', 'model');
+    const t = v === null || v === undefined ? '' : String(v).replace(/`/g, '').trim();
+    if (READY_MODEL_RE.test(t)) cfgModel = t;
+  } catch (_) { cfgModel = null; }
+  const model = cfgModel || (typeof opts.model === 'string' && READY_MODEL_RE.test(opts.model) ? opts.model : null);
+  if (!model) return { role: `role: none - this is the bootstrap window; run --ready again with --model and the model this session runs on${typeof opts.model === 'string' && opts.model ? ` ("${opts.model}" is not a model name)` : ''}, and the leaving-bootstrap block follows the READY line.`, block: null };
+  const lite = requiredSet(projRoot).tier === 'lite';
+  const sh = readyShell(projRoot);
+  const f = READY_SHELLS[sh.shell];
+  const p = path.resolve(projRoot);
+  const others = Object.keys(READY_SHELLS).filter((s) => s !== sh.shell).map((s) => `${READY_SHELLS[s].other}: ${READY_SHELLS[s].cd(p)} and ${READY_SHELLS[s].launch(model)}`);
+  const lines = [];
+  if (sh.note) lines.push(sh.note);
+  lines.push(
+    'Bootstrap is done. Five steps:',
+    '1. Open a NEW terminal window.',
+    `2. Paste these lines, one at a time, to start the ${lite ? 'build session' : 'orchestrator'} (${f.label}):`,
+    `     ${f.cd(p)}`,
+    `     node scripts/set-mode.cjs ${lite ? 'work' : 'orchestrator'}`,
+    `     ${f.launch(model)}`,
+    `   (${others.join(' - ')} - the set-mode line stays the same)`,
+    lite ? '3. In the new session, type `let\'s start M01` - the stamp appears in its reply.'
+      : '3. In the new window, type start - the orchestrator\'s stamp appears in its reply, and it tells you when and how to open the build terminal.',
+    '4. If anything here is unclear, ask Claude in THIS window before closing it.',
+    '5. Then close this window. Bootstrap is over.',
+  );
+  return { role: 'role: none - this is the bootstrap window; the leaving-bootstrap block follows the READY line.', block: lines.join('\n') + '\n' };
 }
 
 // ── --ingest: brownfield known-issue harvest (UAT #19 — imported, never invented) ──────
@@ -948,7 +1087,7 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
           continue;
         }
         settingsConflicts += sres.conflictCount;
-        if (sres.conflictCount > 0 || sres.status === 'unparseable' || sres.status === 'aborted' || sres.status === 'restored') {
+        if (sres.conflictCount > 0 || sres.status === 'unparseable' || sres.status === 'aborted' || sres.status === 'restored' || sres.status === 'disabling') {
           settingsIncomplete++;
         }
         continue;
@@ -1363,6 +1502,15 @@ function cmdMigrate(projRoot, kitRoot, opts) {
     E(`kit-update: --migrate refused - ${dirty.length} uncommitted path(s): ${dirty.slice(0, 3).join(', ')}. Commit or discard them first, so the migration lands as one reviewable diff.`);
     return 2;
   }
+  // M34.6.A: a live settings file that switches the hooks off is refused, never stripped -
+  // the same rule as the door and adopt, before anything is written
+  let liveSettings = null;
+  try { liveSettings = JSON.parse(readIf(path.join(projRoot, '.claude', 'settings.json')) || 'null'); } catch (_) { liveSettings = null; }
+  const off = settingsMergeLib().disablingFinding(liveSettings);
+  if (off) {
+    E(`kit-update: --migrate refused - .claude/settings.json ${off}; the agent cannot edit this file: remove the key in your own editor (or place a copy without it with --place-settings), then re-run; nothing was written.`);
+    return 2;
+  }
   // 3. the pin: recorded, or answered once with --pin (the stamps are the evidence, never a guess)
   const recorded = readPin(projRoot);
   if (recorded.value && opts.pin && recorded.value !== opts.pin) {
@@ -1559,6 +1707,9 @@ function cmdPlaceSettings(projRoot, filledArg, kitArg) {
   if (!filled || typeof filled !== 'object' || Array.isArray(filled)) return refuse('is not a settings object');
   const token = /\{\{[A-Za-z0-9_]+\}\}/.exec(text);
   if (token) return refuse(`still carries ${token[0]}; fill it, then place it`);
+  // M34.6.A: the door never places a configuration that switches the hooks off
+  const off = settingsMergeLib().disablingFinding(filled);
+  if (off) return refuse(`${off}; remove the key, then place it`);
   let kitRoot = kitArg ? path.resolve(kitArg) : null;
   if (kitRoot === null && fs.existsSync(path.join(projRoot, 'templates', 'dot-claude', 'settings.json'))) kitRoot = projRoot;
   if (kitRoot === null && fs.existsSync(path.join(projRoot, KIT_DIR, 'templates', 'dot-claude', 'settings.json'))) kitRoot = path.join(projRoot, KIT_DIR);
@@ -1770,7 +1921,20 @@ function main() {
   // --ready is the end-of-bootstrap readiness check - it inspects the project root and needs
   // no template source, so it is dispatched before the kit-repo no-op too (inside the kit
   // workshop it honestly reports NOT READY: the workshop is not a bootstrapped project).
-  if (argv.includes('--ready')) process.exit(cmdReady(projRoot));
+  if (argv.includes('--ready')) { const mi = argv.indexOf('--model'); process.exit(cmdReady(projRoot, { model: mi !== -1 && argv[mi + 1] && !argv[mi + 1].startsWith('--') ? argv[mi + 1] : (mi !== -1 ? '' : undefined) })); }
+  // --required <live-file> (M34.6.A): read-only, the managed row's own set - the pre-commit
+  // asks it whether a missing gate is required here. Prints "required (<why>)" or "not required
+  // (<why>)", exit 0; a file the kit does not manage, exit 2.
+  const reqIdx = argv.indexOf('--required');
+  if (reqIdx !== -1) {
+    const rel = String(argv[reqIdx + 1] || '').replace(/\\/g, '/').replace(/^\.\//, '');
+    if (!rel || rel.startsWith('--')) usage('--required needs a live kit file path (e.g. validators/validate-test-honesty.cjs)');
+    const row = MANAGED.find((r) => r.file === rel);
+    if (!row) { process.stderr.write(`kit-update: --required - ${rel} is not a kit-managed file (unknown to the managed set)\n`); process.exit(2); }
+    const w = requiredSet(projRoot).why(row);
+    process.stdout.write(`${w.required ? 'required' : 'not required'} (${w.why})\n`);
+    process.exit(0);
+  }
 
   // KIT-REPO NO-OP — the workshop-only pair, BOTH required (see the header note:
   // the packed fixture set made rows.json the wrong discriminator, and demanding

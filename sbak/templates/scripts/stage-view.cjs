@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/stage-view.cjs
 //   (kit source of truth: templates/scripts/stage-view.cjs)
 //

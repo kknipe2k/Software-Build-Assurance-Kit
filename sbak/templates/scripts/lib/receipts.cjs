@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -63,6 +63,7 @@ const EVENTS = Object.freeze([
   'file_read',                // PostToolUse hook — a Read-tool or Bash read of a repo file, as a hashed read_ref (M30.G)
   'channel_published',        // scripts/channel.cjs — a message appended to the terminal channel (M30.H)
   'channel_picked_up',        // scripts/channel.cjs (or approve-red.cjs: the human consuming an approval-request) — a message surfaced (M30.H)
+  'gate_judged',              // PreToolUse hook (the red gate) — one judged call: the state, the verdict, the class, a target ref, the identity (M34.6.B)
   'instrumentation_degraded', // any allowlisted emitter reporting its own failure
 ]);
 
@@ -132,6 +133,7 @@ const EVENT_EMITTERS = Object.freeze({
   file_read: ['PostToolUse'],
   channel_published: ['channel'],
   channel_picked_up: ['channel', 'approve-red'],
+  gate_judged: ['PreToolUse'],
   instrumentation_degraded: EMITTERS,
 });
 
@@ -179,7 +181,14 @@ const ALLOWED_FIELDS = Object.freeze([
   'approval_seq', 'prompt_at', // M32.1.B (R-35 b): red_approved binds the orchestrator's word (the approval-request seq) to the human's click (the permission prompt's time)
   'view_sources', // M33.F: a file_read of a stage view carries the view header's HEAD blob ids, in order - hashes, never paths
   'repo', // M34.C: the gate word's "where" on red_approved and red_voided - the repository identity the stamp prints (<project>@<8 hex>), never a path
+  // M34.6.B (gate-1 ruling Q7): gate_judged's fields - closed enums, a 16-hex ref (never a path), a
+  // positive counter; the tool persists as tool_category only, the identity as tool_use_id or hook_seq.
+  'state', 'verdict', 'class', 'target_ref', 'hook_seq', 'coverage',
 ]);
+const JUDGED_STATES = Object.freeze(['active', 'approved', 'unknown']);
+const JUDGED_VERDICTS = Object.freeze(['allow', 'refuse']);
+const JUDGED_CLASSES = Object.freeze(['allow', 'implementation', 'outside', 'control', 'release-form', 'unknown', 'human-path', 'unreadable', 'void', 'other']);
+const JUDGED_COVERAGE = Object.freeze(['host_id', 'hook_seq']);
 // M34.C: the gate word recorded whole. At append, a red_approved or red_voided row must carry each
 // of these keys; a null records "absent" (no git, no session, no prompt, no pending request), a
 // missing key is a refusal. Readers keep reading the rows written before this rule.
@@ -307,6 +316,16 @@ function validateEvent(raw, opts) {
     delete event.channel_class;
     notes.push('field dropped (out of enum, or channel_class on a non-channel event): channel_class');
   }
+  // M34.6.B: gate_judged's fields, on gate_judged only, each checked; a gate_judged row without its
+  // verdict, class and coverage is refused.
+  const isJudged = event.event === 'gate_judged';
+  for (const [k, ok] of [['state', (v) => JUDGED_STATES.indexOf(v) !== -1], ['verdict', (v) => JUDGED_VERDICTS.indexOf(v) !== -1], ['class', (v) => JUDGED_CLASSES.indexOf(v) !== -1],
+    ['target_ref', (v) => typeof v === 'string' && READ_REF_RE.test(v)], ['hook_seq', (v) => Number.isInteger(v) && v > 0], ['coverage', (v) => JUDGED_COVERAGE.indexOf(v) !== -1]]) {
+    if (k in event && (!isJudged || !ok(event[k]))) { delete event[k]; notes.push(`field dropped (format check failed, or ${k} on an event other than gate_judged): ${k}`); }
+  }
+  if (isJudged && !('verdict' in event && 'class' in event && 'coverage' in event)) {
+    return { ok: false, reason: 'event refused: gate_judged without its verdict, class and coverage', notes };
+  }
   if (event.event === 'file_read' && !('read_ref' in event)) {
     return { ok: false, reason: 'event refused: file_read without a read_ref is not a read', notes };
   }
@@ -354,6 +373,103 @@ function resolveScriptSession(env) {
   }
   return { attributed: false, session: null, notes };
 }
+
+// ---------------------------------------------------------------------------
+// The click (M34.6.G): from a Claude Code session the release, the void and the clear need the
+// permission prompt their own call raised on record in the session's ledger. The one reader, for
+// scripts/approve-red.cjs and scripts/stage-active.cjs both.
+// ---------------------------------------------------------------------------
+
+// A session is CLAUDE_CODE_SESSION_ID present and non-empty (the host sets it in every Bash call). A
+// value that fails the format check is a session whose click cannot be read: refused, never read as
+// the person's own terminal. Absent or empty is the person's own shell, outside the session.
+// -> { state: 'none' } | { state: 'session', session } | { state: 'malformed' }
+function clickSession(env) {
+  const v = (env || process.env).CLAUDE_CODE_SESSION_ID;
+  if (v === undefined || v === null || v === '') return { state: 'none' };
+  return typeof v === 'string' && ID_RE.test(v) ? { state: 'session', session: v } : { state: 'malformed' };
+}
+
+const CLICK_WINDOW_MS = 120 * 1000;     // (ii) an exec prompt this recent counts
+const CLICK_NEWEST_MS = 30 * 60 * 1000; // (i) the bound on the call's own prompt
+const CLICK_SKEW_MS = 5 * 1000;         // a prompt stamped this far ahead of the clock still counts
+const CLICK_TAIL_BYTES = 256 * 1024;    // the newest rows are read, never the whole ledger
+
+// The valid rows of the ledger's last CLICK_TAIL_BYTES, in order (a line cut by the start is dropped).
+function ledgerTail(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const size = fs.fstatSync(fd).size;
+    const start = Math.max(0, size - CLICK_TAIL_BYTES);
+    const buf = Buffer.alloc(size - start);
+    fs.readSync(fd, buf, 0, buf.length, start);
+    const lines = buf.toString('utf8').split('\n');
+    if (start > 0) lines.shift();
+    const out = [];
+    for (const l of lines) {
+      const c = l.replace(/\r$/, '');
+      if (!c.trim()) continue;
+      let p = null;
+      try { p = JSON.parse(c); } catch (_) { p = null; }
+      const v = p === null ? null : validateEvent(p);
+      if (v && v.ok) out.push(v.event);
+    }
+    return out;
+  } finally { fs.closeSync(fd); }
+}
+
+const execPrompt = (e) => !!e && e.event === 'permission_requested' && e.tool_category === 'exec';
+
+// (i): the newest row is an exec prompt and the call it belongs to is the one just before it - its
+// exec tool_started, with nothing between them but that call's own gate_judged rows (the red gate's
+// PreToolUse hook and the receipts hook write in either order; both carry the call's tool_use_id).
+function ownCallPrompt(events) {
+  const n = events.length;
+  if (!execPrompt(events[n - 1])) return false;
+  const judged = [];
+  for (let i = n - 2; i >= 0 && i >= n - 6; i--) {
+    const e = events[i];
+    if (e.event === 'gate_judged') { judged.push(e); continue; }
+    if (e.event !== 'tool_started' || e.tool_category !== 'exec') return false;
+    return judged.every((g) => typeof e.tool_use_id === 'string' && g.tool_use_id === e.tool_use_id);
+  }
+  return false;
+}
+
+// The click for `session`, looked for in the session's own ledger file (events-<session>.jsonl) under
+// each root in order - the calling tree, then each worktree git lists for the repository - never
+// another session's file and never a glob: (i) the newest row is the prompt the call raised, at most
+// 30 min old, however long the person took to answer it; or (ii) an exec prompt at most 120 s old.
+// -> { at, rule: 'newest' | 'window', file } or null.
+function recordedClick(roots, session, now) {
+  if (typeof session !== 'string' || !ID_RE.test(session)) return null;
+  const t = Number.isFinite(now) ? now : Date.now();
+  const fresh = (e, ms) => { const a = t - Date.parse(e.at); return a >= -CLICK_SKEW_MS && a <= ms; };
+  const seen = new Set();
+  for (const root of roots || []) {
+    if (typeof root !== 'string' || !root) continue;
+    const file = path.join(root, '.claude', 'receipts', ledgerFileFor(session));
+    const key = path.resolve(file);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let events;
+    try { if (!fs.statSync(file).isFile()) continue; events = ledgerTail(file); } catch (_) { continue; }
+    const last = events[events.length - 1];
+    if (ownCallPrompt(events) && fresh(last, CLICK_NEWEST_MS)) return { at: last.at, rule: 'newest', file };
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (execPrompt(events[i]) && fresh(events[i], CLICK_WINDOW_MS)) return { at: events[i].at, rule: 'window', file };
+    }
+  }
+  return null;
+}
+
+// The one refusal line both scripts print when a session's call has no click on record.
+function clickRefusalLine(who, sess, what, nothing) {
+  const s = sess && sess.state === 'session' ? `session ${sess.session}` : 'a malformed session id';
+  return `${who}: refused at the click - no permission prompt for this call is on record in this session's receipts (${s}), so the ${what} has no click on record; nothing was ${nothing} - repair: run the bare command so its permission prompt asks you, or run it from your own terminal, outside the session`;
+}
+// What the release prints in place of the prompt's time when there is no session.
+const NO_SESSION_TEXT = 'no session (the person\'s own terminal): no permission prompt to record';
 
 // ---------------------------------------------------------------------------
 // The append sink — per-session files, O_APPEND single-line writes, fail-closed
@@ -824,6 +940,12 @@ module.exports = {
   validateEvent,
   ledgerFileFor,
   resolveScriptSession,
+  clickSession,
+  recordedClick,
+  clickRefusalLine,
+  NO_SESSION_TEXT,
+  CLICK_WINDOW_MS,
+  CLICK_NEWEST_MS,
   appendEvent,
   readLedger,
   mergeLedgers,

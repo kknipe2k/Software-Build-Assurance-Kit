@@ -27,13 +27,14 @@ The sections below unpack the same path in full - prerequisites, the install pat
 
 ## 0. Prerequisites
 
-You need three things installed before anything below works:
+You need three things installed before anything below works, and a fourth is optional:
 
 | Tool | Why | Check it's there |
 |---|---|---|
 | **Git** | To clone the kit and because the framework commits per stage | `git --version` |
 | **Node.js 22+** | Claude Code requires it; the SessionStart hook and the validator are Node scripts. The floor is 22 rather than 18 because the test command this kit prescribes is a path-scoped glob (`node --test "tests/**/*.test.cjs"`), and glob positionals require Node 21 or newer - 22 is the lowest maintained line that runs it. CI pins 24 (Active LTS). | `node --version` |
 | **Claude Code 2.1.295+** | This framework drives Claude Code. It is the CLI tool `claude` - *not* the claude.ai chat website. The kit's settings carry a field (`onFailure`) older releases may reject, so the install and every upgrade of the kit need 2.1.295 or newer; `node scripts/kit-update.cjs --ready` checks it. | `claude --version` |
+| **gh** (optional) | Only for the release attestation: installed and signed in (`gh auth login`), it lets the installer check that the ZIP is the one the repository built. Without it the install goes ahead on the checksum alone, and the installer says which of the three it found (signed in, not found, found but not signed in) before it asks to download. | `gh auth status` |
 
 If `claude` is missing, install Claude Code per the official instructions (typically `npm install -g @anthropic-ai/claude-code`, but follow the current official docs as the authoritative source). The web app at claude.ai/code can host the orchestrator session (see the "Two roles" section); build and verifier sessions run the fully enforced path in the terminal-launched CLI.
 
@@ -62,11 +63,11 @@ The attestation result is one of four:
 
 ### Download the release ZIP - the manual fallback
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.9-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.10-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.9-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.9-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.9-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). An `HTTP 404` from it means the repository holds no attestation for that file: it is not the asset the repository built.
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.10-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.10-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.10-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.10-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). An `HTTP 404` from it means the repository holds no attestation for that file: it is not the asset the repository built.
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -77,7 +78,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project
+unzip sbak-v1.0.10-starter.zip -d <projects-path>/my-project
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -88,7 +89,7 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -99,7 +100,7 @@ Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -252,15 +253,15 @@ For **Lite tier**: just open a fresh session and say *"let's start M01."* Work f
 
 ---
 
-For **Full tier** - the **three-gate per-stage loop** (when `red_review: on`, the Full default):
+For **Full tier** - the **three-gate per-stage loop**:
 
 1. Open a fresh Claude session in the project (`claude`, or `/clear` in an existing one - both work; `STAGE-LOOP.md` is the home doctrine for the difference).
 2. **Verify the hook fired:** Claude's first response should include a line like `[read-first stamp] role=work, op=greenfield, loaded N of M files (M on the manifest, read at their when:), 0 skipped`. If it doesn't, jump to Troubleshooting - orientation didn't load and the stage is unreliable.
-3. **Run the stage.** In the orchestrator's terminal, `/listen` puts that session on the stage first (a stage opens only while the orchestrator is listening or present - typed into in the last 30 minutes) and `/send` carries an adjudicated block across. Then, easiest: type `/stage M01 A` in the build terminal - the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No paste. (`/verify M01`, `/refactor M01` and `/closeout M01` work the same way, and `/on-track` checks the work against the backlog whenever you want it.)
+3. **Run the stage.** In the orchestrator's terminal, `/listen` puts that session on the stage first (a stage opens only while the orchestrator is listening - a recent prompt in its window does not count); the orchestrator sends its blocks on its own, and `/send --approval` carries the release across. Then, easiest: type `/stage M01 A` in the build terminal - the slash command (installed at Full) reads the Phase doc, extracts the matching `### A.5 CLI Prompt` block, and runs it. No paste. (`/verify M01`, `/refactor M01` and `/closeout M01` work the same way, and `/on-track` checks the work against the backlog whenever you want it.)
    - *Or* paste by hand: open `docs/build-prompts/M01-<title>.md`, find `### A.5 CLI Prompt`, copy the fenced ` ```xml ` block, paste it in.
 4. **Gate 1 - plan approval.** Claude states its deliverable + test plan, and the packet travels the channel to the orchestrator. You adjudicate what the orchestrator surfaces; its approval prompt reaches the build terminal on your `/send`.
 5. **Gate 2 - red-stop.** Claude writes the failing tests, confirms they fail for the right reason, then **stops and surfaces the test files for your review** before implementing to green. The red-stop packet reaches the orchestrator over the channel; you adjudicate the test design there, then release the gate or send it back.
-   - This catches shallow or wrong-contract tests at the cheapest moment - especially valuable on weaker models. Skip this gate per project by setting `red_review: off`.
+   - This catches shallow or wrong-contract tests at the cheapest moment - especially valuable on weaker models. There is no per-project switch for this gate: the red gate's hook refuses the implementation edit until the approval, and `red_review` in `project-config.md` is read by no script.
    - **The release rides the orchestrator's verdict packet.** It ends with this explicit line: `RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>`
    - Claude acts only on that line. Approval language without it **is not a release** - Claude stops and tells you `/approve-red` is required. Enter `/approve-red` slash command in the terminal to invoke.
 6. **Gate 3 - stage-end.** Claude implements to green, runs gates, fills a retrospective, and the stage-end packet travels the channel to the orchestrator for adjudication with you:

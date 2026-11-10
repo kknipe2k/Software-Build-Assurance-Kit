@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/lib/channel.cjs
 //   (kit source of truth: templates/scripts/lib/channel.cjs)
 //
@@ -20,10 +20,12 @@
 //     present `work` marker - zero or several is a loud refusal, never a guess. The channel
 //     therefore starts at the worktree split (two roles cannot share one role file).
 //   * THE HITL LINE: builder->orch classes (stage-open / stage-packet / clarification) publish
-//     automatically; orch->builder classes (courier / approval-request) are written only behind a
-//     human action - the /send keystroke (the mode-check hook's one-shot token) or the fence's
-//     ask click on `node scripts/channel.cjs send`. An approval-request is surfaced at pickup and
-//     NEVER consumed by an agent: approve-red.cjs (the human) advances the cursor past it.
+//     automatically; an orchestrator's courier message leaves on its own authority, the hash, seq
+//     and log row its record (M34.6.E item 2, R-144); an approval-request (the release) is written
+//     only behind the owner's /send keystroke (the mode-check hook's one-shot token) and the
+//     fence's ask click on `node scripts/channel.cjs send --approval`. An approval-request is
+//     surfaced at pickup and NEVER consumed by an agent: approve-red.cjs (the human) advances the
+//     cursor past it. Every row's body decodes as UTF-8, or nothing is written (M34.6.E item 8).
 //   * FAIL LOUD: a cursor gap, an unparseable line, a role or repo mismatch, a hash mismatch
 //     (paraphrase) or a dead peer stops the pickup with one line naming the fault and the
 //     human-courier fallback. A poisoned inbox is not partially trusted.
@@ -100,6 +102,27 @@ function repoIdentity(cwd) {
   const hex = crypto.createHash('sha256').update(commonAbs, 'utf8').digest('hex').slice(0, 8);
   return { repo: `${path.basename(main)}@${hex}`, project: path.basename(main), main, common: commonAbs };
 }
+// M34.6.A: the repository's identity across clones, by declaration and digest, never by
+// path. `origin` on every row is the committed .claude/channel/identity ("<project>-<8 hex>",
+// written once by `channel.cjs identity --init`) when the channel tree carries one, else the root
+// commit ("root:<sha>", the lexically first when there are several; a heuristic a shallow clone or a
+// rewritten history breaks). A clone accepts both of its own: rows written before the file landed
+// carry the inference. `repo` (the path hash above) stays on every row as the local collision stamp.
+const IDENTITY_FILE = 'identity';
+const IDENTITY_RE = /^[A-Za-z0-9._-]+-[0-9a-f]{8}$/;
+function readIdentity(tree) {
+  try { const v = fs.readFileSync(path.join(tree, '.claude', 'channel', IDENTITY_FILE), 'utf8').trim(); return IDENTITY_RE.test(v) ? v : null; } catch (_) { return null; }
+}
+function rootInference(cwd) {
+  const out = git(cwd, ['rev-list', '--max-parents=0', 'HEAD']);
+  const roots = out ? out.split(/\r?\n/).map((s) => s.trim()).filter((s) => /^[0-9a-f]{40,64}$/.test(s)).sort() : [];
+  return roots.length ? `root:${roots[0]}` : null;
+}
+// -> { origin: the stamp this clone writes | null, origins: the stamps it accepts, source }
+function originOf(tree) {
+  const file = readIdentity(tree); const inferred = rootInference(tree);
+  return { origin: file || inferred, origins: [file, inferred].filter(Boolean), source: file ? 'file' : inferred ? 'root' : 'none' };
+}
 
 // ---------------------------------------------------------------------------
 // Root resolution: the work tree's .claude/channel. Refuses to guess.
@@ -111,12 +134,13 @@ function resolve(cwd) {
   const role = r.role;
   const id = repoIdentity(cwd);
   if (!id) return { ok: false, line: 'channel: not inside a git repository - the channel lives in the builder worktree; fallback: human courier' };
-  if (WRITER_ROLES.indexOf(role) !== -1) return { ok: true, role, tree: cwd, root: path.join(cwd, '.claude', 'channel'), repo: id.repo };
+  if (WRITER_ROLES.indexOf(role) !== -1) { const o = originOf(cwd); return { ok: true, role, tree: cwd, root: path.join(cwd, '.claude', 'channel'), repo: id.repo, origin: o.origin, origins: o.origins }; }
   if (role !== 'orchestrator') return { ok: false, line: `channel: role ${role} is not one the channel knows (work, verifier, refactor, orchestrator); fallback: human courier` };
   const wts = worktrees(cwd) || [];
   const cands = wts.filter((w) => normPath(w) !== normPath(cwd)).filter((w) => { const rr = readRole(w); return rr.state === 'resolved' && WRITER_ROLES.indexOf(rr.role) !== -1; });
   if (cands.length !== 1) return { ok: false, line: `channel: ${cands.length} builder worktrees found (need exactly 1: a tree whose .claude/role is work, verifier, or refactor) - the channel starts at the worktree split; fallback: human courier` };
-  return { ok: true, role, tree: cands[0], root: path.join(cands[0], '.claude', 'channel'), repo: id.repo };
+  const o = originOf(cands[0]);
+  return { ok: true, role, tree: cands[0], root: path.join(cands[0], '.claude', 'channel'), repo: id.repo, origin: o.origin, origins: o.origins };
 }
 
 // ---------------------------------------------------------------------------
@@ -129,13 +153,27 @@ function outboxFile(res) { return path.join(res.root, fileFor(res.role)); }
 
 // -> { msgs:[...], fault: null | { line } }   (the fault line is the whole plain-word sentence)
 // expectRole names the SIDE whose log this is; any role of that side may have stamped a line.
-function readLog(file, expectRole, repo) {
+// `who` is the reader's identity: a resolved channel ({ repo, origins }) or, as before, the repo
+// string alone. M34.6.A: a row carrying `origin` is compared by origin across clones (one of
+// this clone's accepted origins, else refused); a row without one (every row before this release) is
+// read under the legacy rule - its repo stamp is this clone's, or the row stands in the log as
+// committed at HEAD, so it reached this clone through this repository's own history - else refused.
+function readLog(file, expectRole, who) {
+  const id = typeof who === 'string' ? { repo: who, origins: [] } : (who && typeof who === 'object' ? { repo: who.repo || null, origins: Array.isArray(who.origins) ? who.origins : [] } : null);
   const base = path.basename(file);
   const expected = writersOf(expectRole);
   const fb = (what) => ({ msgs: [], fault: { line: `channel: ${what} in ${base} - pickup stopped; fallback: paste the block by hand (human courier)` } });
   if (!fs.existsSync(file)) return { msgs: [], fault: null };
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  let headLines; // read once, only when a legacy row from another stamp asks
+  const committed = (i) => {
+    if (headLines === undefined) {
+      const r = spawnSync('git', ['show', `HEAD:./${base}`], { cwd: path.dirname(file), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 << 20, windowsHide: true });
+      headLines = r.status === 0 ? String(r.stdout).replace(/\r\n/g, '\n').split('\n') : [];
+    }
+    return i < headLines.length && headLines[i] === lines[i].replace(/\r$/, '');
+  };
   const msgs = [];
   for (let i = 0; i < lines.length; i++) {
     const n = i + 1;
@@ -144,7 +182,11 @@ function readLog(file, expectRole, repo) {
     if (!m || typeof m !== 'object' || typeof m.seq !== 'number') return fb(`unparseable line ${n} (no seq)`);
     if (m.seq !== n) return fb(`cursor gap - expected seq ${n}, found ${m.seq}`);
     if (expected.indexOf(m.role) === -1) return fb(`role mismatch at seq ${m.seq} (stamped ${m.role}, expected ${expected.join(' | ')})`);
-    if (repo && m.repo !== repo) return fb(`repo mismatch at seq ${m.seq} (stamped ${m.repo}, this repo is ${repo})`);
+    if (id && typeof m.origin === 'string' && id.origins.length) {
+      if (id.origins.indexOf(m.origin) === -1) return fb(`repo mismatch at seq ${m.seq} (stamped origin ${m.origin}, this repository is ${id.origins.join(' or ')})`);
+    } else if (id && id.repo && m.repo !== id.repo && !(typeof m.origin !== 'string' && committed(i))) {
+      return fb(`repo mismatch at seq ${m.seq} (stamped ${m.repo}, this repo is ${id.repo})`);
+    }
     if (typeof m.body !== 'string' || sha(Buffer.from(m.body, 'utf8')) !== m.hash) return fb(`hash mismatch at seq ${m.seq} (the body bytes differ from the send hash - a paraphrase is not a relay)`);
     msgs.push(m);
   }
@@ -155,7 +197,8 @@ function readCursor(root, role) { try { const v = parseInt(fs.readFileSync(path.
 // project gitignores, and writeAtomic's temp beside each. kit-update --ready's tree row ignores
 // exactly these; any other file there is uncommitted like any other.
 const OWN_FILES = Object.freeze([/^(builder-to-orch|orch-to-builder)\.jsonl(\.tmp)?$/, /^cursor\.(work|orchestrator)(\.tmp)?$/, /^turn(\.tmp)?$/,
-  /^(watch|present)\.(work|orchestrator)\.json(\.tmp)?$/, /^send-token(\.tmp)?$/, /^outgoing\.md$/, /^approval\.json(\.tmp)?$/]);
+  /^(watch|present)\.(work|orchestrator)\.json(\.tmp)?$/, /^send-token(\.tmp)?$/, /^outgoing\.md$/, /^approval\.json(\.tmp)?$/,
+  /^refusals\.jsonl$/, /^publish\.lock$/]); // M34.6.B: the refusal rows and the stage-end publish lock
 function writeAtomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + '.tmp';
@@ -170,7 +213,7 @@ function writeTurn(root, holder, seq) { writeAtomic(path.join(root, 'turn'), JSO
 // approval-request (it is surfaced but never auto-consumed, so nothing past it moves).
 // -> { fault, unread, consumable (seq to advance to), pending (the approval-request or null) }
 function unreadFor(res) {
-  const { msgs, fault } = readLog(inboxFile(res), PEER[res.role], res.repo);
+  const { msgs, fault } = readLog(inboxFile(res), PEER[res.role], res);
   if (fault) return { fault, unread: [], consumable: readCursor(res.root, res.role), pending: null };
   const cur = readCursor(res.root, res.role);
   const unread = [];
@@ -224,6 +267,27 @@ function stateOf(tree) {
   const status = statusRaw === null ? [] : statusRaw.split(/\r?\n/).filter(Boolean);
   return { branch, head, ahead, status };
 }
+// The UTF-8 judge (M34.6.E item 8): the first byte where the buffer stops being well-formed
+// UTF-8 (RFC 3629: no overlong form, no surrogate, nothing past U+10FFFF, no sequence cut short),
+// or null when every byte decodes. -> { offset, byte } | null
+function utf8Fault(buf) {
+  const b = buf;
+  for (let i = 0; i < b.length;) {
+    const c = b[i];
+    if (c < 0x80) { i++; continue; }
+    const n = c >= 0xc2 && c <= 0xdf ? 1 : c >= 0xe0 && c <= 0xef ? 2 : c >= 0xf0 && c <= 0xf4 ? 3 : 0;
+    if (n === 0 || i + n >= b.length) return { offset: i, byte: c };
+    const lo = c === 0xe0 ? 0xa0 : c === 0xf0 ? 0x90 : 0x80;
+    const hi = c === 0xed ? 0x9f : c === 0xf4 ? 0x8f : 0xbf;
+    if (b[i + 1] < lo || b[i + 1] > hi) return { offset: i, byte: c };
+    for (let k = 2; k <= n; k++) if ((b[i + k] & 0xc0) !== 0x80) return { offset: i, byte: c };
+    i += n + 1;
+  }
+  return null;
+}
+function utf8Refusal(bad) {
+  return `channel: refused - the body is not valid UTF-8 at byte offset ${bad.offset} (0x${bad.byte.toString(16).padStart(2, '0')}); nothing was written - save the body as UTF-8, then run the command again`;
+}
 // -> { ok:true, msg, file } | { ok:false, line }
 function append(cwd, res, cls, kind, bodyBuf, opts) {
   const o = opts || {};
@@ -232,12 +296,16 @@ function append(cwd, res, cls, kind, bodyBuf, opts) {
   if ((SIDE[writer] === 'work' && BUILDER_CLASSES.indexOf(cls) === -1) || (writer === 'orchestrator' && ORCH_CLASSES.indexOf(cls) === -1)) {
     return { ok: false, line: `channel: role ${writer} cannot write class ${cls}` };
   }
+  // M34.6.E item 8 (the M34.6.F seq 377 fault): the log stores the decoded text and hashes the raw bytes, so a body
+  // that does not decode as UTF-8 would be a row that never verifies; refused before anything is read.
+  const bad = utf8Fault(bodyBuf);
+  if (bad) return { ok: false, line: utf8Refusal(bad) };
   const file = outboxFile(res);
-  const { msgs, fault } = readLog(file, writer, res.repo);
+  const { msgs, fault } = readLog(file, writer, res);
   if (fault) return { ok: false, line: fault.line.replace('pickup stopped', 'send stopped') };
   const hash = sha(bodyBuf);
   const dup = msgs.find((m) => m.hash === hash);
-  if (dup) return { ok: false, line: `channel: duplicate body (matches seq ${dup.seq} in ${path.basename(file)}) - refused (the loop guard: no message may ping-pong)` };
+  if (dup) return { ok: false, dup, line: `channel: duplicate body (matches seq ${dup.seq} in ${path.basename(file)}) - refused (the loop guard: no message may ping-pong)` };
   let session = 'unattributed';
   try { const receipts = require(path.join(__dirname, 'receipts.cjs')); const rs = receipts.resolveScriptSession(process.env); if (rs.session) session = rs.session; } catch (_) { /* fine */ }
   const msg = {
@@ -246,6 +314,8 @@ function append(cwd, res, cls, kind, bodyBuf, opts) {
     reply_to: Number.isInteger(o.replyTo) ? o.replyTo : null,
   };
   if (cls === 'stage-packet') msg.state = stateOf(res.tree);
+  // M34.6.A: the cross-clone identity, beside the local collision stamp (repo)
+  if (typeof res.origin === 'string' && res.origin) msg.origin = res.origin;
   // A field the publish derived (an amendment's amended hashes) rides beside state, never over a stamp.
   if (o.extra) for (const k of Object.keys(o.extra)) if (!(k in msg)) msg[k] = o.extra[k];
   msg.body = bodyBuf.toString('utf8');
@@ -262,12 +332,13 @@ function append(cwd, res, cls, kind, bodyBuf, opts) {
 
 // The send gate (orch->builder only): the hook's one-shot token in THIS session's tree - the
 // /send keystroke - is the ONLY gate, consumed here (M30.1.A, V 🟡-2: a presence-checked fence
-// ask rule admitted a send with no keystroke and no click). The fence's ask rule on the send
-// command stays in settings as defense-in-depth; it is never the human action.
+// ask rule admitted a send with no keystroke and no click). From M34.6.E item 2 (R-144) the CLI
+// requires it for an approval-request only and consumes it on every send. The fence's ask rule on
+// the release command stays in settings as defense-in-depth; it is never the human action.
 function sendGate(cwd) {
   const tok = path.join(cwd, '.claude', 'channel', 'send-token');
   if (fs.existsSync(tok)) { try { fs.rmSync(tok, { force: true }); } catch (_) { /* fine */ } return { ok: true, via: 'token' }; }
-  return { ok: false, line: 'channel: send refused - no human action behind it: type /send in this orchestrator terminal (the hook stamps the keystroke, and that keystroke is the only record)' };
+  return { ok: false, line: 'channel: send refused - an approval request (the release) needs the owner\'s keystroke behind it: the owner types /send --approval in this orchestrator terminal (the hook stamps the keystroke, and that keystroke is the only record)' };
 }
 
 function describe(m) {
@@ -462,8 +533,11 @@ function readApproval(root) {
 }
 // The standing approval: the last approval row, each approved path's latest bytes (the approval's,
 // or an ack's after it), and a void after it. -> null | { row, latest: Map path -> { sha256, blob }, voided }
-function currentApproval(rec) {
+// M34.6.B (item 10): opts.ackBound, when given, folds an ack row only where it returns true (the
+// evidence path's rule: the orchestrator's message the row names is in the log with that hash).
+function currentApproval(rec, opts) {
   if (!rec || !Array.isArray(rec.rows)) return null;
+  const bound = opts && typeof opts.ackBound === 'function' ? opts.ackBound : null;
   let idx = -1;
   rec.rows.forEach((r, i) => { if (r && r.kind === 'approval') idx = i; });
   if (idx === -1) return null;
@@ -471,7 +545,7 @@ function currentApproval(rec) {
   const latest = new Map((Array.isArray(row.files) ? row.files : []).map((f) => [f.path, { sha256: f.sha256, blob: f.blob || null }]));
   let voided = null;
   for (const r of rec.rows.slice(idx + 1)) {
-    if (r && r.kind === 'ack') for (const f of Array.isArray(r.files) ? r.files : []) latest.set(f.path, { sha256: f.sha256, blob: f.blob || null });
+    if (r && r.kind === 'ack' && (!bound || bound(r))) for (const f of Array.isArray(r.files) ? r.files : []) latest.set(f.path, { sha256: f.sha256, blob: f.blob || null });
     if (r && r.kind === 'void') voided = r;
   }
   return { row, latest, voided };
@@ -510,6 +584,8 @@ function appendApproval(tree, stage, fields) {
     kind: 'approval', at: new Date().toISOString(), seq: Number.isInteger(f.seq) ? f.seq : null,
     role: f.role, repo: f.repo || null, session: f.session || null, prompt_at: f.prompt_at || null,
     base: git(tree, ['rev-parse', 'HEAD']) || null, scope: f.scope || null, files,
+    // M34.6.B (item 3): the RED record the release bound, and its subject (absent on a legacy stage)
+    tests_run_red: f.tests_run_red || undefined, subject: f.subject || undefined,
   }));
   return { rec: appendRow(tree, stage, row), row };
 }
@@ -543,17 +619,37 @@ function archiveApproval(tree, openStage) {
 // Case 4: the approved scope section against HEAD. The blob equal is the fast answer; a new blob
 // re-slices the section (read-ledger stageSectionAt, the one reader) and compares its sha256, so an
 // unrelated section's edit is not a scope change. -> null (unchanged, or nothing recorded) | the line
+// M34.6.A (item n): then every ref the record carries (the prompt's scope_locks, deliverable and
+// acceptance_criteria refs and docs/scope.md), each named when it moved: a section ref by its
+// section's sha256 (its doc's blob the fast answer), a whole-file ref by its blob. A record with no
+// refs (every one before this release) compares the stage section alone, as before.
 function scopeChange(tree, stage, scope, kind) {
   if (!scope || typeof scope !== 'object' || typeof scope.doc !== 'string') return null;
-  if (git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${scope.doc}`]) === scope.blob) return null;
-  const line = `channel: ${kind} refused - the approved scope changed: the ${stage} section of ${scope.doc} is not the one the RED was approved against; that is scope: the orchestrator /sends the amended scope and the owner runs /approve-red`;
-  let rl;
-  try { rl = require(path.join(__dirname, 'read-ledger.cjs')); } catch (_) {
-    return `channel: ${kind} refused - the approved scope cannot be compared (scripts/lib/read-ledger.cjs did not load) - repair: node scripts/kit-update.cjs --adopt`;
+  const moved = (what) => `channel: ${kind} refused - the approved scope changed: ${what} is not the one the RED was approved against; that is scope: the orchestrator /sends the amended scope and the owner runs /approve-red`;
+  const sha = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
+  let rl = null;
+  const lib = () => {
+    if (rl) return rl;
+    try { rl = require(path.join(__dirname, 'read-ledger.cjs')); } catch (_) { rl = null; }
+    return rl;
+  };
+  const NOLIB = `channel: ${kind} refused - the approved scope cannot be compared (scripts/lib/read-ledger.cjs did not load) - repair: node scripts/kit-update.cjs --adopt`;
+  if (git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${scope.doc}`]) !== scope.blob) {
+    if (!lib()) return NOLIB;
+    const sec = rl.stageSectionAt(tree, stage);
+    if (!sec.ok || sha(sec.text) !== scope.section_sha256) return moved(`the ${stage} section of ${scope.doc}`);
   }
-  const sec = rl.stageSectionAt(tree, stage);
-  if (!sec.ok) return line;
-  return crypto.createHash('sha256').update(sec.text, 'utf8').digest('hex') === scope.section_sha256 ? null : line;
+  for (const r of Array.isArray(scope.refs) ? scope.refs : []) {
+    if (!r || typeof r.doc !== 'string') continue;
+    const blob = git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${r.doc}`]);
+    if (blob === r.blob) continue;
+    const what = r.section ? `the ${r.section} section of ${r.doc}` : r.doc;
+    if (!r.section || blob === null) return moved(what);
+    if (!lib()) return NOLIB;
+    const s = rl.sectionAt(tree, r.doc, r.section);
+    if (!s.ok || sha(s.text) !== r.section_sha256) return moved(what);
+  }
+  return null;
 }
 // The test files changed since the approval's base (committed or not, never a deletion) plus the
 // untracked ones, sorted.
@@ -569,13 +665,39 @@ function testFilesSince(tree, base) {
   }
   return Array.from(out).sort();
 }
+// M34.6.B (item 10): the ack bound to the orchestrator's message. An ack row folds only when the
+// orchestrator's log in this tree - read through readLog, the integrity check - holds a row with the
+// seq and the hash the ack row names, kind ack, answering the amendment's seq. A role and a hash
+// identify a message on this machine, not a person.
+function ackBoundFor(res) {
+  const log = readLog(path.join(res.root, FILES.orchestrator), 'orchestrator', res);
+  const msgs = log.fault ? [] : log.msgs;
+  return (r) => Number.isInteger(r.message_seq) && typeof r.message_sha256 === 'string'
+    && msgs.some((m) => m.seq === r.message_seq && m.hash === r.message_sha256 && m.kind === 'ack' && m.reply_to === r.seq);
+}
 // The stage-end publish's checks (cases 3 and 4) against the open stage's v2 record; a legacy record,
 // no record or another stage's record leaves the stage end as it was. -> { ok } | { ok: false, line }
-function stageEndCheck(res) {
-  const rec = readApproval(res.root);
+// M34.6.B: on a stage on the evidence path the ack fold is the bound one, and the evidence checks
+// follow (scripts/lib/evidence.cjs stageEndEvidence: the completed prefix, the GREEN and the lane on
+// the candidate, the gate's and the channel's unresolved refusals); its result carries prepare(),
+// which writes gate.json, the approval archive and the manifest before the packet is appended.
+// A legacy stage returns { ok: true, legacy: true, line } and is published as before.
+function stageEndCheck(res, body) {
   const open = stageOf(res.tree);
+  let evid = null; let evErr = null;
+  try { evid = require(path.join(__dirname, 'evidence.cjs')); } catch (e) { evErr = String((e && e.message) || e).split('\n')[0]; }
+  if (!evid) return { ok: false, line: `channel: stage-end refused - scripts/lib/evidence.cjs did not load (${evErr}) - repair: node scripts/kit-update.cjs --adopt` };
+  const onPath = open !== '-' && evid.stageState(res.tree, open).onPath;
+  const a = approvalChecks(res, open, onPath ? { ackBound: ackBoundFor(res) } : null);
+  if (!a.ok) return a;
+  if (open === '-') return { ok: true };
+  // M34.6.C (item 5): the standing row's base, the point item o derives the changed paths from
+  return evid.stageEndEvidence({ root: res.tree, stage: open, body, rowHash: a.rowHash || null, base: a.base || null });
+}
+function approvalChecks(res, open, foldOpts) {
+  const rec = readApproval(res.root);
   if (!rec || rec.legacy || rec.stage !== open) return { ok: true };
-  const cur = currentApproval(rec);
+  const cur = currentApproval(rec, foldOpts);
   if (!cur) return { ok: true };
   const sc = scopeChange(res.tree, open, cur.row.scope, 'stage-end');
   if (sc) return { ok: false, line: sc };
@@ -592,7 +714,68 @@ function stageEndCheck(res) {
       : `channel: stage-end refused - ${p} is a test file the RED approval recorded and it is not in the working tree; that is scope: the owner's /approve-red` };
   }
   if (added.length) return { ok: false, line: `channel: stage-end refused - ${added[0]} is a test file added after the RED approval with no re-approval; that is scope: the owner's /approve-red` };
-  return { ok: true };
+  // M34.6.A (item e): the bytes accepted are the bytes approved. Each recorded file at its path is
+  // compared with its latest value in the record - the approval's, or an ack's after it - in the
+  // working tree the builder publishes from (the candidate). A published amendment the orchestrator
+  // has not acked moves nothing, so it does not cover the bytes. The hook still allows the test edit:
+  // it is the amendment path; this is where the bytes are judged.
+  for (const [p, f] of cur.latest) {
+    const now = fileSha(res.tree, p);
+    if (now !== null && now !== f.sha256) return { ok: false, line: `channel: stage-end refused - ${p} changed since the RED approval and no ack covers it; publish an amendment, or the owner runs /approve-red` };
+  }
+  return { ok: true, rowHash: approvalRowHash(cur.row), base: cur.row.base || null };
+}
+
+// ---------------------------------------------------------------------------
+// M34.6.B: the channel's refusals (item 9) and the stage-end publish lock (item 13).
+// ---------------------------------------------------------------------------
+// One row per refusal the CLI prints for publish, send, ack and pickup, and one per success of the
+// first three, in .claude/channel/refusals.jsonl (local, gitignored), while the open stage is on the
+// evidence path. A refusal row is resolved by a later success of the same verb and kind for the same
+// stage, or by a "resolved:channel:<n> <why>" line in the stage-end packet; the stage-end publish
+// writes the unresolved set into gate.json and refuses while it is non-empty. Diagnostic: a row that
+// cannot be written is skipped and never changes the verb's own outcome.
+const REFUSALS_FILE = 'refusals.jsonl';
+function refusalRow(cwd, fields) {
+  try {
+    const res = resolve(cwd);
+    if (!res.ok) return;
+    const stage = stageOf(res.tree);
+    if (stage === '-') return;
+    const evid = require(path.join(__dirname, 'evidence.cjs'));
+    if (!evid.stageState(res.tree, stage).onPath) return;
+    const row = { v: 1, verb: fields.verb, kind: fields.kind, stage, at: new Date().toISOString() };
+    if (fields.ok) Object.assign(row, { ok: true, seq: fields.seq });
+    else {
+      const s = evid.subject(res.tree);
+      Object.assign(row, { class: fields.verb === 'pickup' ? 'pickup' : `${fields.verb}:${fields.kind}`, line: String(fields.line || '').slice(0, 600), answers: Number.isInteger(fields.answers) ? fields.answers : null, subject: s.subject || null });
+    }
+    evid.appendRow(path.join(res.root, REFUSALS_FILE), row);
+  } catch (_) { /* diagnostic */ }
+}
+// The lock: .claude/channel/publish.lock, created with O_EXCL, holding { pid, at }. A live holder
+// refuses the second publish; a dead one is named and taken over. -> { ok, line?, note?, release }
+function takePublishLock(res) {
+  const file = path.join(res.root, 'publish.lock');
+  fs.mkdirSync(res.root, { recursive: true });
+  let note = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const fd = fs.openSync(file, 'wx');
+      try { fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }) + '\n'); } finally { fs.closeSync(fd); }
+      let released = false;
+      return { ok: true, note, release: () => { if (released) return; released = true; try { fs.rmSync(file, { force: true }); } catch (_) { /* the next publish names it stale */ } } };
+    } catch (e) {
+      if (!e || e.code !== 'EEXIST') return { ok: false, line: `channel: stage-end refused - the publish lock .claude/channel/publish.lock cannot be taken (${(e && e.code) || 'error'})` };
+      let held = null; try { held = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { held = null; }
+      const pid = held && Number.isInteger(held.pid) ? held.pid : null;
+      const age = held && typeof held.at === 'string' && Number.isFinite(Date.parse(held.at)) ? Math.max(0, Math.round((Date.now() - Date.parse(held.at)) / 1000)) : null;
+      if (pid !== null && pid !== process.pid && pidAlive(pid)) return { ok: false, line: `channel: stage-end refused - another stage-end publish holds the lock: pid ${pid}, age ${age === null ? '?' : age} s` };
+      note = `channel: a stale publish lock (pid ${pid === null ? 'unknown' : pid}, age ${age === null ? '?' : age} s) was taken over`;
+      try { fs.rmSync(file, { force: true }); } catch (_) { /* the second attempt reports it */ }
+    }
+  }
+  return { ok: false, line: 'channel: stage-end refused - the publish lock .claude/channel/publish.lock could not be taken over' };
 }
 
 // Case 5's evidence: a line diff of the approved (or acked) bytes against the amended ones. Common
@@ -680,12 +863,12 @@ function amendment(res) {
 // longer holds), appends an ack row naming the amended bytes, and returns the diff summary the
 // orchestrator reads in the acking turn (M34.C). A legacy record is acked as before.
 function ackAmendment(cwd, res, seq) {
-  const theirs = readLog(path.join(res.root, FILES.work), 'work', res.repo);
+  const theirs = readLog(path.join(res.root, FILES.work), 'work', res);
   if (theirs.fault) return { ok: false, line: theirs.fault.line.replace('pickup stopped', 'ack stopped') };
   const m = theirs.msgs.find((x) => x.seq === seq);
   if (!m) return { ok: false, line: `channel: ack answers only an amendment - builder seq ${seq} does not exist` };
   if (m.class !== 'stage-packet' || m.kind !== 'amendment') return { ok: false, line: `channel: ack answers only an amendment - seq ${seq} is ${m.class}/${m.kind}` };
-  const mine = readLog(outboxFile(res), 'orchestrator', res.repo);
+  const mine = readLog(outboxFile(res), 'orchestrator', res);
   if (mine.fault) return { ok: false, line: mine.fault.line.replace('pickup stopped', 'ack stopped') };
   const prev = mine.msgs.find((x) => x.kind === 'ack' && x.reply_to === seq);
   if (prev) return { ok: false, line: `channel: amendment seq ${seq} is already acknowledged (seq ${prev.seq})` };
@@ -706,7 +889,8 @@ function ackAmendment(cwd, res, seq) {
   const r = append(cwd, res, 'courier', 'ack', Buffer.from(body, 'utf8'), { replyTo: seq });
   if (!r.ok) return r;
   if (rec && rec.legacy) { const raw = rec.raw; raw.acks = (raw.acks || []).concat([{ seq, files }]); writeRecord(res.root, raw); }
-  else if (rec) { rec.rows.push(JSON.parse(JSON.stringify({ kind: 'ack', at: new Date().toISOString(), seq, ack_seq: r.msg.seq, files }))); writeRecord(res.root, rec); }
+  // M34.6.B (item 10): the ack row names the orchestrator's message it rides on, by seq and hash.
+  else if (rec) { rec.rows.push(JSON.parse(JSON.stringify({ kind: 'ack', at: new Date().toISOString(), seq, ack_seq: r.msg.seq, message_seq: r.msg.seq, message_sha256: r.msg.hash, files }))); writeRecord(res.root, rec); }
   r.summary = summary;
   return r;
 }
@@ -726,11 +910,14 @@ function consumeApproval(cwd) {
 module.exports = {
   SCHEMA, CLASSES, BUILDER_CLASSES, ORCH_CLASSES, WRITER_ROLES, FILES, SIDE, PEER, PEER_NAME, KIND_RE, SEND_ASK_RULE, writersOf,
   readRole, repoIdentity, worktrees, resolve, readLog, readCursor, writeCursor, readTurn, writeTurn,
-  unreadFor, append, sendGate, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
+  IDENTITY_FILE, IDENTITY_RE, readIdentity, rootInference, originOf, // M34.6.A
+  unreadFor, append, sendGate, utf8Fault, utf8Refusal, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
   stampLine, consumeApproval, emit, writeAtomic, pidAlive, trunkOf, aheadOf,
   LISTEN_FRESH_MS, watcherState, bellLine, peerFolder,
   APPROVAL_FILE, OWN_FILES, TEST_GLOBS, changedTestFiles, redSet, readApproval, amendment, ackAmendment,
   // the approval record cannot be weakened (M34.C)
   canonicalJson, approvalRowHash, currentApproval, appendApproval, appendVoid, recordBytes, restoreRecord, archiveApproval,
   snapshotBlobs, blobBytes, scopeChange, stageEndCheck, testFilesSince, lineDiff, classifyAmendment,
+  // the evidence path (M34.6.B)
+  ackBoundFor, approvalChecks, REFUSALS_FILE, refusalRow, takePublishLock,
 };

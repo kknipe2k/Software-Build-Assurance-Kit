@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit, and a second group with matcher
@@ -89,6 +89,24 @@
 // own policy on a root it cannot find (the KF-62 class: a hook that cannot find a repo must not
 // lock the person out). The red gate alone refuses.
 //
+// THE EVIDENCE PATH (M34.6.B, R-139). Fail-soft is reversed for the seven required evidence records
+// and nothing else: stage_opened, gate_probed liveness, red_approved, tests_run RED, tests_run GREEN,
+// lane_run and gate.json, with stage_cleared checked at the next open. When one of them cannot be
+// written its writer refuses, and the boundary that reads it refuses when it is absent or
+// contradictory (deterministic enforcement at stage-active, the release, the stage-end publish, the
+// pre-commit and the closeout check); every other record keeps the M34 stage A rule: written when
+// possible, instrumentation_degraded when not, never a refusal (observed evidence, diagnostic).
+// This hook writes none of the seven. It writes gate_judged, a diagnostic row per judged call (a
+// stage open, or the state unknown; a confirmed-inactive call writes nothing) to the session's
+// receipts ledger through the receipts sink: the state, the verdict, the refusal's class (read from
+// the line printed), the tool's category, the target as target_ref (the read ledger's refFor over
+// its canonical form, never a path), and the identity - the host's tool_use_id when the hook input
+// carries one (coverage host_id), else hook_seq, a counter under .claude/receipts/ (coverage
+// hook_seq, which identifies a row and claims no coverage). The verdict is fixed before the write,
+// the write is fail-soft, and the decision never waits on it. On a stage on the evidence path an ack
+// row in the approval record folds only when the orchestrator's channel message it names is in the
+// log with that sha256; a role and a hash identify a message on this machine, not a person.
+//
 // THE ROLE IS THE ONE RECORDED AT STAGE OPEN (M33.A, R-50 a): the live .claude/role is a file an
 // edit tool could flip, and a flip to verifier used to stand the gate down. The gate now reads
 // .claude/stage-role, which stage-active.cjs writes beside stage-active; both are in the control
@@ -120,10 +138,34 @@
 //   node scripts/approve-red.cjs --stage <id> --release-seq <n>     (n: digits, or none)
 //   node scripts/approve-red.cjs --stage <id> --void --reason "<text>"   (M34.C: the un-approve)
 // - so the permission prompt the human clicks shows the stage and the seq, and nothing rides
-// in front of it or after it (the drive's `; echo "exit=$?"`). It never parses shell; any
-// other form is refused in one line, except one read-only command (M32.1.C, V-15: a listed verb
-// first and no separator, substitution or redirect - see releaseRefusal). A word with a glob
-// character that could expand to the release script names it too (M34.B).
+// in front of it or after it (the drive's `; echo "exit=$?"`). The form check is no shell parser;
+// a name spelled with a quoted part or an escaped character names it too (M34.6.J), read in each word
+// the tool's lexer reads and in the text with its escapes removed; any other form is refused in one
+// line, except, under the Bash tool, one read-only command (M32.1.C, V-15: a listed
+// verb first and no separator, substitution or redirect; M34.6.I, R11: and no parenthesis or brace
+// outside quotes, read by the shell write gate's lexer for the tool the call names, since
+// PowerShell runs a command inside a grouping, an array subexpression or a script block in
+// argument position - see plainRead). A word with a glob character that could expand to the
+// release script names it too (M34.B).
+//
+// THE GATE'S OWN SCRIPTS (M34.6.G). The same rule holds for the script that opens and clears the
+// gate: a shell command that names stage-active.cjs, or carries a glob that could expand to it, runs
+// only as one of its bare forms, whitespace-normalized and alone in the call (node
+// scripts/stage-active.cjs <stage id>, node scripts/stage-active.cjs --clear, node
+// scripts/stage-active.cjs --clear --tree <path>), so under the Bash tool the ask rule that
+// outranks any allow matches every form that runs (deterministic enforcement, at PreToolUse where
+// Claude Code runs this hook). The kit sets no ask rule for Claude Code's PowerShell tool, on
+// automatically on Windows without Git Bash, opt-in elsewhere (CLAUDE_CODE_USE_POWERSHELL_TOOL=1)
+// and off on Windows with Git Bash while the kit's Bash deny rules stand unless that variable is
+// set; under it a command that names either script or one of the gate's control files runs only in a
+// bare form, with no read-only exemption (the name guard, M34.6.J), and the scripts' own click holds
+// (deterministic enforcement). Under it the bare forms are the gate scripts' and the two hook commands
+// the kit prints, each exact and alone in the call (node .claude/hooks/session-start-read-first.cjs
+// --check and node scripts/kit-update.cjs --apply .claude/hooks/receipts-lifecycle.cjs; M34.6.K, V5-G2).
+// Any other form is refused in one line naming them, and under the Bash
+// tool the read-only commands above, by the same guard (plainRead), are not judged. The click the release, the void and the clear need from a session is the scripts' own
+// check (scripts/lib/receipts.cjs recordedClick), not this hook's. A wrapper, a script that names
+// either gate script inside a file, is not judged: it is on the list below of what is not judged.
 //
 // THE SHELL WRITE GATE (M34.B). A shell command (Bash or PowerShell, one parser for both) is read
 // for these write constructs, every one in the call (`;`, `&&`, `||`, `|`, `&` and newlines
@@ -178,7 +220,15 @@
 // same call (Git Bash's /c/... and ~ read as paths). Under tool_name Bash an unquoted backslash
 // escapes the next character (docs/a\ b is the folder "a b"); under PowerShell a backslash is a
 // path character and a backtick escapes, and a cmdlet's operands keep that reading under either
-// tool name. A literal target goes through the edit tools' own path rule (probeControl at step 2,
+// tool name. M34.6.J: under PowerShell the lexer follows PowerShell's written rules - the quote
+// characters of each class (the typographic ones too), a doubled quote and the backtick as the
+// escapes, no backslash escape or line continuation, here-strings and their bodies, braced variables,
+// block comments, its white space and a lone CR, a > or < inside a bare word as text and a > where a
+// token starts as a redirect (M34.6.K: after a quote's or a here-string's close, a body, or a stream
+// number; about_Parsing), the stop-parsing token's line as literal text that is still judged
+// as a command list (M34.6.K), and a parenthesis as
+// a grouping - and real PowerShell checks that reading on a corpus wherever pwsh is installed (the
+// differential pin, M34.6.J). A literal target goes through the edit tools' own path rule (probeControl at step 2,
 // judge() at step 4: the carve, the scratch homes, the repo boundary, the allow globs). A target
 // the gate cannot read - a variable, a glob, a substitution, or none - is refused at step 4 with
 // the construct named, never allowed by default.
@@ -197,8 +247,11 @@
 // against the payload cwd, so a shell working folder carried over from an earlier call that
 // differs from it is not seen. A deletion or move whose victim the gate cannot read (rm $F) is
 // refused while a stage is engaged and allowed when confirmed inactive or approved, the same as a
-// wrapper whose text is not a literal. A command parser is not a sandbox: the recognised list is
-// the whole control.
+// wrapper whose text is not a literal. The two gate scripts' form rule (above) does not judge, under
+// the Bash tool, one read-only command that names either one; a parenthesis or brace outside quotes,
+// by the tool's own reading, makes a command no read (M34.6.I); under the PowerShell tool no
+// read-only command naming either one is exempt (M34.6.J). A command parser is not a sandbox: the
+// recognised list is the whole control.
 //
 // HONEST SCOPE. This is a PROCESS gate, not a security boundary:
 //   * a hook that cannot START (the file deleted, node absent, a syntax error, a hang) is outside
@@ -427,6 +480,28 @@ function readRecord(root) {
   try { const j = JSON.parse(probeDecode(fs.readFileSync(path.join(root, '.claude', 'channel', 'approval.json')))); return j && typeof j === 'object' ? j : null; } catch (_) { return null; }
 }
 function voidReason(reasonText) { return oneLine(reasonText).slice(0, 200); }
+// M34.6.B (item 10): on a stage on the evidence path (its lifecycle carries an opened row) an ack row
+// folds only when the orchestrator's channel row it names is in the log with that sha256, kind ack,
+// answering the amendment's seq; each log row's body is re-hashed first. Lockstep with
+// scripts/lib/channel.cjs ackBoundFor.
+function evidencePath(root, stage) {
+  try {
+    return probeDecode(fs.readFileSync(path.join(root, '.claude', 'evidence', stage, 'lifecycle.jsonl'))).split('\n')
+      .some((l) => { try { const j = JSON.parse(l); return !!j && j.row === 'opened' && j.stage === stage; } catch (_) { return false; } });
+  } catch (_) { return false; }
+}
+function orchMessages(root) {
+  const out = new Map();
+  try {
+    for (const l of probeDecode(fs.readFileSync(path.join(root, '.claude', 'channel', 'orch-to-builder.jsonl'))).split('\n')) {
+      if (!l.trim()) continue;
+      let m = null; try { m = JSON.parse(l); } catch (_) { continue; }
+      if (m && Number.isInteger(m.seq) && typeof m.body === 'string' && m.hash === 'sha256:' + crypto.createHash('sha256').update(Buffer.from(m.body, 'utf8')).digest('hex')) out.set(m.seq, m);
+    }
+  } catch (_) { /* no log: no ack is bound */ }
+  return out;
+}
+const ackBound = (msgs, r) => { if (!Number.isInteger(r.message_seq) || typeof r.message_sha256 !== 'string') return false; const m = msgs.get(r.message_seq); return !!m && m.hash === r.message_sha256 && m.kind === 'ack' && m.reply_to === r.seq; };
 function approvalVoidLine(root, st) {
   if (!st.binding) return null;
   const bindingLine = `[red-gate] approval void - the approval record for stage ${st.stage} is missing or does not match the marker; the owner runs /approve-red\n`;
@@ -435,11 +510,12 @@ function approvalVoidLine(root, st) {
   const idx = rec.rows.findIndex((r) => r && r.kind === 'approval' && probeRowHash(r) === st.binding);
   if (idx === -1) return bindingLine;
   const latest = new Map((Array.isArray(rec.rows[idx].files) ? rec.rows[idx].files : []).map((f) => [String(f.path), f.sha256]));
+  const bound = evidencePath(root, st.stage) ? orchMessages(root) : null;
   for (const r of rec.rows.slice(idx + 1)) {
     if (!r) continue;
     if (r.kind === 'approval') return bindingLine; // a later approval the marker does not name
     if (r.kind === 'void') return `[red-gate] approval void - stage ${st.stage}'s RED approval was voided (${voidReason(r.reason)}); the owner runs /approve-red\n`;
-    if (r.kind === 'ack') for (const f of Array.isArray(r.files) ? r.files : []) latest.set(String(f.path), f.sha256);
+    if (r.kind === 'ack' && (!bound || ackBound(bound, r))) for (const f of Array.isArray(r.files) ? r.files : []) latest.set(String(f.path), f.sha256);
   }
   for (const [rel, sha] of latest) {
     let now = null;
@@ -515,7 +591,89 @@ function bodyLine(token) {
 }
 function refuse(line) {
   process.stderr.write(line);
+  judgedRow('refuse', line);
   process.exit(BLOCK);
+}
+function allow() {
+  judgedRow('allow', null);
+  process.exit(ALLOW);
+}
+
+// ---- the judgment row (M34.6.B item 7): diagnostic, fail-soft, after the verdict is fixed ----
+// JUDGED is filled by main() as the call is read; a refusal before the state is known is the unknown
+// state, and a call with no project root writes nothing (there is no ledger to write to).
+const JUDGED = { root: null, payload: null, tool: '', target: null, st: null, fault: false };
+function classOf(line) {
+  const l = String(line || '');
+  if (l.indexOf('[red-gate] REFUSED - state unknown') === 0) return 'unknown';
+  if (Object.keys(HUMAN_PATH_LINES).some((k) => HUMAN_PATH_LINES[k] === l)) return 'human-path';
+  if (/^\[red-gate\] REFUSED - '[^']*' is a red-gate control file/.test(l)) return 'control';
+  if (l.indexOf('[red-gate] REFUSED - the release command') === 0) return 'release-form';
+  if (/^\[red-gate\] REFUSED - (?:.* writes to a target the gate cannot read|a command body the gate cannot read)/.test(l)) return 'unreadable';
+  if (/^\[red-gate\] Implementation edit /.test(l)) return 'implementation';
+  if (/^\[red-gate\] Outside-repo edit /.test(l)) return 'outside';
+  if (l.indexOf('[red-gate] approval void') === 0) return 'void';
+  return 'other';
+}
+// The read ledger's refFor (sha256 over 'sbak-read:' and the canonical form, 16 hex) over the
+// target's repo-relative real form, lowercased; a target outside the repo is 'outside:' and its
+// absolute real form. A ref, never the path.
+function targetRef(root, target) {
+  const abs = probeRealForm(path.resolve(root, String(target)));
+  const rel = path.relative(probeRealForm(root), abs);
+  const canonical = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).join('/').toLowerCase() : `outside:${abs.split(path.sep).join('/').toLowerCase()}`;
+  return crypto.createHash('sha256').update('sbak-read:' + canonical, 'utf8').digest('hex').slice(0, 16);
+}
+// hook_seq: the next value of .claude/receipts/gate-seq, under an O_EXCL lock (at most 200 ms; a lock
+// older than 5 s is taken over).
+function nextSeq(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, 'gate-seq');
+  const lock = file + '.lock';
+  const t0 = Date.now();
+  let fd = null;
+  while (fd === null) {
+    try { fd = fs.openSync(lock, 'wx'); } catch (e) {
+      if (!e || e.code !== 'EEXIST') throw e;
+      try { if (Date.now() - fs.statSync(lock).mtimeMs > 5000) fs.rmSync(lock, { force: true }); } catch (_) { /* gone */ }
+      if (Date.now() - t0 > 200) throw new Error('the gate-seq lock is busy');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);
+    }
+  }
+  try {
+    let n = 0;
+    try { n = parseInt(fs.readFileSync(file, 'utf8'), 10) || 0; } catch (_) { n = 0; }
+    n++;
+    fs.writeFileSync(file + '.tmp', `${n}\n`);
+    fs.renameSync(file + '.tmp', file);
+    return n;
+  } finally {
+    try { fs.closeSync(fd); } catch (_) { /* closed */ }
+    try { fs.rmSync(lock, { force: true }); } catch (_) { /* the next call takes it over */ }
+  }
+}
+function judgedRow(verdict, line) {
+  let receipts = null; let dir = null;
+  try {
+    const root = JUDGED.root;
+    if (!root) return;
+    const st = JUDGED.st;
+    if (!JUDGED.fault && st && st.kind === 'inactive') return; // confirmed inactive: no stage to name
+    const state = JUDGED.fault || !st || st.kind !== 'active' ? 'unknown' : (st.approved && st.approved === st.stage ? 'approved' : 'active');
+    receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs'));
+    dir = path.join(root, '.claude', 'receipts');
+    const p = JUDGED.payload || {};
+    const row = { schema: receipts.SCHEMA_VERSION, at: new Date().toISOString(), event: 'gate_judged', emitter: 'PreToolUse', state, verdict, class: verdict === 'allow' ? 'allow' : classOf(line), tool_category: receipts.toolCategory(JUDGED.tool) };
+    if (typeof p.session_id === 'string' && p.session_id) row.session = p.session_id;
+    if (st && st.kind === 'active') { row.stage = st.stage; if (st.role) { const m = classifyRole(st.role); row.role = m === 'unresolved' ? 'unknown' : m; } }
+    if (JUDGED.target) row.target_ref = targetRef(root, JUDGED.target);
+    if (typeof p.tool_use_id === 'string' && p.tool_use_id) { row.tool_use_id = p.tool_use_id; row.coverage = 'host_id'; }
+    else { row.hook_seq = nextSeq(dir); row.coverage = 'hook_seq'; }
+    const r = receipts.appendEvent(dir, row);
+    if (!r || !r.ok) throw new Error(r && r.reason ? r.reason : 'the receipts sink refused the row');
+  } catch (_) {
+    try { if (receipts && dir) receipts.appendEvent(dir, { schema: receipts.SCHEMA_VERSION, at: new Date().toISOString(), event: 'instrumentation_degraded', emitter: 'PreToolUse', marker: 'degraded' }); } catch (__) { /* the degraded write is itself bonus */ }
+  }
 }
 
 // ---- the role, as recorded at stage open ----
@@ -660,6 +818,7 @@ function scratchHomes(repoRootDir) {
 // judged - no separator, substitution or redirect anywhere in it (; & | newline ` $( > <) and a
 // listed read-only verb first. No verb with an exec path is listed (sed's `e` command runs a shell
 // line; rg runs a program per file under --pre / --pre-glob, so rg with either is judged).
+// M34.6.I (R11): and no parenthesis or brace outside quotes, by the tool's own reading (plainRead).
 const RELEASE_NAMED = /approve-red\.cjs/i;
 const RELEASE_EXACT = /^node scripts\/approve-red\.cjs --stage [A-Za-z0-9][A-Za-z0-9._-]{0,63} --release-seq (?:[1-9][0-9]{0,8}|none)$/;
 // M34.C (CFI-02): the second bare shape of the one release script - the human's un-approve. The
@@ -672,20 +831,78 @@ const READ_ONLY = /^(?:(?:cat|head|tail|wc|grep|rg|diff|cmp|ls|stat)|git (?:add|
 // working directory it runs in (`approve-red.c?s`, `scripts/*`, a brace form) also names it -
 // `globNamed`, worked out by the shell write gate's parser, which tracks that directory. The limit
 // that remains: a wrapper, or a script that names the release script inside a file, is not judged.
-// -> null (not judged, or the exact form) or the one refusal line.
-function releaseRefusal(command, globNamed) {
-  if (typeof command !== 'string' || !(RELEASE_NAMED.test(command) || globNamed)) return null; // not judged: no output
+// M34.6.I (R11): the one read-only exemption, shared by the release and the stage script. A plain read
+// is a listed verb first with no separator, substitution or redirect (M32.1.C) and no rg --pre, and -
+// read by lexShell for the tool the call names, the shell write gate's own lexer - no parenthesis or
+// brace outside quotes: PowerShell runs a command inside a grouping, an array subexpression or an
+// invoked script block in argument position (`cat (node ...)`) with none of COMPOUND's characters.
+// An unquoted ( or ) is a par token under both tools; a PowerShell { } or @( ), and any $( ), <( ),
+// >( ) or Bash backtick pair, is a body on its word; an unquoted { or } elsewhere marks the word br.
+// No catch here: a throw is the unknown state, refused by main's caller.
+function plainRead(command, tool) {
   const norm = command.trim().split(/\s+/).join(' ');
-  if (!COMPOUND.test(command) && READ_ONLY.test(norm) && !/^rg .*--pre(?:-glob)?(?:[ =]|$)/.test(norm)) return null;
+  if (COMPOUND.test(command) || !READ_ONLY.test(norm) || /^rg .*--pre(?:-glob)?(?:[ =]|$)/.test(norm)) return false;
+  return !lexShell(command, tool).some((t) => t.k === 'par' || (t.k === 'w' && (t.br || t.bodies.length > 0)));
+}
+// M34.6.J (item 2, gate 1 Q3; clarification Q-B): the gate's own names in every spelling the shell
+// resolves to the same file. A name is looked for in the command as written, in the command with every
+// backtick (PowerShell) or backslash (Bash) removed, and in each word the tool's lexer reads, its quotes
+// and escapes removed, bodies included; each text after collapsing repeated separators, ./ segments and
+// <segment>/../ (a backslash read as a separator). A throw here is the unknown state (main's catch).
+function nameTexts(command, tool) {
+  const words = [];
+  const walk = (src, depth) => { if (depth > BODY_DEPTH) return; for (const t of lexShell(src, tool)) { if (t.k !== 'w') continue; words.push(t.v); for (const b of t.bodies || []) walk(b.text, depth + 1); } };
+  walk(command, 0);
+  const norm = (t) => { let s = String(t).replace(/\\/g, '/').replace(/\/(?:\.\/)+/g, '/').replace(/\/{2,}/g, '/'); for (let k = 0; k < 64; k++) { const x = s.replace(/(^|\/)(?!\.\.\/)[^/\s"'`()]+\/\.\.\//, '$1'); if (x === s) break; s = x; } return s; };
+  return [command, command.replace(tool === 'PowerShell' ? /`/g : /\\/g, '')].concat(words).map(norm);
+}
+const namesGate = (command, tool, re) => re.test(command) || nameTexts(command, tool).some((t) => re.test(t));
+// Under the PowerShell tool a read that names a gate script, or any command that names a red-gate control
+// file, is refused with this line (item 2); no reading decides it, and no read-only command is exempt.
+const psReadLine = (name) => `[red-gate] REFUSED - under the PowerShell tool a command that names '${name}' runs only as a bare gate-script form or one of the kit's two hook commands (node .claude/hooks/session-start-read-first.cjs --check, node scripts/kit-update.cjs --apply .claude/hooks/receipts-lifecycle.cjs); read the file with the Read tool, and pass text that names it in a file (git commit -F <file>).\n`;
+// The control set as names (the probe's own lists, PROBE_CONTROL_FILES under .claude/, the read-first
+// glob and PROBE_CONTROL_PATHS), any case, never part of a longer name.
+const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const PS_CONTROL_NAME = new RegExp('(?:^|[^A-Za-z0-9_.-])(' + PROBE_CONTROL_FILES.map((f) => '\\.claude/' + reEsc(f))
+  .concat(['\\.claude/' + PROBE_CONTROL_LIST_GLOB.split('*').map(reEsc).join('[A-Za-z0-9_.-]*')], PROBE_CONTROL_PATHS.map(reEsc)).join('|') + ')(?![A-Za-z0-9_.-])', 'i');
+function psControlName(command) {
+  for (const t of nameTexts(command, 'PowerShell')) { const m = PS_CONTROL_NAME.exec(t); if (m) return m[1].toLowerCase(); }
+  return null;
+}
+// Gate 1 Q2: the two commands the kit prints that name a hook file and write nothing, bare and alone.
+const PS_KIT_FORMS = [/^node \.claude\/hooks\/session-start-read-first\.cjs --check$/, /^node scripts\/kit-update\.cjs --apply \.claude\/hooks\/receipts-lifecycle\.cjs$/];
+const psKitForm = (command) => !COMPOUND.test(command) && PS_KIT_FORMS.some((re) => re.test(command.trim().split(/\s+/).join(' ')));
+// -> null (not judged, or the exact form) or the one refusal line.
+function releaseRefusal(command, globNamed, tool) {
+  if (typeof command !== 'string' || !(globNamed || namesGate(command, tool, RELEASE_NAMED))) return null; // not judged: no output
+  const norm = command.trim().split(/\s+/).join(' ');
+  if (plainRead(command, tool)) return tool === 'PowerShell' ? psReadLine('approve-red.cjs') : null;
   if (RELEASE_EXACT.test(norm) || RELEASE_VOID.test(norm)) return null;
   return '[red-gate] REFUSED - the release command runs only in its bare form, alone in the call: node scripts/approve-red.cjs --stage <id> --release-seq <n> (n is the pending approval-request seq, or none).\n';
+}
+// M34.6.G (item 1): the script that opens and clears the gate runs only in its three bare forms, as
+// the release does - the open, the clear, and the orchestrator's clear of a builder worktree (one
+// plain path token: no quote, $, glob or space, never a leading -). The ask rule
+// Bash(node scripts/stage-active.cjs*) matches all three, so every form this lets run is one the fence
+// asks about under the Bash tool (M34.6.I: the PowerShell tool has no kit ask rule; these forms hold
+// there, and so does the clear's own click; the open takes none). The same read-only commands are not judged, by the same guard
+// (plainRead); a word with a glob character that could expand to scripts/stage-active.cjs names it
+// too (`stageGlob`, from the same parser).
+const STAGE_NAMED = /stage-active\.cjs/i;
+const STAGE_EXACT = /^node scripts\/stage-active\.cjs (?:[A-Za-z0-9][A-Za-z0-9._-]{0,63}|--clear|--clear --tree [A-Za-z0-9_.\/~:+@\\][A-Za-z0-9_.\/~:+@\\-]{0,511})$/;
+function stageRefusal(command, globNamed, tool) {
+  if (typeof command !== 'string' || !(globNamed || namesGate(command, tool, STAGE_NAMED))) return null; // not judged: no output
+  const norm = command.trim().split(/\s+/).join(' ');
+  if (plainRead(command, tool)) return tool === 'PowerShell' ? psReadLine('stage-active.cjs') : null;
+  if (!COMPOUND.test(command) && STAGE_EXACT.test(norm)) return null;
+  return '[red-gate] REFUSED - the stage script runs only in its bare forms, alone in the call: node scripts/stage-active.cjs <stage id>, node scripts/stage-active.cjs --clear, or node scripts/stage-active.cjs --clear --tree <path>.\n';
 }
 
 // ---- the shell write gate (M34.B): the recognised write constructs and their targets ----
 // A parser, not a sandbox (the header's NOT JUDGED list). It needs nothing but Node, like the state
 // probe, because its control-file targets are judged in every state, the unknown one included.
 // shellWrites(command, cwd, tool, root, depth) -> { finds: [{ construct, token, abs, glob?, cwd?,
-// dir?, victim?, only?, body? }], releaseGlob, cwdMoved }: abs null is a target the gate cannot
+// dir?, victim?, only?, body? }], releaseGlob, stageGlob, cwdMoved }: abs null is a target the gate cannot
 // read; glob carries a glob target for the control-set test (step 2); dir marks a directory
 // pathspec; victim marks a deletion's or a move source's operand (the carve's alone, M34.1.A), only
 // a victim judged as the path itself; body a command body the gate cannot read.
@@ -700,6 +917,62 @@ function releaseRefusal(command, globNamed) {
 // list of its own, to BODY_DEPTH. A word also carries `pv`, its PowerShell reading (a backslash a
 // path character), so a cmdlet's operands read the same under either tool name.
 const BODY_DEPTH = 8;
+// M34.6.J (item 1): PowerShell's own lexical rules as its language specification writes them (the
+// PowerShell Language Specification 3.0 chapter 2, about_Quoting_Rules and about_Comments, read
+// 2026-11-08), read under the PowerShell tool only; Bash's reading is unchanged. The quote classes
+// (2.3.5.2): a string opened by any quote of a class is closed by any quote of the same class, a doubled
+// quote is an escaped one, and a backslash escapes nothing. White space (2.2.4): Zs, Zl, Zp, tab,
+// vertical tab, form feed. A new line (2.2.2): CR, LF or CRLF; no backslash continues a line. A comment
+// (2.2.3) starts only where a token may, never inside a word. Each is built from character codes, so
+// this file stays ASCII.
+const PS_DQ = '"' + String.fromCharCode(0x201C, 0x201D, 0x201E);
+const PS_SQ = "'" + String.fromCharCode(0x2018, 0x2019, 0x201A, 0x201B);
+const psDq = (c) => typeof c === 'string' && c.length === 1 && PS_DQ.indexOf(c) !== -1;
+const psSq = (c) => typeof c === 'string' && c.length === 1 && PS_SQ.indexOf(c) !== -1;
+// M34.6.K (gate 1 Q1): the characters a stop-parsing line is judged without (every quote of both classes,
+// the backtick, the comment mark and the braces), so none of them can hide text inside it.
+const PS_STOP_BLANK = new RegExp('[' + PS_DQ + PS_SQ + '`#{}]', 'g');
+const PS_WS = /^[\t\v\f\p{Zs}\p{Zl}\p{Zp}]$/u;
+const psWs = (c) => typeof c === 'string' && PS_WS.test(c);
+// A comment may start at the text's start, after white space or a new line, or after a character that
+// ends an expression or a statement or opens a body: ( ) { } [ ] ; , = | & or a quote.
+const psCommentAt = (s, j, from) => j <= from || /[\s(){}[\];,=|&]/.test(s[j - 1]) || psWs(s[j - 1]) || psDq(s[j - 1]) || psSq(s[j - 1]);
+// The index after the braced variable ${ ... } at s[i] (2.3.2: to the first } a backtick does not
+// escape; quotes and braces inside it are text), or -1 when it never closes.
+function psBraceEnd(s, i) {
+  for (let j = i + 2; j < s.length; j++) { if (s[j] === '`') { j++; continue; } if (s[j] === '}') return j + 1; }
+  return -1;
+}
+// The index of the quote that closes the string opened at s[i], or -1. In a double-quoted string a
+// backtick escapes the next character, and a $( ) or a ${ } inside it is skipped to its own close.
+function psQuoteEnd(s, i, tool) {
+  const cls = psDq(s[i]) ? psDq : psSq;
+  for (let j = i + 1; j < s.length; j++) {
+    const c = s[j];
+    if (cls === psDq) {
+      if (c === '`') { j++; continue; }
+      if (c === '$' && s[j + 1] === '(') { const k = closeOf(s, j + 1, tool); if (k === -1) return -1; j = k - 1; continue; }
+      if (c === '$' && s[j + 1] === '{') { const k = psBraceEnd(s, j); if (k === -1) return -1; j = k - 1; continue; }
+    }
+    if (cls(c)) { if (cls(s[j + 1])) { j++; continue; } return j; }
+  }
+  return -1;
+}
+// A here-string opened at s[i] (2.3.5.2: @ and a quote of either class, white space, a new line; closed
+// by a new line, then a quote of the same class at the line's start, then @) -> { body, bodyEnd, end, dq },
+// or null when s[i] opens none. One never closed runs to the end.
+function psHere(s, i) {
+  if (s[i] !== '@' || !(psDq(s[i + 1]) || psSq(s[i + 1]))) return null;
+  let j = i + 2; while (j < s.length && psWs(s[j])) j++;
+  if (s[j] === '\r' && s[j + 1] === '\n') j += 2; else if (s[j] === '\n' || s[j] === '\r') j += 1; else return null;
+  const dq = psDq(s[i + 1]); const cls = dq ? psDq : psSq;
+  for (let ls = j; ;) {
+    if (cls(s[ls]) && s[ls + 1] === '@') return { body: j, bodyEnd: ls, end: ls + 2, dq };
+    let le = ls; while (le < s.length && s[le] !== '\n' && s[le] !== '\r') le++;
+    if (le >= s.length) return { body: j, bodyEnd: s.length, end: s.length, dq };
+    ls = le + (s[le] === '\r' && s[le + 1] === '\n' ? 2 : 1);
+  }
+}
 // The end of the bracketed text opened at s[i] ('(' or '{'): quotes and the tool's escape skipped,
 // the same bracket counted -> the index after its close, or -1 when it never closes.
 // M34.2.A (V-5 iii): under Bash a `case ... esac` at command position inside the parentheses takes
@@ -720,6 +993,15 @@ function closeOf(s, i, tool) {
   for (let j = i; j < s.length; j++) {
     const c = s[j];
     if (c === esc) { j++; continue; }
+    // M34.6.J (a), (c), (d), (e): under PowerShell the quotes by class, a here-string, a braced variable
+    // and a comment are skipped as PowerShell reads them, so a bracket inside one closes nothing.
+    if (tool === 'PowerShell') {
+      if (c === '@') { const h = psHere(s, j); if (h) { j = h.end - 1; continue; } }
+      if (psDq(c) || psSq(c)) { const k = psQuoteEnd(s, j, tool); if (k === -1) return -1; j = k; continue; }
+      if (c === '$' && s[j + 1] === '{') { const k = psBraceEnd(s, j); if (k === -1) return -1; j = k - 1; continue; }
+      if (c === '<' && s[j + 1] === '#' && psCommentAt(s, j, i + 1)) { const k = s.indexOf('#>', j + 2); if (k === -1) return -1; j = k + 1; continue; }
+      if (c === '#' && psCommentAt(s, j, i + 1)) { let k = j; while (k < s.length && s[k] !== '\n' && s[k] !== '\r') k++; j = k - 1; continue; }
+    }
     if (c === "'") { const k = s.indexOf("'", j + 1); if (k === -1) return -1; j = k; continue; }
     if (c === '"') { let k = j + 1; while (k < s.length && s[k] !== '"') { if (s[k] === esc) k++; k++; } if (k >= s.length) return -1; j = k; continue; }
     if (cases && depth > 0) {
@@ -773,10 +1055,17 @@ function lexShell(src, tool) {
   const pend = []; // heredoc delimiters waiting for the end of their line
   let i = 0;
   let w = null;
-  const start = () => { if (!w) w = { k: 'w', v: '', pv: '', raw: '', s: i, q: false, sub: false, vr: false, bodies: [] }; };
+  // br (M34.6.I): an unquoted { or } on the word - plainRead's guard, beside the par tokens and bodies.
+  const start = () => { if (!w) w = { k: 'w', v: '', pv: '', raw: '', s: i, q: false, sub: false, vr: false, br: false, bodies: [] }; };
   const add = (x, px) => { w.v += x; w.pv += px === undefined ? x : px; };
   const end = () => { if (w) { w.raw = src.slice(w.s, i); toks.push(w); w = null; } };
   const lineEnd = (from) => { const j = src.indexOf('\n', from); return j === -1 ? n : j; };
+  // M34.6.K (item 1): under PowerShell a > is text only where it continues a bare word (about_Parsing:
+  // < > @ and # are special only at a token's start). bareTo is the index after the last character read
+  // as part of a bare word and runAt where that bare run began; a quote, a here-string or a body ends a
+  // run, so a > right after one starts a token, and a run that is a stream number (digits, *) is n>.
+  let bareTo = -1; let runAt = -1;
+  const bare = (k) => { if (bareTo !== i) runAt = i; add(src.slice(i, i + k)); i += k; bareTo = i; };
   // A body from its lead at `from` ($ < > @, or the bracket itself) through the close of the bracket at o.
   const body = (from, o, block) => {
     const k = closeOf(src, o, tool);
@@ -806,7 +1095,7 @@ function lexShell(src, tool) {
   // ${...} at i, unquoted: to its own close (quotes, substitutions and nested braces counted); under
   // Bash its substitutions are bodies (M34.2.A, Q5), one never closed an open body.
   const dollarBrace = () => {
-    w.vr = true;
+    w.vr = true; w.br = true;
     let j = i + 2; let d = 1;
     for (; j < n && d > 0; j++) {
       const c2 = src[j];
@@ -825,9 +1114,25 @@ function lexShell(src, tool) {
     }
     add(src.slice(i, e)); i = e;
   };
+  // M34.6.J (c): the $( ) bodies and ${ } variables of an expandable PowerShell here-string, from..to.
+  const psExpand = (from, to) => {
+    for (let j = from; j < to; j++) {
+      const d = src[j];
+      if (d === '`') { j++; continue; }
+      if (d !== '$') continue;
+      w.vr = true;
+      if (src[j + 1] === '(') {
+        const k = closeOf(src, j + 1, tool); const bad = k === -1 || k > to; const e = bad ? to : k;
+        w.sub = true; w.bodies.push({ text: src.slice(j + 2, bad ? to : k - 1), tool, open: bad, tok: src.slice(j, e), block: false });
+        j = e - 1; continue;
+      }
+      if (src[j + 1] === '{') { const k = psBraceEnd(src, j); j = (k === -1 || k > to ? to : k) - 1; }
+    }
+  };
   while (i < n) {
     const c = src[i];
-    if (c === ' ' || c === '\t' || c === '\r') { end(); i++; continue; }
+    if (ps && c === '\r' && src[i + 1] !== '\n') { end(); toks.push({ k: 'op', v: '\n', s: i }); i++; continue; } // M34.6.J (f): a lone CR ends a statement
+    if (c === ' ' || c === '\t' || c === '\r' || (ps && psWs(c))) { end(); i++; continue; } // M34.6.J (f): PowerShell's white space
     if (c === '\n') {
       end(); toks.push({ k: 'op', v: '\n', s: i }); i++;
       while (pend.length) {
@@ -848,6 +1153,7 @@ function lexShell(src, tool) {
       continue;
     }
     if (c === '\\') {
+      if (ps) { start(); bare(1); continue; } // M34.6.J (b): PowerShell: a path character, never an escape or a line continuation
       if (src[i + 1] === '\n') { i += 2; continue; } // a line continuation
       if (src[i + 1] === '\r' && src[i + 2] === '\n') { i += 3; continue; }
       start();
@@ -855,7 +1161,29 @@ function lexShell(src, tool) {
       const nx = src[i + 1] === undefined ? '' : src[i + 1];
       add(nx, c + nx); i += 2; continue; // Bash: the next character, escaped
     }
-    if (c === '#' && !w) { i = lineEnd(i); continue; } // a comment, to the end of the line
+    if (c === '#' && !w) { if (ps) { while (i < n && src[i] !== '\n' && src[i] !== '\r') i++; } else i = lineEnd(i); continue; } // a comment, to the end of the line (PowerShell: a CR ends it too)
+    // M34.6.J (e): a PowerShell block comment where a token may start, white space to its close (or the
+    // end); inside a word < is a word character, so a word's <# opens no comment (about_Comments).
+    if (ps && c === '<' && src[i + 1] === '#' && (!w || psCommentAt(src, i, 0))) { end(); const k = src.indexOf('#>', i + 2); i = k === -1 ? n : k + 2; continue; }
+    if (ps && c === '<' && w) { bare(1); continue; }
+    // M34.6.J (a): a PowerShell single-quoted string, opened and closed by any single quote of the class.
+    if (ps && psSq(c)) {
+      start(); w.q = true;
+      const k = psQuoteEnd(src, i, tool); const e = k === -1 ? n : k;
+      let v = ''; for (let j = i + 1; j < e; j++) { v += src[j]; if (psSq(src[j]) && psSq(src[j + 1])) j++; }
+      add(v); i = e + 1; continue;
+    }
+    // M34.6.J (c): a PowerShell here-string, its quotes by class, white space after the opener; an
+    // expandable one's $( ) are bodies, as in a double-quoted string.
+    if (ps && c === '@' && !w) {
+      const h = psHere(src, i);
+      if (h) {
+        start(); w.q = true;
+        add(src.slice(h.body, h.bodyEnd).replace(/\r?\n$/, ''));
+        if (h.dq) psExpand(h.body, h.bodyEnd);
+        i = h.end; continue;
+      }
+    }
     if (c === "'") { start(); w.q = true; const j = src.indexOf("'", i + 1); const k = j === -1 ? n : j; add(src.slice(i + 1, k)); i = k + 1; continue; }
     if (c === '@' && !w && (src[i + 1] === "'" || src[i + 1] === '"') && /^\r?\n/.test(src.slice(i + 2, i + 4))) {
       // a PowerShell here-string: one quoted word to the line that opens with its closing quote
@@ -868,6 +1196,24 @@ function lexShell(src, tool) {
     }
     if (ps && c === '@' && src[i + 1] === '(') { start(); w.sub = true; body(i, i + 1); continue; } // @(...)
     if (ps && c === '{') { start(); body(i, i, true); continue; } // a script block
+    // M34.6.J (a), (b), (d): a PowerShell double-quoted string, opened and closed by any double quote of
+    // the class; a doubled quote or a backtick before one is a quote; a backslash is text; ${ } is a
+    // braced variable to its own close; $( ) a body.
+    if (ps && psDq(c)) {
+      start(); w.q = true; i++;
+      while (i < n) {
+        const d = src[i];
+        if (psDq(d)) { if (psDq(src[i + 1])) { add(d); i += 2; continue; } break; }
+        if (d === '`') { if (psDq(src[i + 1])) { add(src[i + 1]); i += 2; continue; } w.vr = true; add(src.slice(i, i + 2)); i += 2; continue; }
+        if (d === '$') {
+          if (src[i + 1] === '(') { dollarParen(); continue; }
+          if (src[i + 1] === '{') { const k = psBraceEnd(src, i); const e = k === -1 ? n : k; w.vr = true; add(src.slice(i, e)); i = e; continue; }
+          w.vr = true;
+        }
+        add(d); i++;
+      }
+      i++; continue;
+    }
     if (c === '"') {
       start(); w.q = true; i++;
       while (i < n && src[i] !== '"') {
@@ -890,15 +1236,16 @@ function lexShell(src, tool) {
       if (ps) {
         if (src[i + 1] === '\n') { i += 2; continue; } // a PowerShell line continuation
         if (src[i + 1] === '\r' && src[i + 2] === '\n') { i += 3; continue; }
-        start(); w.vr = true; add(src.slice(i, i + 2)); i += 2; continue; // the escape character
+        start(); w.vr = true; bare(2); continue; // the escape character
       }
       start(); ticks(); continue;
     }
     if (c === '$') {
       start();
       if (src[i + 1] === '(') { dollarParen(); continue; }
+      if (ps && src[i + 1] === '{') { const k = psBraceEnd(src, i); const e = k === -1 ? n : k; w.vr = true; w.br = true; add(src.slice(i, e)); i = e; continue; } // M34.6.J (d): a braced variable
       if (src[i + 1] === '{') { dollarBrace(); continue; }
-      w.vr = true; add(c); i++; continue;
+      w.vr = true; bare(1); continue;
     }
     if (c === ';') { end(); toks.push({ k: 'op', v: ';', s: i }); i++; continue; }
     if (c === '|') {
@@ -911,11 +1258,22 @@ function lexShell(src, tool) {
       if (src[i + 1] === '>') { end(); const op = src[i + 2] === '>' ? '&>>' : '&>'; toks.push({ k: 'r', op, s: i }); i += op.length; continue; }
       end(); toks.push({ k: 'op', v: '&', s: i }); i++; continue;
     }
+    // M34.6.J (g): under PowerShell a grouping ( ... ) is a body, so its pipeline is judged and a grouped
+    // operand is a target the gate cannot read; a ) with no ( stays a par token.
+    if (ps && c === '(') { end(); start(); w.sub = true; body(i, i); continue; }
     if (c === '(' || c === ')') { end(); toks.push({ k: 'par', v: c, s: i }); i++; continue; }
+    // M34.6.J (e): under PowerShell a > inside a word is a word character (pwsh echoes `a>b`, probes/
+    // ps-facts2.txt), unless the word is a stream number or * (2>, *>) or the > follows a quote or a close.
+    // M34.6.K (item 1): and only where the > continues a bare run that is not a stream number; after a
+    // here-string's close, a body or a quote the > starts a token (V5-R1; probes/ps-facts-k-base.txt).
+    if (ps && c === '>' && w && !/^(?:\d+|\*)$/.test(w.v) && !(psDq(src[i - 1]) || psSq(src[i - 1]) || /[)}\]]/.test(src[i - 1])) && bareTo === i && !/^(?:\d+|\*)$/.test(src.slice(runAt, i))) { bare(1); continue; }
     if (c === '>') {
       if (src[i + 1] === '(') { end(); start(); w.sub = true; body(i, i + 1); continue; } // >(...)
       let op = '>';
       if (w && !w.q && w.s + w.v.length === i && /^(?:\d+|\*)$/.test(w.v)) { op = w.v + '>'; w = null; } // 2> 2>> *>
+      // M34.6.K (item 1): under PowerShell a stream number right after a token's close starts its own token,
+      // n> (pwsh writes `"x"1>f`, K33): the run leaves the word, which ends where the run began.
+      else if (ps && w && bareTo === i && runAt > w.s && /^(?:\d+|\*)$/.test(src.slice(runAt, i))) { op = src.slice(runAt, i) + '>'; w.v = w.v.slice(0, runAt - i); w.pv = w.pv.slice(0, runAt - i); const at = i; i = runAt; end(); i = at; }
       else end();
       let j = i + 1;
       if (src[j] === '>') { op += '>'; j++; } else if (src[j] === '|') { op += '|'; j++; }
@@ -943,7 +1301,21 @@ function lexShell(src, tool) {
       if (src[i + 1] === '(') { start(); w.sub = true; body(i, i + 1); continue; } // <(...)
       toks.push({ k: 'in', s: i }); i++; continue;
     }
-    start(); add(c); i++;
+    // M34.6.K (gate 1 Q1): PowerShell's stop-parsing token where a token may start. The rest of its line,
+    // to a new line or a lone CR, is literal text for the command (about_Parsing; a bare | ends it too,
+    // probes/ps-facts-k-base.txt K54). The hook keeps that text as one word and also judges it as a command
+    // list with every quote, backtick, #, { and } read as a space, so nothing in it hides a pipeline from
+    // the gate and no quote in it reaches the next line.
+    if (ps && c === '-' && src.startsWith('--%', i) && (!w || bareTo !== i)) {
+      end(); start();
+      let le = i + 3; while (le < n && src[le] !== '\n' && src[le] !== '\r') le++;
+      const text = src.slice(i, le);
+      w.q = true; w.sub = true;
+      w.bodies.push({ text: text.slice(3).replace(PS_STOP_BLANK, ' '), tool, open: false, tok: text, block: false });
+      add(text); i = le; end(); continue;
+    }
+    start(); if (c === '{' || c === '}') w.br = true;
+    bare(1);
   }
   end();
   return toks;
@@ -1206,6 +1578,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
   const lvl = depth || 0;
   const finds = [];
   let releaseGlob = false;
+  let stageGlob = false; // M34.6.G: a glob that could expand to scripts/stage-active.cjs
   let moved = false;
   let cwd = cwd0 || null;
   const push = (construct, token, abs, extra) => finds.push(Object.assign({ construct, token, abs: abs || null }, extra || {}));
@@ -1242,16 +1615,18 @@ function shellWrites(command, cwd0, tool, root, depth) {
     else push(construct, v, abs);
   };
   const literal = (construct, value, ctx) => (value === null ? push(construct, '(none)', null) : target(construct, wordOf(value), ctx));
-  // A glob that could expand to the release script from this command's directory names it.
-  const namesRelease = (v, ctx) => {
+  // A glob that could expand to a gate script (the release script, or since M34.6.G the stage
+  // script) from this command's directory names it.
+  const namesScript = (v, ctx, file) => {
     if (!root) return false;
     const re = globRe(v);
     if (!re) return false;
-    const abs = path.join(root, 'scripts', 'approve-red.cjs');
+    const abs = path.join(root, 'scripts', file);
     if (re.test(fwd(abs))) return true;
     if (ctx.cwd) return re.test(fwd(path.relative(ctx.cwd, abs)));
-    return (globRe(String(v).replace(/\\/g, '/').split('/').pop()) || /$^/).test('approve-red.cjs');
+    return (globRe(String(v).replace(/\\/g, '/').split('/').pop()) || /$^/).test(file);
   };
+  const namesRelease = (v, ctx) => namesScript(v, ctx, 'approve-red.cjs');
   // M34.1.A (V-3): a body is a command list of its own, judged by this same function one level down.
   // Past BODY_DEPTH, never closed, or a wrapper's text that is not a literal: the body line at step 4.
   const literalWord = (wd) => !wd.sub && !wd.vr && !PCT_VAR.test(wd.v);
@@ -1261,6 +1636,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
     const sub = shellWrites(text, ctx.cwd, bodyTool, root, lvl + 1);
     for (const f of sub.finds) finds.push(f);
     if (sub.releaseGlob) releaseGlob = true;
+    if (sub.stageGlob) stageGlob = true;
     return sub.cwdMoved;
   };
   // M34.1.A (V-4): a victim of a deletion or a move (its source) - the carve judges it at step 2 in
@@ -1288,6 +1664,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
   for (const c of shellCommands(command, tool)) {
     const ctx = { cwd, tool, root };
     for (const t of c.items) if (t.k === 'w' && !t.dup && /[*?[{]/.test(t.v) && namesRelease(t.v, ctx)) releaseGlob = true;
+    for (const t of c.items) if (t.k === 'w' && !t.dup && /[*?[{]/.test(t.v) && namesScript(t.v, ctx, 'stage-active.cjs')) stageGlob = true;
     let blockMoved = false;
     for (const t of c.all) for (const b of t.bodies || []) if (judgeBody(b.text, b.tool, b.tok, ctx, b.open) && b.block) blockMoved = true;
     for (const b of c.hdBodies) judgeBody(b.text, b.tool, b.tok, ctx, b.open); // M34.2.A (V-5 i): an unquoted heredoc body's substitutions
@@ -1666,7 +2043,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
       }
     } else if (name === 'popd') { moved = true; cwd = null; }
   }
-  return { finds, releaseGlob, cwdMoved: moved };
+  return { finds, releaseGlob, stageGlob, cwdMoved: moved };
 }
 // A directory pathspec that holds a control target -> that target's repo-relative form, or null.
 function dirControl(dir, roots) {
@@ -1786,7 +2163,7 @@ function main() {
   const targetRoot = rawPath && path.isAbsolute(rawPath) ? probeWalk(path.dirname(probeRealForm(rawPath))) : null;
   // The shell write gate (M34.B): every recognised write construct in the call; each literal target
   // is one absolute path, owned by the repo above it as an absolute edit-tool path is.
-  const writes = shell && typeof ti.command === 'string' ? shellWrites(ti.command, cwd, tool, root) : { finds: [], releaseGlob: false };
+  const writes = shell && typeof ti.command === 'string' ? shellWrites(ti.command, cwd, tool, root) : { finds: [], releaseGlob: false, stageGlob: false };
   for (const f of writes.finds) f.root = f.abs ? probeWalk(path.dirname(probeRealForm(f.abs))) : null;
   const roots = [];
   if (!fault) {
@@ -1799,12 +2176,14 @@ function main() {
     }
   }
   const stOf = (r) => { const x = r ? roots.find((y) => probeSame(y.root, r)) : null; return x ? x.st : null; };
+  // M34.6.B: what the judgment row names (written by refuse() and allow(), never deciding).
+  Object.assign(JUDGED, { root, payload, tool, target: rawPath || ((writes.finds.find((f) => f.abs) || {}).abs) || null, st: stOf(root), fault: !!fault });
 
   // 1. The repair exemption: the exact form, from the project root, the script authenticated.
   let repairDenied = null;
   if (shell && repairForm(ti.command) && root && probeSame(cwd, root)) {
     repairDenied = repairCause(root);
-    if (!repairDenied) process.exit(ALLOW);
+    if (!repairDenied) allow();
   }
 
   // The resolver, once a stage is known to be open (a missing one is the unknown state).
@@ -1830,6 +2209,7 @@ function main() {
   // the folders that hold the set too; a nested construct's (V-3) like any other.
   for (const f of writes.finds) {
     let ctl = null;
+    if (f.abs) JUDGED.target = f.abs;
     if (f.abs) {
       ctl = probeControl(f.abs, [f.root, root]);
       if (!ctl && (f.dir || (f.victim && !f.only))) ctl = dirControl(f.dir || f.abs, [f.root, root]);
@@ -1838,13 +2218,24 @@ function main() {
   }
 
   // 3. The unknown state.
-  if (fault) refuse(repairDenied ? HUMAN_PATH_LINES[repairDenied] : unknownLine(fault));
+  if (fault) { JUDGED.fault = true; refuse(repairDenied ? HUMAN_PATH_LINES[repairDenied] : unknownLine(fault)); }
 
   // 4 and 5. A known state: today's judgment where a work stage is open and unapproved.
   if (shell) {
     if (repairDenied && roots.some((x) => engaged(x.st))) refuse(HUMAN_PATH_LINES[repairDenied]);
-    const release = releaseRefusal(ti.command, writes.releaseGlob);
+    const release = releaseRefusal(ti.command, writes.releaseGlob, tool);
     if (release) refuse(release);
+    // M34.6.G: the stage script by the same rule, judged after the release (a command naming both
+    // gets the release's line). M34.6.I: both read the one read-only guard by the call's tool.
+    const stage = stageRefusal(ti.command, writes.stageGlob, tool);
+    if (stage) refuse(stage);
+    // M34.6.J (item 2): under the PowerShell tool a command that names a red-gate control file runs only
+    // as one of the two bare forms the kit prints (gate 1 Q2); no reading decides it, in every known
+    // state. A literal write to one was refused at step 2 already, with the control-file line.
+    if (tool === 'PowerShell' && typeof ti.command === 'string') {
+      const nm = psControlName(ti.command);
+      if (nm && !psKitForm(ti.command)) refuse(psReadLine(nm));
+    }
     // The shell write gate (M34.B): each literal target by judge(), from its own root and the
     // session's; a target the gate cannot read is refused while the session's stage is engaged.
     const sess = stOf(root);
@@ -1858,13 +2249,14 @@ function main() {
         continue;
       }
       if (f.victim) continue; // a victim is the carve's alone (step 2): a deletion of a non-control path is not judged
+      JUDGED.target = f.abs;
       for (const r of f.root && !probeSame(f.root, root) ? [f.root, root] : [root]) {
         const st = stOf(r);
         const refusal = st && st.kind === 'active' ? judge(r, st, f.abs, f.construct) : null;
         if (refusal) refuse(refusal); // the target's refusal named first
       }
     }
-    process.exit(ALLOW);
+    allow();
   }
   if (rawPath) {
     for (const x of roots) {
@@ -1872,7 +2264,7 @@ function main() {
       if (refusal) refuse(refusal); // the target's refusal named first
     }
   }
-  process.exit(ALLOW);
+  allow();
 }
 
 // Run as a hook: any internal error is the unknown state, refused with the error named. Required

@@ -43,19 +43,27 @@ These blocks are mandatory (do not remove). Honest limit: the validator is prese
 
 ## Calibration self-test (G14) — mandatory, run FIRST
 
-> ⚠️ **Run before any other pass.** The verifier OPENS by running its plan-challenge against the seeded-defect calibration set (`prompts/calibration/` — one fixture per §8.5 escape class) and must catch **every** seed: **false-negative rate (FNR) = 0**. Only then do the real findings below count. This is G14 — the adversary-side analog of G9's mutation-kill. **The verifier reads `prompts/calibration/fixtures/` only — never `labels/`** (the sealed answers); reading the answer would make FNR = 0 prove nothing.
+> **Run before any other pass.** You open by judging the seeded-defect calibration set (`prompts/calibration/fixtures/`, one fixture per escape class) blind, and the findings below count only when the orchestrator's scorer has recorded a false-negative rate (FNR) of 0. This is G14, the adversary-side analog of G9's mutation-kill; the two scores stay separate. **Read `prompts/calibration/fixtures/` only, never `labels/`** (the sealed answers): a recorded read of a label refuses `node scripts/lib/read-ledger.cjs --check verify` and the scorer, and the exam is void.
 
-Record the result here — **mandatory, must not be removed**. A "Sound" milestone with no calibration block is invalid (`validators/validate-calibration.cjs` flags it: FNR unrecorded = the verifier-proof never ran = untrusted):
+**Your verdicts (agent judgment).** Written right after your view is built, before any other pass: one line per fixture, `<fixture filename>: <a class from the table in prompts/calibration/README.md, or clean>`, then `judged-from: content`. Publish them with `node scripts/channel.cjs publish --class stage-packet --kind calibration-verdicts --body-file <this file>`. Both blocks are **mandatory and must not be removed**.
+
+```calibration-verdicts
+{{FIXTURE_FILENAME}}: {{CLASS_OR_CLEAN}}
+judged-from: content
+```
+
+**The score (observed evidence), never yours to write.** The orchestrator runs `node scripts/calibration-score.cjs --findings <this file> --session <your session id>`, which reads the sealed labels and rewrites the block below in place: `seeds`, `caught`, `FNR` as a decimal and as `<missed> of <seeds>`, `missed`, whether the labels check ran, and a `scored-by:` line carrying the sha256 of your verdicts block. Leave it at `scored-by: pending`. `validators/validate-calibration.cjs` refuses a "Sound" findings file without the scorer's block, with verdicts changed after scoring, or with an FNR other than 0 (deterministic enforcement at the pre-commit).
 
 ```calibration
 self-test: plan-challenge vs prompts/calibration/
-seeds: {{N}}            # the catalog size (one fixture per escape class)
-caught: {{M}}           # seeds your plan-challenge flagged
-FNR: {{(N-M)/N}}        # MUST be 0 before the findings below count
-missed: {{none | <class>...}}   # if non-zero, the verifier-proof worked — this is a real finding
+scored-by: pending
+seeds: pending
+caught: pending
+FNR: pending
+missed: pending
 ```
 
-**Honest locus:** the static validator proves the harness is present + wired; **this recorded FNR is the catch** — agent judgment, not a pre-commit check (you can't run a judge in a smoke test). If your own FNR > 0, **stop**: a verifier that can't catch its own seeds cannot be trusted to have reviewed the real work (`merge_gate` structural signal).
+**Honest locus:** the static validator proves the harness is present and wired and the block is the scorer's; **the catch is your judgment** (agent judgment), and no pre-commit check can make it. If the scored FNR is above 0, **stop**: a verifier that cannot catch its own seeds cannot be trusted to have reviewed the real work (`merge_gate` structural signal).
 
 ---
 

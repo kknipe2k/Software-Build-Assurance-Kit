@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.9-green" alt="Status: GA v1.0.9"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.10-green" alt="Status: GA v1.0.10"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -26,7 +26,7 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 - **[HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html)** - the visual overview. A few minutes, in your browser.
 - **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived from real commits, findings, and rework, not a staged demo.
 - **[WHY-THIS-KIT.md](WHY-THIS-KIT.md)** - deciding if it's worth your evening? Two pages, honest costs.
-- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.9 GA release: exactly what is claimed, what is not, and the notes for both.
+- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.10 GA release: exactly what is claimed, what is not, and the notes for both.
 
 ## How it works
 
@@ -73,7 +73,7 @@ Step-by-step detail is under [The stage loop](#full-documentation) below.
 
 ## Installation
 
-**Prerequisites, exactly:** **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent - **Claude Code 2.1.295 or newer** for the fully enforced path (the kit's settings carry a field older releases may reject, so an upgrade of the kit needs it too); GitHub Copilot works too, with one copy step creating the auto-load shim. `gh` only if you want the attestation check. The kit itself is stack-agnostic.
+**Prerequisites, exactly:** **Node.js 22 or newer** (the only runtime the validators and hooks need), **git**, and a coding agent - **Claude Code 2.1.295 or newer** for the fully enforced path (the kit's settings carry a field older releases may reject, so an upgrade of the kit needs it too); GitHub Copilot works too, with one copy step creating the auto-load shim. `gh`, the GitHub CLI, is optional: installed and signed in (`gh auth login`), it lets the installer check the release's build attestation; without it the install checks the checksum only. The kit itself is stack-agnostic.
 
 **Recommended:** download **`sbak-install.cjs`** from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases) into the directory the kit should live in - a blank folder for a new project, or the root of an existing repo. The script is attested with the release; its `.sha256` is beside it. The signed ZIP stays available as the manual path (below, under "Install and download, in full").
 
@@ -156,6 +156,7 @@ The result is a build that can tell its own story: what was decided, what broke,
 - **Not a replacement for tests, review, or judgment.** It assumes you have those and gives them a place to stand.
 - **Not a sandbox.** The generated permission fence denies secret reads and irreversible commands at the agent's tool layer, but a subprocess the agent spawns can still read a file on disk or make changes you don't want. The fence raises the bar; the real backstops are secrets kept off disk and the OS sandbox and your judgement.
 - **Not audited.** This framework was generated for the most part by Claude with human guidance - but no human security review has been performed on this code. See [SECURITY.md](SECURITY.md).
+- **Not checked everywhere yet.** One host, one runner adapter, one transport: Claude Code at 2.1.295 or later, the node --test reporter read by scripts/verify-local.cjs, and the stage commit; any other host, any other test runner (its RED is taken on its exit code with the labels unread, and the orchestrator judges whether the failures are the approved tests), an artifact store and a separate evidence ref are unsupported on this path. On Windows a killed test process and a test file that fails to load both reach node --test as exit code 1 with no signal, so a RED there whose only failures are file-level is classified cancelled_or_load and the release refuses it, naming both readings (deterministic enforcement at the release): make the test fail by an assertion, or run the RED on a POSIX host. The records are checked against each other and against the commit, never against their author: anyone who can write the repository can rewrite a record together with its manifest hash and evidence.cjs --verify still passes, so a fabricated record is outside the local trust boundary this path claims (observed evidence, not proof of authorship).
 
 </details>
 
@@ -260,7 +261,7 @@ The generated project's verification floor runs in three lanes over one registry
 
 Details and every toggle: [FRAMEWORK-CONFIG.md](sbak/FRAMEWORK-CONFIG.md).
 
-**The overhead is real.** In a controlled two-arm trial on a small **solo** markdown-to-HTML CLI, the framework arm ran **over 10× the cost and time** of a lightweight control loop, and the trial's own ratified adjudication called out two missed thresholds, adaptability and economic justification **for that project class** (it passed the other four, including one evidence-bound prevented defect). If your project looks like that one, you are betting that the coding quality and outcome are worth the added overhead; see [WHY-THIS-KIT.md](WHY-THIS-KIT.md) and [limitations.md](docs/limitations.md). The full trial record is not part of this release; the measured figures are in [WHY-THIS-KIT.md](WHY-THIS-KIT.md).
+**The cost against a lighter loop is not measured on this release.** The trial that measured it ran on an earlier release, before the weight was cut; that result no longer describes the kit, and it is being re-run. The result will be published here.
 
 </details>
 
@@ -278,11 +279,11 @@ Skip the bootstrap entirely: run in terminal `node scripts/set-mode.cjs orchestr
 <details>
 <summary><strong>What's in the box</strong></summary>
 
-The ZIP - and the `sbak/` payload of this repository, which is the same set - is 207 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
+The ZIP - and the `sbak/` payload of this repository, which is the same set - is 210 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
 
 | Directory | Files | What it is for you |
 |---|---|---|
-| `sbak/templates/` | 115 | Copied into your project by the bootstrap; never read here. |
+| `sbak/templates/` | 118 | Copied into your project by the bootstrap; never read here. |
 | `sbak/prompts/` | 23 | The verifier's seeded-defect exam; runs itself. |
 | `sbak/validators/` | 29 | Enforcement (the project-floor validators plus mode-specific and append-only checkers, `lib/`, and docs); CI runs it. |
 | `sbak/scripts/` | 18 | You run 2–3, read none. |
@@ -314,12 +315,12 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 **Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing.
 
-**Manual:** download `sbak-v1.0.9-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
+**Manual:** download `sbak-v1.0.10-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.10-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.10-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
@@ -329,7 +330,7 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -340,7 +341,7 @@ Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt

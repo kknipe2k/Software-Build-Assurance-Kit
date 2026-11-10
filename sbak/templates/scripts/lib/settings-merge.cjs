@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/lib/settings-merge.cjs
 //
 // The VERIFIED .claude/settings.json merge (M27.B, KF-56; rider §4 + owner
@@ -174,6 +174,37 @@ function flattenRegistrations(parsed) {
   }
   return out;
 }
+// M34.6.A: the one rule every door reads for a settings object that switches the hooks off.
+// Claude Code reads disableAllHooks after settings precedence, and `true` in a project or local file
+// turns off every project hook, the red gate included (hooks reference, "Disable or remove hooks",
+// quoted 2026-11-03). `false` is the safe value (it outranks a user-level true) and passes.
+// -> null | 'carries "disableAllHooks": <value>, which turns off every hook in this project, the red gate included'
+function disablingFinding(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) || !Object.prototype.hasOwnProperty.call(obj, 'disableAllHooks')) return null;
+  if (obj.disableAllHooks === false) return null;
+  return `carries "disableAllHooks": ${JSON.stringify(obj.disableAllHooks)}, which turns off every hook in this project, the red gate included`;
+}
+// The kit's hook policy over a settings object (the door's floor, readiness's effective read): every
+// kit registration present by event, matcher and command identity, and each onFailure the kit
+// carries on it. -> [finding] in the kit's order, the door's own words
+function hookPolicyFindings(obj, kit) {
+  const out = [];
+  const regs = flattenRegistrations(obj);
+  const have = new Set(regs.map((r) => `${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}`));
+  const fields = new Set(regs.filter((r) => r.onFailure).map((r) => `${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}\u0000${r.onFailure}`));
+  // the pre-M32.I four-source SessionStart form is the same kit registration, as the merge reads it
+  // (legacySessionStartWired): a project adopted before it is wired, not missing a registration
+  const hooksObj = obj && obj.hooks && typeof obj.hooks === 'object' && !Array.isArray(obj.hooks) ? obj.hooks : {};
+  const ssLegacy = legacySessionStartWired(hooksObj, kit.registrations.filter((r) => r.event === 'SessionStart' && r.matcher === null).map((r) => r.command));
+  for (const r of kit.registrations) {
+    const k = `${r.event}\u0000${r.matcher === null ? '\u0001' : r.matcher}\u0000${commandIdentity(r.command)}`;
+    if (!have.has(k) && r.event === 'SessionStart' && r.matcher === null && ssLegacy) continue;
+    if (!have.has(k)) { out.push(`lacks the kit's hook registration ${r.event}/${r.matcher === null ? '-' : r.matcher} ${r.command}`); continue; }
+    if (r.onFailure && !fields.has(`${k}\u0000${r.onFailure}`)) out.push(`lacks "onFailure": "${r.onFailure}" on the kit's hook registration ${r.event}/${r.matcher === null ? '-' : r.matcher} ${r.command}`);
+  }
+  return out;
+}
+
 // Separators are escape-spelled control characters (never raw bytes in source):
 // NUL cannot appear in a JSON-parsed event/matcher/command string, so the key
 // is collision-free; SOH stands in for "no matcher" as its own identity.
@@ -352,9 +383,14 @@ function verifyMerged(candidate, expect) {
   for (const r of expect.addedRegs) {
     if (!cset.has(regKey(r))) errs.push('kit registration missing: ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
   }
-  const field = new Set(flattenRegistrations(candidate).filter((r) => r.onFailure).map((r) => regKey(r) + '\u0000' + r.onFailure));
+  // M34.6.A: the field is checked by command IDENTITY, as the merge that set it matched the
+  // registration (a pre-M32.A bare `node .claude/hooks/<hook>.cjs` is the same kit registration as the
+  // prefixed form). Keyed by the raw command, a field set on a bare-form hook was never found, and the
+  // whole merge aborted, so the red gate's onFailure could never land on such a project.
+  const idKey = (r) => r.event + '\u0000' + (r.matcher === null ? '\u0001' : r.matcher) + '\u0000' + commandIdentity(r.command);
+  const field = new Set(flattenRegistrations(candidate).filter((r) => r.onFailure).map((r) => idKey(r) + '\u0000' + r.onFailure));
   for (const r of (expect.addedRegs || []).concat(expect.fieldSet || [])) {
-    if (r.onFailure && !field.has(regKey(r) + '\u0000' + r.onFailure)) errs.push('kit registration without its "onFailure": "' + r.onFailure + '": ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
+    if (r.onFailure && !field.has(idKey(r) + '\u0000' + r.onFailure)) errs.push('kit registration without its "onFailure": "' + r.onFailure + '": ' + r.event + '/' + (r.matcher === null ? '-' : r.matcher) + ' ' + r.command);
   }
   const replaced = expect.replacedRegs || [];
   for (const r of flattenRegistrations(expect.original)) {
@@ -419,6 +455,14 @@ function applySettingsMerge(opts) {
     log('ERROR      ' + SETTINGS_REL + ' is UNPARSEABLE (' + parseWhy + ') — the file was NOT replaced and adopt never will replace it. '
       + 'Fix the JSON by hand (your original is archived at ' + relArchive(archivePath) + '), then re-run --adopt to merge the kit hooks.');
     return { status: 'unparseable', conflictCount: 0, addedCount: 0, dedupedCount: 0, archivePath };
+  }
+
+  // M34.6.A: a live file that switches the hooks off is refused, never stripped: the key is
+  // the person's to remove, and adopt reports activation INCOMPLETE until it is gone.
+  const off = disablingFinding(original);
+  if (off) {
+    log('ERROR      ' + SETTINGS_REL + ' ' + off + '; the agent cannot edit this file: remove the key in your own editor (or place a copy without it: node scripts/kit-update.cjs --place-settings <copy>), then re-run --adopt');
+    return { status: 'disabling', conflictCount: 0, addedCount: 0, dedupedCount: 0 };
   }
 
   const m = mergeSettings({ live: original, kit });
@@ -542,4 +586,6 @@ module.exports = {
   mergeSettings,
   verifyMerged,
   applySettingsMerge,
+  disablingFinding, // M34.6.A: the door, adopt, migrate and readiness read this one rule
+  hookPolicyFindings,
 };

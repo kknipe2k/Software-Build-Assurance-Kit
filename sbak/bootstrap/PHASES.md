@@ -170,7 +170,7 @@ Iterate with user until M01 Phase doc is accepted. The XML stage prompts (Full) 
 
 The bootstrap is complete. First surface the final state - it is what the bootstrap commit carries:
 
-- All scaffold files generated and listed (with realistic counts: ~54 for Lite, ~121 for Full (the unarmed reference; +3 files when a risk trigger arms the ledger workflow, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
+- All scaffold files generated and listed (with realistic counts: ~56 for Lite, ~124 for Full (the unarmed reference; +3 files when a risk trigger arms the ledger workflow, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`) — including Phase 1/4 outputs, not just the always-generated set; derived from `sbak/golden-manifest.json` — see the counting note in `sbak/templates/CALIBRATION-INTERVIEW.md`)
 - The project's `CLAUDE.md` placed via `node scripts/kit-update.cjs --place-project-claude` — the bootstrap root replaced, or, on a combined root (the installer's import line), merged: the person's file kept byte-for-byte, the project rules at `CLAUDE.sbak.md`
 - `project-config.md` written with the agreed tier and toggles
 - `.claude/` hooks installed; the SessionStart hook prints the stamp + orientation manifest on the next session (session-start entries inlined, the rest read at their `when:` and checked at the gate)
@@ -186,8 +186,8 @@ The bootstrap is complete. First surface the final state - it is what the bootst
 Then three steps, in this order, and nothing else:
 
 1. **The bootstrap commit.** Surface the commit - the final state above and a one-line commit message; on the owner's `commit` word, commit the scaffold. G1 holds: no other word commits, and the bootstrap commit is the project's first commit, so the worktree split is available immediately after it - there is no zero-commit interim to work around.
-2. **The READY line.** Run `node scripts/kit-update.cjs --ready` and quote its output verbatim. A passing run prints exactly one line - `READY. Project committed at <short sha>. Next: open a fresh terminal as the orchestrator.` - and nothing else. Any `NOT READY:` line means there is no READY line: stop with the STOPPED block (§If something goes wrong), and never print step 3 over a failed check.
-3. **The leaving-bootstrap block.** Print this block verbatim - the Full block - and nothing after it:
+2. **The READY line.** Run `node scripts/kit-update.cjs --ready --model <model>` and print its output verbatim, composing nothing. A passing run prints the READY line - `READY. Project committed at <short sha>. Next: open a fresh terminal as the orchestrator.` - then the role line and, in this window (role none), the leaving-bootstrap block of step 3, filled from the project. Any `NOT READY:` line means there is no READY line: stop with the STOPPED block (§If something goes wrong), and never print step 3 over a failed check.
+3. **The leaving-bootstrap block.** `--ready` prints it after the READY line, and you print that output verbatim and nothing after it; never compose it - its step 2 carries the set-mode line and its step 3 the start word, which a composed block has dropped. The Full block, as `--ready` prints it in cmd:
 
    ```
    Bootstrap is done. Five steps:

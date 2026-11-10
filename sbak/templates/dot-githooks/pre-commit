@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.9
+# @kit-version 1.0.10
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
@@ -22,6 +22,14 @@ staged_all=$(git diff --cached --name-only --diff-filter=ACMR) || {
   exit 1
 }
 
+# --- the evidence path (M34.6.B): a stage commit carries its gate.json --------
+# While a stage on the evidence path is open, the commit is refused unless the index carries the
+# stage's .claude/evidence/<stage>/gate.json and manifest.json (the stage-end publish writes them).
+# A stage opened before the evidence path says so in one line and commits as before. A project
+# without scripts/evidence.cjs cannot have opened a stage on the path (the open needs it), so there
+# is nothing to check; the ci step runs the script unguarded and fails closed.
+if [ -f scripts/evidence.cjs ]; then node scripts/evidence.cjs --pre-commit || exit 1; fi
+
 # --- the `[ -f ]` guard policy: VISIBLE SKIP AT FIRE-TIME (KF-48, M27.D) ------
 # Every gate below is guarded by `[ -f validators/…`, because a lighter tier legitimately
 # ships a SUBSET of the validator set — a hard requirement would false-block Lite on its
@@ -33,13 +41,31 @@ staged_all=$(git diff --cached --name-only --diff-filter=ACMR) || {
 #   2. the guard moved INSIDE the staged-file filter, so absence is disclosed exactly when
 #      the gate WOULD have fired — never silently skipped, and never as chatter on the
 #      ordinary commits of a lighter tier that touches none of these surfaces.
-# A NOTE here means one of two things, both worth seeing: this project's tier does not carry
-# that gate, or the gate was deleted. It names the validator and the one-command repair.
+# M34.6.A: the two cases are told apart, by the same required set kit-update --ready's
+# managed row reads (node scripts/kit-update.cjs --required <file>: the row's render conditions
+# against project-config.md). A gate this project's tier or toggles do not render keeps the NOTE;
+# a REQUIRED gate that is missing REFUSES the commit, and so does a query that cannot answer
+# (kit-update gone or broken): fail-closed, the unknown is never a pass.
 gate_not_installed() {
-  echo "NOTE  gate NOT INSTALLED in this project: $1" >&2
-  echo "      Its staged-file filter matched, so this commit is going through UNCHECKED by it." >&2
-  echo "      A lighter tier ships a subset by design; a deleted gate does not. Restore the" >&2
-  echo "      full set for this project's tier:  node scripts/kit-update.cjs --adopt" >&2
+  req=$(node scripts/kit-update.cjs --required "$1" 2>/dev/null) || req=""
+  case "$req" in
+    "not required"*)
+      echo "NOTE  gate not rendered in this project: $1 (${req#not required })" >&2
+      echo "      Its staged-file filter matched, and this project's tier or toggles do not carry it," >&2
+      echo "      so this commit goes through unchecked by it." >&2
+      return 0
+      ;;
+  esac
+  echo "FAIL  gate NOT INSTALLED in this project: $1" >&2
+  if [ -n "$req" ]; then
+    echo "      This project's tier and toggles require it ${req#required }, so the commit is refused." >&2
+  else
+    echo "      The required set could not be read (node scripts/kit-update.cjs --required did not answer)," >&2
+    echo "      so the commit is refused: an unknown is never a pass." >&2
+  fi
+  echo "      Restore the full set for this project's tier:  node scripts/kit-update.cjs --adopt" >&2
+  echo "      (when scripts/kit-update.cjs itself is gone:  node sbak/templates/scripts/kit-update.cjs --adopt)" >&2
+  exit 1
 }
 
 # --- framework validators (only fire when relevant files are staged) ----------
@@ -223,12 +249,15 @@ if [ -n "$staged_rm" ]; then
 fi
 
 # G14 verifier-proof: the seeded-defect calibration set + the
-# recorded FNR are the verifier-proof. The STATIC FLOOR runs here — when the calibration set
+# scorer's FNR are the verifier-proof. The STATIC FLOOR runs here — when the calibration set
 # (prompts/calibration/**) or a *-findings.md is staged, validate-calibration.cjs checks the
 # set shadows the full §8.5 catalog, every fixture is labeled + SEALED (no answer in the
-# fixture), and a "Sound" findings file records a calibration block. Fail-closed on a git error.
-# HONEST LOCUS: this floor only proves the harness is present + wired — the CATCH is the FNR
-# recorded at V-time (agent judgment), NOT a pre-commit check (you can't run a judge in a smoke
+# fixture), and refuses a "Sound" findings file without the scorer's calibration block, with
+# verdicts changed after scoring, or with an FNR other than 0 (deterministic enforcement at the
+# pre-commit). Fail-closed on a git error.
+# HONEST LOCUS: this floor only proves the harness is present + wired — the catch is agent
+# judgment (the verifier's verdicts) and the rate is the scorer's (observed evidence, written by
+# the orchestrator's run, never by the verifier), NOT a pre-commit check (you can't run a judge in a smoke
 # test). Severity follows the same model: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a calibration file or a findings file is staged.
 staged_cal=$(printf '%s\n' "$staged_all" | grep -E '^prompts/calibration/|-findings\.md$' || true)
 if [ -n "$staged_cal" ]; then

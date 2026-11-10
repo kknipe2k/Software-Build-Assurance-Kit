@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -149,6 +149,8 @@ function doSplit(branch) {
   process.stdout.write(SHELL_FORMS[sh.shell].launch + '\n');
   const others = Object.keys(SHELL_FORMS).filter((s) => s !== sh.shell).map((s) => `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)}, the same set-mode line, then ${SHELL_FORMS[s].launch}`);
   process.stdout.write(`(other shells - ${others.join(' / ')})\n`);
+  // M34.6.E item 7 (R-174): a stage opens only while the orchestrator listens, so the split names it.
+  process.stdout.write('\nBefore the build window opens its first stage, put THIS window on listen: /listen M01.A (a stage opens only while the orchestrator listens; for a later stage, its id).\n');
 }
 
 // M32.1.A (drive note 9): the launch block renders in the shell the person pastes into, read from

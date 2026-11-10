@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/lib/hook-root.cjs
 //   (twin: templates/scripts/lib/hook-root.cjs - byte-identical; ships via kit-update's table)
 //

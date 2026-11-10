@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -32,6 +32,10 @@ const { spawnSync } = require('child_process');
 // the project tree; the inherited git env is scrubbed (a lesson shipped).
 const sandbox = require(path.join(__dirname, 'lib', 'sandbox.cjs'));
 sandbox.scrubProcessEnv();
+// The mini-smoke plays the person, whose own terminal has no session id: run from a Claude Code
+// session, an inherited one would make its release and clear a session's, which refuse without the
+// permission prompt on record.
+delete process.env.CLAUDE_CODE_SESSION_ID;
 
 const PROJ = process.cwd();
 const TMP = sandbox.sandboxRoot('project-smoke-');
@@ -251,9 +255,19 @@ vPair('validate-risk-matrix.cjs',
     `# M02\n\n${FENCE}xml\n<work_stage_prompt id="M02.B">\n<risk_declaration triggers="credentials">\n<property name="normal">covered-by: x — test: t</property>\n</risk_declaration>\n</work_stage_prompt>\n${FENCE}\n`)]).code,
   'a risk declaration omitting matrix properties');
 
+// A Sound findings file passes only with the scorer's calibration block bound to the verifier's
+// verdicts by sha256 (scripts/calibration-score.cjs writes it): a one-label synthetic set and a
+// scored file over it, the hash computed here over the verdicts block's body.
 vPair('validate-calibration.cjs',
-  () => vRun('validate-calibration.cjs', [write('M01.V-ok-findings.md',
-    `# Findings\n\n${FENCE}verdict\nstatus: Sound\n${FENCE}\n\n${FENCE}calibration\nseeds caught: 8/8\nfnr: 0\n${FENCE}\n`)]).code,
+  () => {
+    write('cal-set/fixtures/artifact-01.md', '# Excerpt\n\nAn artifact with a planted defect.\n');
+    write('cal-set/labels/false-na.label.md', '---\nfixture: artifact-01.md\nclass: false-na\nexpected: must-flag\n---\n');
+    const verdicts = 'artifact-01.md: false-na\njudged-from: content\n';
+    const sha = require('crypto').createHash('sha256').update(verdicts, 'utf8').digest('hex');
+    return vRun('validate-calibration.cjs', ['--set', path.join(TMP, 'cal-set'), write('M01.V-ok-findings.md',
+      `# Findings\n\n${FENCE}verdict\nstatus: Sound\n${FENCE}\n\n${FENCE}calibration-verdicts\n${verdicts}${FENCE}\n\n` +
+      `${FENCE}calibration\nscored-by: calibration-score.cjs verdicts-sha256 ${sha} at 2026-01-01T00:00:00.000Z\nseeds: 1\ncaught: 1\nFNR: 0 (0 of 1)\nmissed: none\n${FENCE}\n`)]).code;
+  },
   () => vRun('validate-calibration.cjs', [write('M01.V-bad-findings.md',
     `# Findings\n\n${FENCE}verdict\nstatus: Sound\n${FENCE}\n\nNo calibration block.\n`)]).code,
   'a Sound verdict with no calibration block');

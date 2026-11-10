@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // validators/validate-calibration.cjs
 //
 // The G14 verifier-proof gate, shipped framework-wide so
@@ -17,11 +17,13 @@
 //     • the seal holds (a fixture does NOT contain its own answer token), and
 //     • a "Sound" verifier-findings file RECORDS a calibration-result block (seeds caught / FNR).
 //   It does NOT — and structurally CANNOT — prove the verifier actually CAUGHT the seeds. THE
-//   CATCH IS AGENT JUDGMENT, recorded at V-time as the FNR (false-negative rate) — you can't run
-//   a judge in a pre-commit smoke test, so the catch is NOT a pre-commit check. Conflating
+//   CATCH IS AGENT JUDGMENT (the verifier's verdicts) and the RATE IS THE SCORER'S (the FNR,
+//   false-negative rate, written by node scripts/calibration-score.cjs, which the orchestrator runs:
+//   observed evidence, never the verifier's) — you can't run a judge in a pre-commit smoke test,
+//   so the catch is NOT a pre-commit check. Conflating
 //   "the harness is present" with "the verifier caught the seeds" is the exact presence-≠-
 //   effectiveness theater these gates exist to kill. Floor (this validator, present + wired) + adversary
-//   (the V-run FNR) = a real gate; neither alone is. See prompts/calibration/README.md.
+//   (the verifier's verdicts, scored by the program) = a real gate; neither alone is. See prompts/calibration/README.md.
 //
 // ── THE MECHANICAL FLOOR ───────────────────────────────────────────────────────────────────
 //   --set <dir>  (the calibration set, default prompts/calibration/):
@@ -48,9 +50,26 @@
 //       seal-broken finding. FNR=0 on a set that announces its classes proves the verifier can
 //       READ, not that it can DETECT (the announcement-leak class, fixed 2026-08-01; the leak
 //       probe measured 11/11 from filenames+headings alone pre-fix).
-//   <findings-file>...  (or --staged over *-findings.md):
-//     • a file asserting a "Sound" verdict with NO fenced ```calibration block (seeds / FNR) →
-//       finding. FNR unrecorded = the verifier-proof never ran for this milestone → untrusted.
+//   <findings-file>...  (or --staged over *-findings.md; [--set <dir>] names the set, default
+//   prompts/calibration under the cwd; [--catalog <protocol.md>] binds seeds to the catalog too):
+//     • M34.6.D - the score is the scorer's, never the verifier's. The verifier writes its blind
+//       verdicts in a ```calibration-verdicts block (agent judgment); node
+//       scripts/calibration-score.cjs, run by the orchestrator, writes the ```calibration block
+//       (observed evidence). A file asserting a "Sound" verdict must carry: exactly one verdicts
+//       block; exactly one calibration block whose `scored-by:` line is the scorer's
+//       (`calibration-score.cjs verdicts-sha256 <64 hex> at <ISO time>`) and whose hash equals the
+//       sha256 of the verdicts block's body as normalize() reads it (BOM dropped, CR/CRLF to LF,
+//       fences excluded); `seeds` an integer equal to the set's label count (and, with --catalog,
+//       to the §8.5 numbered count plus the owed extras); `caught` equal to `seeds`; FNR a number
+//       equal to 0. `scored-by: pending` is refused naming the scorer line to run; a block with no
+//       scorer line (the self-reported shape) is refused; a verdicts block edited after scoring is
+//       refused by the hash. A file that does not assert Sound is not refused on the blocks.
+//       Blocks are selected by EXACT label (the shared extractor matches a label by prefix, so
+//       ```calibration would also return ```calibration-verdicts).
+//     • HONEST LIMIT: this checks the record's form and its binding, never the verdicts against the
+//       labels (a re-scoring validator would tell a verifier who runs it how many seeds it missed).
+//       A scored-by line typed by hand with the right hash and numbers passes - the local trust
+//       boundary every record on the evidence path shares.
 //
 // Severity / the toggle (mirrors test_honesty / risk_matrix, FRAMEWORK-CONFIG §4.17):
 //   default (block)  — any finding → exit 1.
@@ -59,7 +78,7 @@
 //
 // Usage:
 //   node validators/validate-calibration.cjs [--warn] --set <dir> [--catalog <protocol.md>]  # check the set (+ reverse binding)
-//   node validators/validate-calibration.cjs [--warn] <findings.md>...     # check findings files
+//   node validators/validate-calibration.cjs [--warn] [--set <dir>] [--catalog <protocol.md>] <findings.md>...  # check findings files
 //   node validators/validate-calibration.cjs [--warn] --staged             # staged set + findings
 //
 // Exit 0 = clean (or all findings downgraded by --warn). Exit 1 = ≥1 blocking finding.
@@ -72,13 +91,14 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 
 // EXTEND, DON'T FORK: the shared line-anchored, block-bound extractor. The unanchored-presence
 // defect runs in BOTH directions, closed here at the primitive: the
 // verdict is read from a line-START field (not a quoted mention) and the calibration record from
 // a real ```calibration block's BODY (not a decoy fence + a stray prose FNR).
-const { extractBlocks, normalize } = require('./lib/fenced-block.cjs');
+const { extractBlocksWithPos, normalize, escapeRe } = require('./lib/fenced-block.cjs');
 
 // The 11 escape classes — the SHADOW of STAGE-PROMPT-PROTOCOL.md §8.5 (the canonical source).
 // The first 10 are 1:1 with the §8.5 numbered enumeration; the 11th (non-covering-test) is the
@@ -285,21 +305,106 @@ function checkCatalogBinding(catalogPath) {
   return [];
 }
 
-// Check a verifier-findings file: a "Sound" verdict must RECORD a calibration-result block.
-// The unanchored-presence defect (BOTH directions) closed at the shared primitive:
-//   • fail-CLOSED (:197) — the verdict is read from a LINE-ANCHORED `status:`/`verdict:` field
-//     (in or out of a ```verdict fence). A `status: Sound` QUOTED mid-prose (backtick/text before
-//     it) is not the file's verdict, so an illustrative mention no longer false-blocks.
-//   • fail-OPEN (:198) — the calibration record must be a LINE-ANCHORED ```calibration block
-//     whose BODY carries the FNR (block-bound). A decoy fence, or an FNR only in prose OUTSIDE
-//     the block, no longer satisfies the record requirement.
-function checkFindings(file, text) {
+// M34.6.D - blocks by EXACT label. The shared extractor matches a fence label by prefix (its
+// opening pattern is the label then any text), so ```calibration would also return a
+// ```calibration-verdicts block. This filter keeps a block only when its opening fence's first
+// word IS the label (an info string after whitespace still allowed). Line-anchored and CRLF/BOM-
+// tolerant through the shared extractor; the shared primitive itself is untouched.
+function exactBlocks(text, label) {
+  const lines = normalize(text).split('\n');
+  const open = new RegExp('^[ \\t]*```' + escapeRe(label) + '(?:[ \\t].*)?$');
+  return extractBlocksWithPos(text, label).filter((b) => open.test(lines[b.startLine - 1] || ''));
+}
+
+// The verifier's verdicts block body -> { map: fixture -> class|clean, judged, malformed, dupes }.
+// Every non-blank line is `<fixture filename>.md: <token>` or `judged-from: content`.
+function verdictsOf(body) {
+  const out = { map: new Map(), judged: false, malformed: [], dupes: [] };
+  normalize(body).split('\n').forEach((raw, i) => {
+    const l = raw.trim();
+    if (!l) return;
+    if (/^judged-from:\s*content$/.test(l)) { out.judged = true; return; }
+    const m = l.match(/^(\S+\.md):\s*(\S+)$/i);
+    if (!m) { out.malformed.push({ line: i + 1, text: l }); return; }
+    if (out.map.has(m[1])) { if (out.dupes.indexOf(m[1]) === -1) out.dupes.push(m[1]); return; }
+    out.map.set(m[1], m[2]);
+  });
+  return out;
+}
+
+// The binding: sha256 hex over the verdicts block's body as normalize() reads it (BOM dropped,
+// CR/CRLF to LF), every body line with its LF, the fences excluded - so a checkout's line-ending
+// conversion never breaks it.
+function verdictsSha(body) { return crypto.createHash('sha256').update(normalize(body), 'utf8').digest('hex'); }
+
+// The time's digits are written \d{2} on purpose: two \d escapes either side of a colon read as a
+// Windows drive path to the release scrub's absolute-path rule.
+const SCORED_BY = /^calibration-score\.cjs verdicts-sha256 ([0-9a-f]{64}) at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)$/;
+const SCORER_LINE = 'node scripts/calibration-score.cjs';
+function blockField(body, key) {
+  const m = normalize(body).match(new RegExp('^[ \\t]*' + escapeRe(key) + '[ \\t]*:[ \\t]*(.*?)[ \\t]*$', 'm'));
+  return m ? m[1] : null;
+}
+function labelCount(setDir) {
+  const dir = path.join(setDir, 'labels');
+  try { return fs.readdirSync(dir).filter((n) => /\.label\.md$/i.test(n)).length; }
+  catch (e) { failClosed(`cannot enumerate calibration labels at ${dir}: ${e && e.message ? e.message : 'unknown error'}`); }
+  return 0;
+}
+
+// Check a verifier-findings file. A "Sound" verdict must carry the scorer's calibration block,
+// bound to the verifier's verdicts. The unanchored-presence defect (BOTH directions) stays closed:
+//   • fail-CLOSED - the verdict is read from a LINE-ANCHORED `status:`/`verdict:` field (in or
+//     out of a ```verdict fence); a `status: Sound` QUOTED mid-prose is not the file's verdict.
+//   • fail-OPEN - the record must be LINE-ANCHORED, EXACT-label blocks; a decoy fence or an FNR
+//     only in prose OUTSIDE the block never satisfies it.
+// ctx: { setDir, catalogPath }.
+function checkFindings(file, text, ctx) {
+  const c = ctx || {};
   const hasSound = /^[ \t]*(?:status|verdict)\s*:\s*`?Sound\b/im.test(normalize(text));
-  const hasCalBlock = extractBlocks(text, 'calibration').some((b) => /FNR/i.test(b));
-  if (hasSound && !hasCalBlock) {
-    return [`${file}: asserts a "Sound" verdict but records NO calibration-result block (a fenced \`\`\`calibration block with seeds caught / FNR). FNR unrecorded = the verifier-proof never ran for this milestone — untrusted (G14).`];
+  if (!hasSound) return [];
+  const cal = exactBlocks(text, 'calibration');
+  const ver = exactBlocks(text, 'calibration-verdicts');
+  if (!cal.length && !ver.length) {
+    return [`${file}: asserts a "Sound" verdict but records NO calibration-result block (a fenced \`\`\`calibration block written by ${SCORER_LINE}) and no calibration-verdicts block - the verifier-proof never ran for this milestone; untrusted (G14).`];
   }
-  return [];
+  if (!ver.length) return [`${file}: asserts a "Sound" verdict but carries no calibration-verdicts block - the verifier's blind verdicts are the exam the score is bound to (G14).`];
+  if (ver.length > 1) return [`${file}: carries ${ver.length} calibration-verdicts blocks - one exam, one block (G14).`];
+  if (!cal.length) return [`${file}: asserts a "Sound" verdict but records NO calibration-result block (a fenced \`\`\`calibration block written by ${SCORER_LINE}) (G14).`];
+  if (cal.length > 1) return [`${file}: carries ${cal.length} calibration blocks - one exam, one score (G14).`];
+  const body = cal[0].body;
+  const sb = blockField(body, 'scored-by');
+  if (sb === 'pending') {
+    return [`${file}: asserts a "Sound" verdict but the calibration block is not scored (scored-by: pending) - the orchestrator runs ${SCORER_LINE} --findings ${file} --session <the verifier's session id> (G14).`];
+  }
+  const m = SCORED_BY.exec(sb || '');
+  if (!m) {
+    return [`${file}: asserts a "Sound" verdict but the calibration block was not written by ${SCORER_LINE} (no scored-by: calibration-score.cjs verdicts-sha256 <hex> at <time> line) - a self-reported rate is not a score (G14).`];
+  }
+  const now = verdictsSha(ver[0].body);
+  if (m[1] !== now) {
+    return [`${file}: the calibration-verdicts block changed after scoring (verdicts-sha256 ${m[1].slice(0, 12)} in the block, ${now.slice(0, 12)} now) - the score is bound to the verdicts it scored (G14).`];
+  }
+  const findings = [];
+  const seedsV = blockField(body, 'seeds');
+  const caughtV = blockField(body, 'caught');
+  const fnrV = blockField(body, 'FNR');
+  const seeds = /^\d+$/.test(seedsV || '') ? Number(seedsV) : null;
+  const count = labelCount(c.setDir || 'prompts/calibration');
+  if (seeds === null || seeds !== count) findings.push(`${file}: seeds ${seedsV === null ? '(missing)' : seedsV} is not the calibration set's label count ${count} (G14).`);
+  if (c.catalogPath) {
+    let n = null;
+    try { n = catalogNumberedCount(fs.readFileSync(c.catalogPath, 'utf8')); } catch (_) { n = null; }
+    if (n === null) findings.push(`${file}: cannot count the §8.5 catalog in ${c.catalogPath} - refusing to bind seeds to it (fail-loud).`);
+    else if (seeds !== n + OWED_EXTRA.length) findings.push(`${file}: seeds ${seedsV} is not the shadowed catalog count ${n + OWED_EXTRA.length} (§8.5's ${n} numbered hunts plus ${OWED_EXTRA.length} owed extra) (G14).`);
+  }
+  const caught = /^\d+$/.test(caughtV || '') ? Number(caughtV) : null;
+  if (caught === null || seeds === null || caught !== seeds) findings.push(`${file}: caught ${caughtV === null ? '(missing)' : caughtV} of seeds ${seedsV === null ? '(missing)' : seedsV} - a Sound verdict needs every seed caught (FNR 0) (G14).`);
+  const fnrTok = String(fnrV || '').split(/\s+/)[0];
+  const fnr = fnrTok === '' ? NaN : Number(fnrTok);
+  if (!Number.isFinite(fnr)) findings.push(`${file}: FNR ${fnrV === null ? '(missing)' : fnrV} does not parse as a number (G14).`);
+  else if (fnr !== 0) findings.push(`${file}: FNR ${fnrV} is not 0 - a Sound verdict needs every seed caught (G14).`);
+  return findings;
 }
 
 // FAIL CLOSED: a `git diff --cached` failure must surface and exit non-zero.
@@ -325,7 +430,7 @@ function emit(findings, warn) {
     process.stderr.write(`\n${findings.length} calibration finding(s) (advisory — run without --warn to block). Review before the next milestone.\n`);
     process.exit(0);
   }
-  process.stderr.write(`\n${findings.length} calibration finding(s) block this commit (G14 — the seeded-defect set + the recorded FNR are the verifier-proof).\n`);
+  process.stderr.write(`\n${findings.length} calibration finding(s) block this commit (G14 — the seeded-defect set + the scorer's FNR are the verifier-proof).\n`);
   process.exit(1);
 }
 
@@ -340,12 +445,20 @@ function main() {
     process.exit(2);
   }
 
-  if (setIdx !== -1) {
-    const setDir = args[setIdx + 1];
-    if (!setDir || setDir.startsWith('--')) {
-      process.stderr.write('usage: validate-calibration.cjs [--warn] --set <dir> [--catalog <protocol.md>]\n');
-      process.exit(2);
-    }
+  const setArg = setIdx !== -1 ? args[setIdx + 1] : null;
+  if (setIdx !== -1 && (!setArg || setArg.startsWith('--'))) {
+    process.stderr.write('usage: validate-calibration.cjs [--warn] --set <dir> [--catalog <protocol.md>]\n');
+    process.exit(2);
+  }
+  // Positional findings files: every argument that is neither a flag nor a flag's value.
+  const valueAt = new Set([setIdx, catIdx].filter((i) => i !== -1).map((i) => i + 1));
+  const positional = args.filter((a, i) => !a.startsWith('--') && !valueAt.has(i));
+  // M34.6.D: findings mode reads the set (for the label count) from --set when given beside
+  // findings files, else prompts/calibration under the cwd; --catalog binds seeds to the catalog.
+  const ctx = { setDir: setArg || 'prompts/calibration', catalogPath };
+
+  if (setIdx !== -1 && positional.length === 0 && !args.includes('--staged')) {
+    const setDir = setArg;
     const findings = checkSet(setDir); // may fail-closed (exit 2) on an unreadable fixture
     // The REVERSE binding — opt-in via --catalog: also assert the §8.5 numbered catalog and
     // the shadowed set haven't drifted apart (a new §8.5 hunt with no fixture is FLAGGED).
@@ -364,13 +477,12 @@ function main() {
     for (const f of findingsFiles) {
       let text;
       try { text = fs.readFileSync(f, 'utf8'); } catch (e) { findings.push(`${f}: cannot read file (${e && e.message ? e.message : 'unknown error'})`); continue; }
-      findings.push(...checkFindings(f, text));
+      findings.push(...checkFindings(f, text, ctx));
     }
     emit(findings, warn);
     return;
   }
 
-  const positional = args.filter((a) => !a.startsWith('--'));
   if (positional.length === 0) {
     process.stderr.write('usage: validate-calibration.cjs [--warn] (--set <dir> | <findings.md>... | --staged)\n');
     process.exit(2);
@@ -379,9 +491,13 @@ function main() {
   for (const f of positional) {
     let text;
     try { text = fs.readFileSync(f, 'utf8'); } catch (e) { findings.push(`${f}: cannot read file (${e && e.message ? e.message : 'unknown error'})`); continue; }
-    findings.push(...checkFindings(f, text));
+    findings.push(...checkFindings(f, text, ctx));
   }
   emit(findings, warn);
 }
 
-main();
+// M34.6.D: one source for the catalog, the label reader, the set check and the verdicts' parser
+// and hash - scripts/calibration-score.cjs requires this module (the CLI runs only when invoked).
+module.exports = { REQUIRED_CLASSES, OWED_EXTRA, readLabels, checkSet, exactBlocks, verdictsOf, verdictsSha, catalogNumberedCount, checkFindings };
+
+if (require.main === module) main();

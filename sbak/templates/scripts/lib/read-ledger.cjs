@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/lib/read-ledger.cjs
 //   (kit source of truth: templates/scripts/lib/read-ledger.cjs)
 //
@@ -273,6 +273,17 @@ function readConfigValue(source, key) {
   const field = row || text.match(new RegExp(k + '\\s*[:*]+\\s*`?([A-Za-z0-9][\\w.-]*)`?', 'i'));
   return field && field[1] ? field[1].toLowerCase() : null;
 }
+// The list form beside it (M34.6.A, kit-update's required set reads risk_triggers through it): a
+// `key: [a, b]` line or a `| key | [a, b] |` row -> ['a', 'b'] (lowercased); `[]` -> []; absent or
+// an unfilled {{TOKEN}} -> null, so the caller decides what an unknown means.
+function readConfigList(source, key) {
+  const text = stripHtmlComments(source);
+  const k = key.replace(/_/g, '[_ ]');
+  const row = text.match(new RegExp('^\\|\\s*' + k + '\\s*\\|\\s*`?\\[([^\\]|\\n]*)\\]`?\\s*\\|', 'mi'));
+  const field = row || text.match(new RegExp(k + '\\s*[:*]+\\s*`?\\[([^\\]\\n]*)\\]', 'i'));
+  if (!field) return null;
+  return field[1].split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
 function operatingMode(root) {
   try { return readConfigValue(fs.readFileSync(path.join(root, 'project-config.md'), 'utf8'), 'operating_mode') || 'greenfield'; }
   catch (_) { return 'greenfield'; }
@@ -406,17 +417,46 @@ function recordedReads(root, scope) {
 }
 function recordedRefs(root, scope) { return new Set(recordedReads(root, scope).keys()); }
 
+// ---- the labels rule (M34.6.D, G14): a recorded read of a sealed calibration label voids the exam ----
+// Every file under <set>/labels/ (default prompts/calibration, the set the verifier is examined on) is
+// resolved to its canonical repo-relative path and hashed to its ref, the form the ledger stores; a
+// label whose ref is among `refs` is returned by its repo-relative path. Ref against ref: the ledger
+// never carries a path. A label that does not resolve inside the root is returned as unresolved (a
+// caller that cannot compare refuses rather than passing a check it could not run). A fixture read is
+// never compared: only labels/ is enumerated. The rule sees what the ledger recorded (a Read-tool read
+// or a shell command naming the file); a glob, a directory search or another program is outside it.
+// -> { read: [rel...], unresolved: [abs...] }
+const CALIBRATION_SET = 'prompts/calibration';
+function labelsRead(root, refs, setDir) {
+  const set = setDir ? path.resolve(root, setDir) : path.join(root, ...CALIBRATION_SET.split('/'));
+  const dir = path.join(set, 'labels');
+  const out = { read: [], unresolved: [] };
+  let names = [];
+  try { names = fs.readdirSync(dir).sort(); } catch (_) { return out; }
+  for (const n of names) {
+    const abs = path.join(dir, n);
+    let isFile = false; try { isFile = fs.statSync(abs).isFile(); } catch (_) { isFile = false; }
+    if (!isFile) continue;
+    const canonical = canonicalRel(root, abs);
+    if (canonical === null) { out.unresolved.push(abs); continue; }
+    if (refs.has(refFor(canonical))) out.read.push(path.relative(realOrLexical(root), realOrLexical(abs)).split(path.sep).join('/'));
+  }
+  return out;
+}
+
 // The check. Returns { boundary, required: [rel...], missing: [rel...], notBuilt, stale, reread,
-// errors } - the last four name a view entry's state, each with its rebuild command. The recorded
-// scope is the stage at stage-open; at verify / closeout it is the role's newest session, and a
-// `stage` there only names the view.
+// errors, labels } - notBuilt to errors name a view entry's state, each with its rebuild command;
+// labels (verify only, M34.6.D) names each calibration label the session read. The recorded scope
+// is the stage at stage-open; at verify / closeout it is the role's newest session, and a `stage`
+// there only names the view.
 function checkReads(root, opts) {
   const o = opts || {};
   const boundary = o.boundary || 'stage-open';
   const role = o.role || currentRole(root) || 'work';
   const required = requiredReads(root, boundary, o.stage, role);
   const reads = recordedReads(root, boundary === 'stage-open' && o.stage ? { stage: o.stage } : { role });
-  const res = { boundary, required: required.map((r) => r.display), missing: [], notBuilt: [], stale: [], reread: [], errors: [] };
+  const res = { boundary, required: required.map((r) => r.display), missing: [], notBuilt: [], stale: [], reread: [], errors: [], labels: [] };
+  if (boundary === 'verify') res.labels = labelsRead(root, new Set(reads.keys())).read;
   const covered = new Set(); // the sources of every current, read view (R-68 Q1)
   for (const r of required.filter((x) => x.kind === 'view')) {
     const cmd = `node scripts/stage-view.cjs ${r.stage || VIEW_TARGET}${r.role !== 'work' ? ' --role ' + r.role : ''}`;
@@ -460,7 +500,9 @@ function measure(root, stage) {
     const touches = l.events.some((e) => e.stage === stage);
     for (const e of l.events) {
       if (e.event === 'stage_opened' && e.stage === stage && (!opened || e.at < opened)) opened = e.at;
-      if (touches && typeof e.session === 'string' && e.session && (!sessions.has(e.session) || (!sessions.get(e.session) && e.role))) sessions.set(e.session, e.role || null);
+      // M34.6.B: the open's probe drives the red gate as session sbak-probe (scripts/lib/evidence.cjs
+      // PROBE_SESSION); it is no reader, so it adds no session-start list to the bytes read.
+      if (touches && typeof e.session === 'string' && e.session && e.session !== 'sbak-probe' && (!sessions.has(e.session) || (!sessions.get(e.session) && e.role))) sessions.set(e.session, e.role || null);
     }
   }
   const minutes = opened ? Math.max(0, Math.floor((Date.now() - Date.parse(opened)) / 60000)) : null;
@@ -581,6 +623,42 @@ function stageSectionAt(root, stage) {
   return { ok: false, why: `no section for ${stage} in ${docPaths.join(', ')} (an H2 "## §${stage} ..." or "## Stage ${rest} ...")` };
 }
 
+// ---- the refs a stage prompt names (M34.6.A, item n): the scope the RED is approved against is the
+// stage section AND every <scope_locks>, <deliverable> and <acceptance_criteria> the prompt names by
+// ref, plus docs/scope.md when present. Transitive refs are not followed: the prompt's own refs are
+// the contract. -> [{ tag, ref, section | null }] in prompt order
+const REF_TAGS = ['scope_locks', 'deliverable', 'acceptance_criteria'];
+function stagePromptRefs(sectionText, docText, stage) {
+  const re = new RegExp(`<(\\w+)_stage_prompt\\s+id="${reEscape(stage)}"[^>]*>([\\s\\S]*?)</\\1_stage_prompt>`);
+  const m = re.exec(String(sectionText || '')) || re.exec(String(docText || ''));
+  if (!m) return [];
+  const out = [];
+  const tagRe = new RegExp(`<(${REF_TAGS.join('|')})\\b([^>]*?)/?>`, 'g');
+  let t;
+  while ((t = tagRe.exec(m[2])) !== null) {
+    const ref = /\bref="([^"]*)"/.exec(t[2]);
+    if (!ref) continue; // the inline form names no file
+    const sec = /\bsection="([^"]*)"/.exec(t[2]);
+    out.push({ tag: t[1], ref: ref[1].trim(), section: sec && sec[1].trim() ? sec[1].trim() : null });
+  }
+  return out;
+}
+// One section of one doc at HEAD (CRLF read as LF): the one heading outside a fence whose text, a
+// leading section sign stripped, is `heading` or starts with it followed by a space, a colon or a
+// dash (so "M01.A" never matches "M01.A.5 CLI Prompt"), sliced to the next heading of the same or
+// higher level. No heading -> the whole file. -> { ok, doc, blob, text } | { ok: false, why }
+function sectionAt(root, doc, heading) {
+  const read = headReadAt(root, [doc]);
+  if (!read.ok) return { ok: false, why: read.why };
+  const d = read.map.get(doc);
+  if (!d) return { ok: false, why: 'is not at HEAD' };
+  if (heading === null || heading === undefined || heading === '') return { ok: true, doc, blob: d.blob, text: d.text, whole: true };
+  const l = mdLines(d.text); const hs = mdHeadings(l);
+  const hit = hs.filter((h) => { const x = h.text.replace(/^§\s*/, ''); return x === heading || (x.startsWith(heading) && /^[:\s—-]/.test(x.slice(heading.length))); });
+  if (hit.length !== 1) return { ok: false, why: `matches ${hit.length} headings` };
+  return { ok: true, doc, blob: d.blob, text: mdSliceFrom(l, hs, hit[0]) };
+}
+
 // The refusal lines a gate prints for a checkReads result, `label` naming what was checked.
 function refusalLines(res, prefix, label) {
   const out = [];
@@ -589,6 +667,7 @@ function refusalLines(res, prefix, label) {
   for (const s of res.stale || []) out.push(`${prefix}: the stage view is stale - ${s.paths.join(', ')} changed since it was built; rebuild it (${s.cmd}), read ${s.view}, then re-run.`);
   for (const r of res.reread || []) out.push(`${prefix}: the stage view was rebuilt after you read it - read ${r.view} again, then re-run.`);
   if (res.missing.length) out.push(`${prefix}: required reads not recorded for ${label}: ${res.missing.join(', ')} - read them, then re-run.`);
+  for (const l of res.labels || []) out.push(`${prefix}: verify refused - the verifier read a calibration label (${l}); the exam is void and the findings do not count`);
   return out;
 }
 
@@ -603,6 +682,11 @@ module.exports = {
   RUNS_FILE, measure, // the measure line (M33.G): --measure here, and stage-active --clear
   // the stage section at HEAD (M34.C): stage-view, approve-red and the channel's publishes
   stageSectionAt, headReadAt, mdLines, mdHeadings, mdSliceFrom, mdTrimTail,
+  // the refs the stage prompt names and one section of one doc (M34.6.A, item n): approve-red
+  // records them, the channel's publishes compare them
+  stagePromptRefs, sectionAt, REF_TAGS,
+  readConfigList, // the list form of a config value (M34.6.A: risk_triggers), beside readConfigValue
+  labelsRead, CALIBRATION_SET, // the labels rule (M34.6.D): --check verify and scripts/calibration-score.cjs --session
 };
 
 if (require.main === module) {
@@ -625,6 +709,12 @@ if (require.main === module) {
   const stage = si !== -1 ? argv[si + 1] : undefined;
   const res = checkReads(process.cwd(), { boundary, stage });
   const lines = refusalLines(res, 'read-ledger', `${boundary}${stage ? ' ' + stage : ''}`);
+  // M34.6.B (item 5): at closeout, every work stage on the evidence path (its lifecycle carries an
+  // opened row) has its gate.json at accepted; --stage <milestone> narrows to that milestone.
+  if (boundary === 'closeout') {
+    try { for (const l of require(path.join(__dirname, 'evidence.cjs')).closeoutLines(process.cwd(), stage || null)) lines.push(l); }
+    catch (e) { lines.push(`read-ledger: closeout refused - scripts/lib/evidence.cjs did not load (${String((e && e.message) || e).split('\n')[0]}) - repair: node scripts/kit-update.cjs --adopt`); }
+  }
   if (lines.length) {
     process.stderr.write(lines.join('\n') + '\n');
     process.exit(2);

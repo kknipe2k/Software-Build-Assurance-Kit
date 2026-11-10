@@ -43,11 +43,11 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.9-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.10-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.9-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.9-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.9-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.9-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.10-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.10-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.10-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.10-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
 
 **What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
 
@@ -60,7 +60,7 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.9-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.10-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 mkdir -p .github
@@ -71,7 +71,7 @@ Windows (cmd or PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.9-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -123,7 +123,7 @@ The adopt step is not optional on the clone path either: `core.hooksPath` is loc
 
 What you should see next:
 
-1. **First response:** the agent reads the auto-loaded instructions, then the kit's entry files. A Copilot session runs no hooks, so the stamp check and the read check (both live in the session hooks) do not apply here - the read floor is prose-only on this host: the agent reads the orientation files the instructions name, and you hold it to that.
+1. **First response:** the agent reads the auto-loaded instructions, then the kit's entry files. A Copilot session runs no hooks, so the stamp check (a session hook) does not run here, and the read check (the release script's check over the reads the receipts hook records) has no recorded reads to judge - the read floor is prose-only on this host: the agent reads the orientation files the instructions name, and you hold it to that.
 2. **You reply with the standard line:** *"This is Copilot - the session-hook layer does not run in this host. Git hooks are armed (adopt exit 0). Proceed with the honor-system steps from sbak/QUICKSTART-COPILOT.md."*
 3. **Then:** the agent asks what you want to build. Answer in a line, and the kit derives the rest - it works out the kind of work from your answer, reads the risk posture off the spec it writes with you, and shows the whole calibration back as a single line to accept.
 
@@ -204,7 +204,7 @@ For **Full tier**: type the convention the instructions file teaches - **`Stage 
 
 For **Lite tier**: just say *"let's start M01"* - Lite uses markdown task lists, not XML stage prompts.
 
-### 5.4 The work loop - three gates (the Full default, `red_review: on`)
+### 5.4 The work loop - three gates
 
 The agent runs the same three-gate per-stage loop as the Claude Code track. The gates are honor-system on this host - the instructions file teaches them, and VS Code's approval UI backs the write side:
 

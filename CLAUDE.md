@@ -86,7 +86,7 @@ The pre-flight disclosure (rule #11: ONE consent line, ask-and-WAIT, carrying th
 
 ### Phase 5: Commit and hand off
 
-Surface the final state, run the read-only kit-update divergence report, settle the git remote — ZIP arrival: nothing to reset; clone: run `git remote remove origin` before any push — then **ask** where the project lives; never guess. Then three steps: on the owner's `commit` word, the bootstrap commit; `node scripts/kit-update.cjs --ready`, quoted; the five-step block, nothing after it. The orchestrator then opens the builder for Stage M01.A with `/stage M01 A` (pasting the XML stage prompt from the Phase doc is the fallback). Checklist: `sbak/bootstrap/PHASES.md` §Phase 5.
+Surface the final state, run the read-only kit-update divergence report, settle the git remote — ZIP arrival: nothing to reset; clone: run `git remote remove origin` before any push — then **ask** where the project lives; never guess. Then three steps: on the owner's `commit` word, the bootstrap commit; `node scripts/kit-update.cjs --ready --model <model>`, its output verbatim, the five-step block included and never composed; nothing after it. The orchestrator then opens the builder for Stage M01.A with `/stage M01 A`. Checklist: `sbak/bootstrap/PHASES.md` §Phase 5.
 
 ---
 

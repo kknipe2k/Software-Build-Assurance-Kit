@@ -6,7 +6,7 @@
 
 ## HITL co-authorship rule (HARD — this is what gives the off-track check teeth)
 
-**This backlog is co-authored. No AI-only edit ever lands.** The agent may *draft* the initial backlog and *propose* changes — but **no change to this file is committed without explicit human ratification.** That bar applies to *every* kind of change, with no exceptions:
+**This backlog is co-authored. No AI-only edit should land: the agent proposes, the person ratifies** (agent judgment and human authorization; no script refuses an AI-only edit). The agent may *draft* the initial backlog and *propose* changes — but **no change to this file is committed without explicit human ratification.** That bar applies to *every* kind of change, with no exceptions:
 
 - a **re-rank** (moving a row up or down),
 - an **addition** or a `🚫 cut`,

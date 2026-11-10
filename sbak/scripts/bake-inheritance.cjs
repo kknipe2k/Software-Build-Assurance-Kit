@@ -333,6 +333,9 @@ if (require.main === module) {
 // Never trust the invoking (hook) git env — a linked-worktree pre-push exports
 // an ABSOLUTE GIT_DIR that would otherwise reach every child this bake spawns.
 sandbox.scrubProcessEnv();
+// The bake plays the person, whose own terminal has no session id; an inherited one would make its
+// release and clear a session's, refused without a permission prompt on record.
+delete process.env.CLAUDE_CODE_SESSION_ID;
 
 // ---- the throwaway baked project ----
 baked = sandbox.sandboxRoot('kit-bake-');

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // validators/validate-claude-integrity.cjs
 //
 // The project's CLAUDE.md self-integrity gate (M30.I) - the one check that would
@@ -82,6 +82,25 @@ function checkSettings(file, { absentIsNote, resolveScripts }) {
   const missing = SESSION_HOOKS.filter((h) => !cmds.some((c) => c.indexOf(h) !== -1));
   if (missing.length > 0) {
     die(`FAIL  claude-integrity: ${file} does not register the session hook(s): ${missing.join(', ')} - the session layer is dormant while looking installed. Restore the wiring: node scripts/kit-update.cjs --adopt`, 1);
+  }
+  // M34.6.A: the effective policy, not field presence. A file that switches the hooks off
+  // (Claude Code reads disableAllHooks after settings precedence; `false` is the safe value), and a
+  // red-gate registration without "onFailure": "block" (a gate that cannot run would let the call
+  // through), both read as wired by the names above and both are refused here.
+  const shown = String(file).replace(/\\/g, '/');
+  if (cfg && Object.prototype.hasOwnProperty.call(cfg, 'disableAllHooks') && cfg.disableAllHooks !== false) {
+    die(`FAIL  claude-integrity: ${shown} carries "disableAllHooks": ${JSON.stringify(cfg.disableAllHooks)}, which turns off every hook in this project, the red gate included - remove the key (the agent cannot edit this file: your own editor, or place a copy without it with node scripts/kit-update.cjs --place-settings <copy>)`, 1);
+  }
+  const noBlock = [];
+  for (const ev of Object.keys(cfg.hooks || {})) {
+    for (const g of Array.isArray(cfg.hooks[ev]) ? cfg.hooks[ev] : []) {
+      for (const h of g && Array.isArray(g.hooks) ? g.hooks : []) {
+        if (h && typeof h.command === 'string' && h.command.indexOf('pretooluse-red-gate.cjs') !== -1 && h.onFailure !== 'block') noBlock.push(`${ev}/${g && typeof g.matcher === 'string' ? g.matcher : '-'}`);
+      }
+    }
+  }
+  if (noBlock.length > 0) {
+    die(`FAIL  claude-integrity: ${shown} registers the red gate (pretooluse-red-gate.cjs) without "onFailure": "block" at ${noBlock.join(', ')} - a red gate that cannot run would let the call through. Restore it: node scripts/kit-update.cjs --adopt`, 1);
   }
   // M34.D: a registered command whose script file is gone fails at every event while the names
   // above still read as wired, so each project-relative script a command names must exist.

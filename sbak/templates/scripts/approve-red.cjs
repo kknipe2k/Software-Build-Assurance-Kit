@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/approve-red.cjs
 //
 // The HUMAN's action — gate 2 of the three-gate loop (plan -> RED -> stage-end).
@@ -81,25 +81,9 @@ function need(load, name, step) {
   return null;
 }
 
-// The human's click (M32.1.B, R-35 b): a permission prompt on a command (tool category exec)
-// recorded in THIS session's receipts ledger within the last 120 s - the session's own file,
-// read through the receipts reader, never a glob over other sessions. Null when there is none,
-// or no session id to name the file.
-const CLICK_WINDOW_MS = 120 * 1000;
-function recordedClick(receipts, session) {
-  try {
-    if (!session) return null;
-    const file = path.join(claudeDir, 'receipts', receipts.ledgerFileFor(session));
-    if (!fs.existsSync(file)) return null;
-    const now = Date.now();
-    const clicks = receipts.readLedger(file).events.filter((e) => {
-      if (e.event !== 'permission_requested' || e.tool_category !== 'exec') return false;
-      const age = now - Date.parse(e.at);
-      return age >= -5000 && age <= CLICK_WINDOW_MS;
-    });
-    return clicks.length ? clicks[clicks.length - 1] : null;
-  } catch (_) { return null; }
-}
+// The human's click (M32.1.B, R-35 b; a boundary from a session since M34.6.G): the permission
+// prompt this call raised, read from the session's own receipts ledger by the one reader,
+// scripts/lib/receipts.cjs recordedClick (the calling tree first, then each worktree git lists).
 
 const stageId = readTrim(path.join(claudeDir, 'stage-active'));
 if (!stageId) {
@@ -187,8 +171,23 @@ if (roleRead.state === 'unresolved') refuseAt('the receipt', '.claude/role does 
 const role = roleRead.role;
 let repo = null;
 try { const id = chan.repoIdentity(process.cwd()); repo = id ? id.repo : null; } catch (_) { repo = null; }
-const session = receipts.resolveScriptSession(process.env).session || null;
-const click = recordedClick(receipts, session);
+// THE CLICK (M34.6.G item 2). From a Claude Code session (CLAUDE_CODE_SESSION_ID present) the release
+// and the void need the prompt this call raised on record in the session's receipts; with none, or a
+// malformed session id, they are refused here, before anything is written (deterministic enforcement
+// over observed evidence). With no session id - the person's own terminal, outside the session - they
+// proceed as before, and the line says there was no prompt to record.
+const sess = receipts.clickSession(process.env);
+const session = sess.state === 'session' ? sess.session : null;
+let click = null;
+if (sess.state !== 'none') {
+  let trees = null;
+  try { trees = chan.worktrees(process.cwd()); } catch (_) { trees = null; }
+  click = receipts.recordedClick([process.cwd()].concat(trees || []), session);
+  if (!click) {
+    process.stderr.write(receipts.clickRefusalLine('approve-red', sess, voiding ? 'void' : 'release', voiding ? 'voided' : 'approved') + '\n');
+    process.exit(2);
+  }
+}
 const evt = {
   schema: receipts.SCHEMA_VERSION, at: new Date().toISOString(), event: voiding ? 'red_voided' : 'red_approved', emitter: 'approve-red',
   stage: stageId, marker: 'red-approved', role, repo, session, prompt_at: click ? click.at : null,
@@ -200,11 +199,25 @@ if (!checked.ok) refuseAt('the receipt', checked.reason);
 // The scope the RED is approved against (M34.C item 5): the stage's section of its Phase doc at
 // HEAD, through the one reader stage-view uses. No HEAD or no Phase doc for the milestone records
 // scope null; a Phase doc without the stage's section (or with two) is a refusal.
+// M34.6.A (item n): and every ref the stage prompt names (<scope_locks>, <deliverable>,
+// <acceptance_criteria>: a ref with a section by that section's sha256, one without by the file's
+// blob) plus docs/scope.md by blob when present, in `refs`. A ref that does not resolve at HEAD is a
+// refusal, as a missing stage section is. Transitive refs are not followed.
 let scope = null;
 if (!voiding) {
   const sec = rl.stageSectionAt(process.cwd(), stageId);
-  if (sec.ok) scope = { doc: sec.doc, blob: sec.blob, section_sha256: crypto.createHash('sha256').update(sec.text, 'utf8').digest('hex') };
-  else if (!sec.none) refuseAt('the approval record', `the scope cannot be recorded: ${sec.why}`, 'give the stage its section in the Phase doc, commit it, then run the release again');
+  if (sec.ok) {
+    const h = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
+    const refs = [];
+    for (const r of rl.stagePromptRefs(sec.text, sec.docText, stageId)) {
+      const s = rl.sectionAt(process.cwd(), r.ref, r.section);
+      if (!s.ok) refuseAt('the approval record', `the scope cannot be recorded: the ${r.tag} ref ${r.section ? `"${r.section}" in ` : ''}${r.ref} ${s.why}`, 'name a heading the doc carries (or the file alone), commit it, then run the release again');
+      refs.push(r.section ? { tag: r.tag, doc: r.ref, section: r.section, blob: s.blob, section_sha256: h(s.text) } : { tag: r.tag, doc: r.ref, blob: s.blob });
+    }
+    const sd = rl.sectionAt(process.cwd(), 'docs/scope.md', null);
+    if (sd.ok) refs.push({ tag: 'docs/scope.md', doc: 'docs/scope.md', blob: sd.blob });
+    scope = { doc: sec.doc, blob: sec.blob, section_sha256: h(sec.text), refs };
+  } else if (!sec.none) refuseAt('the approval record', `the scope cannot be recorded: ${sec.why}`, 'give the stage its section in the Phase doc, commit it, then run the release again');
 }
 
 // THE RED SET (M34.1.B, Y-4): an approval names at least one test file - the test files that differ
@@ -223,6 +236,19 @@ if (!voiding) {
   }
 }
 
+// THE RED RECORD (M34.6.B item 3): on a stage on the evidence path the release refuses without a
+// tests_run.red.json whose approved set equals this release's set file by file and hash by hash, and
+// whose failure is an assertion with at least one failing test (for a runner that is not node --test:
+// a non-zero exit that is not a signal, the labels unread). It checks binding, never meaning: whether
+// the failing tests are the right ones is the packet's red-failing: line and the orchestrator's
+// judgment. A legacy stage (no lifecycle) is released as before, and the line says so.
+const evid = voiding ? null : need(() => require('./lib/evidence.cjs'), 'evidence.cjs', 'the RED record');
+let redBind = null;
+if (!voiding) {
+  redBind = evid.redBinding(process.cwd(), stageId, evid.approvedSet(process.cwd()));
+  if (!redBind.legacy && !redBind.ok) refuseAt('the RED record', redBind.cause, redBind.repair);
+}
+
 // 4. THE APPROVAL RECORD: the row appended (a re-approval appends, never overwrites).
 const recordPrior = chan.recordBytes(channelRoot);
 function putBack() {
@@ -236,7 +262,8 @@ let written;
 try {
   written = voiding
     ? chan.appendVoid(process.cwd(), stageId, { reason, role, repo, session, prompt_at: evt.prompt_at })
-    : chan.appendApproval(process.cwd(), stageId, { seq: evt.approval_seq, role, repo, session, prompt_at: evt.prompt_at, scope });
+    : chan.appendApproval(process.cwd(), stageId, { seq: evt.approval_seq, role, repo, session, prompt_at: evt.prompt_at, scope,
+      tests_run_red: redBind && redBind.ok ? redBind.sha : undefined, subject: redBind && redBind.ok ? redBind.subject : undefined });
 } catch (e) {
   putBack();
   refuseAt('the approval record', `.claude/channel/approval.json could not be written (${e && e.message ? e.message : 'error'})`);
@@ -271,6 +298,16 @@ try {
   process.exit(2);
 }
 
+// 5b. THE LIFECYCLE (M34.6.B): on the evidence path the stage's red_approved row, binding the
+// approval row by its hash and the RED record by its sha256; required, so a row that cannot be
+// written takes the marker and the record back. (Written before the receipt, so the receipts ledger
+// never holds an approval that did not take; a stray row after a later failure is refused at the
+// stage end, where the row's hash is compared with the standing approval.)
+if (!voiding && redBind && redBind.ok) {
+  try { evid.appendLife(process.cwd(), stageId, 'red_approved', { seq: evt.approval_seq, row_hash: chan.approvalRowHash(written.row), tests_run_red: redBind.sha, subject: redBind.subject }); }
+  catch (e) { putBack(); refuseAt('the lifecycle', `.claude/evidence/${stageId}/lifecycle.jsonl could not be written (${(e && e.code) || 'error'})`); }
+}
+
 // 6. THE RECEIPT, appended once the marker stands; a failure here takes the marker and the record
 // back, so the ledger never records an approval that did not take. The call sites name their
 // event, as stage-active and set-mode do (the contract-order lock reads them after the rename).
@@ -289,16 +326,19 @@ if (voiding) {
 }
 
 process.stdout.write(`red-approved = ${stageId} — implementation edits unlocked for this stage.\n`);
+if (redBind && redBind.ok && redBind.line) process.stdout.write(redBind.line + '\n');
+// A legacy stage says so once, on success only (a refusal stays one line).
+if (redBind && redBind.legacy) process.stderr.write(evid.LEGACY_LINE(stageId) + '\n');
 
 // THE RECEIPT BINDS BOTH HALVES, AND THE SCRIPT SAYS WHAT IT HAS (M32.1.B, R-35 b). The channel
 // (M30.H): an approval-request is surfaced by pickup but never consumed by an agent - this
 // command advances the builder's cursor past it. The line names the orchestrator's word (the
-// request's seq) and the human's click (the permission prompt this session recorded) when both
-// are on record; with no click on record it says so in a WARNING, and the marker still stands -
-// the warning is the record. It never claims a human it cannot show.
+// request's seq) and the human's click (the permission prompt this session recorded). From a
+// session there is always a click here (M34.6.G: none is refused above); with no session id the
+// line says so. It never claims a human it cannot show.
 // M32.1.C (V-26 a, drive note 21): the recorded time is the PROMPT's; the click lies between the
 // prompt and this release and nothing records the click itself, so the line names both ends.
-const clickText = click ? `prompt at ${click.at}, released at ${new Date().toISOString()}` : 'WARNING: no permission prompt recorded in this session\'s receipts';
+const clickText = click ? `prompt at ${click.at}, released at ${new Date().toISOString()}` : receipts.NO_SESSION_TEXT;
 let releasedSeq = null;
 if (pending) {
   try { releasedSeq = chan.consumeApproval(process.cwd()); } catch (_) { releasedSeq = null; }

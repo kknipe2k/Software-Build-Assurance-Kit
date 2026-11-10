@@ -335,7 +335,7 @@ Output: summarize to the owner (or `retrospectives/{{BUG_ID}}.C-findings.md` if 
   </scope_to_verify>
 
   <verification_passes>
-    <pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; record seeds-caught / FNR (G14). Required even for a bug_fix's single verifier pass — the verifier-proof is universal."/>
+    <pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; write the blind verdicts in the calibration-verdicts block; the orchestrator's scorer records seeds-caught / FNR (G14). Required even for a bug_fix's single verifier pass — the verifier-proof is universal."/>
     <pass name="hooks"/>
     <pass name="behavior" harness="{{project harness, if any}}; re-run the impact-analysis list (G_BUGFIX_C1)"/>
     <pass name="plan_challenge" harness="anchored on the declared risk matrix (which dangerous properties of the changed surface did the fix + its impact-analysis leave unproven?) + the standing escape catalog (an n/a that's false / a prose-dodged count / assert-a-constant / always-matching-snapshot / mock-only / under-declared-trigger / toy-path-confinement / bare-startsWith / dropped-fence-caveat). Bounded: against the declared properties, not arbitrary threats."/>

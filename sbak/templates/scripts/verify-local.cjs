@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // scripts/verify-local.cjs
 //
 // The ONE local verification entrypoint (verification_locus: local_first | hybrid),
@@ -16,6 +16,21 @@
 //   node scripts/verify-local.cjs --reconcile M03     # closeout: the three proofs + the estate review
 //   node scripts/verify-local.cjs --reconcile M03 --write   # ...then mark M03's tests settled
 // Non-zero exit on any failure; exit 2 on a bad flag or an invalid registry.
+//
+// ── THE EVIDENCE PATH ─────────────────────────────────────────────────────────────────
+//   node scripts/verify-local.cjs --stage <id> --subject red     # the RED run as a record
+//   node scripts/verify-local.cjs --stage <id> --subject green   # the GREEN run on the candidate
+//   node scripts/verify-local.cjs --lane fast --stage <id>       # the lane, and its lane_run record
+// --subject runs the native test step once and writes .claude/evidence/<stage>/tests_run.<red|green>
+// .json (scripts/lib/evidence.cjs): the command's sha256, the exit code, the subject (the index's
+// fingerprint, the one exclusion rule) and, for a node --test command that names no reporter of its
+// own, the counts, the failing labels and the failure's class, read from a tap reporter written to a
+// temporary file beside the spec reporter on stdout (the one runner adapter). Any other command
+// records its exit code and last line with adapter "none": its labels are not read, and the
+// orchestrator judges whether its failures are the approved tests. --stage beside a lane writes
+// .claude/evidence/<stage>/lane_run.json with the lane's verdict and the subject taken before its
+// first task. Both refuse, exit 2, while the working tree differs from the index outside the
+// excluded prefixes (stage the candidate with git add first), and when the record cannot be written.
 //
 // ── LANES ─────────────────────────────────────────────────────────────────────────────
 // ONE task registry as DATA; three lanes as FILTERS over it. `release` is DERIVED as the
@@ -65,6 +80,7 @@
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { StringDecoder } = require('string_decoder');
 
@@ -591,19 +607,65 @@ function reconcile(root, milestone, write) {
   return 0;
 }
 
+// ── the evidence path: the RED or GREEN run as a record ───────────────────────────────
+async function testsRunRecord(root, stage, kind) {
+  const ev = require(path.join(__dirname, 'lib', 'evidence.cjs'));
+  const d = ev.indexDiff(root);
+  if (d.error) { process.stderr.write(`evidence: refused - the working tree cannot be compared with the index (${d.error})\n`); return 2; }
+  if (d.path) { process.stderr.write(ev.UNSTAGED_LINE('evidence: refused', d.path) + '\n'); return 2; }
+  const s = ev.subject(root);
+  if (s.error) { process.stderr.write(`evidence: refused - the subject cannot be computed (${s.error})\n`); return 2; }
+  const command = CONFIG.nativeTestCommand;
+  if (unfilled(command)) { process.stderr.write('evidence: refused - the native test command is not filled (NATIVE_TEST_COMMAND)\n'); return 2; }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sbak-tap-'));
+  const tapFile = path.join(tmpDir, 'run.tap').split(path.sep).join('/');
+  const adapted = ev.adaptCommand(command, tapFile);
+  const reason = adapted ? null : (ev.NODE_TEST.test(command) ? 'the command names its own --test-reporter' : 'the command is not node --test');
+  const win = process.platform === 'win32';
+  const line = adapted || command;
+  // one shell for the tests and for the node they resolve (runner.node)
+  const shellFor = (l) => (win ? ['cmd', ['/d', '/s', '/c', `"${l}"`], { windowsVerbatimArguments: true }] : ['sh', ['-lc', l], {}]);
+  const [sh, args] = shellFor(line);
+  const testsNode = ev.testsNode(root, command, shellFor);
+  const run = await new Promise((resolve) => {
+    let out = '';
+    const dec = new StringDecoder('utf8');
+    const child = spawn(sh, args, { cwd: root, stdio: ['inherit', 'pipe', 'inherit'], windowsVerbatimArguments: win });
+    child.stdout.on('data', (b) => { process.stdout.write(b); out = (out + dec.write(b)).slice(-65536); });
+    child.on('error', () => resolve({ exitCode: 1, signal: null, stdout: out }));
+    child.on('close', (code, signal) => resolve({ exitCode: code, signal: signal || null, stdout: out + dec.end() }));
+  });
+  let tap = null;
+  if (adapted) { try { tap = fs.readFileSync(tapFile, 'utf8'); } catch (_) { tap = ''; } }
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { /* temporary */ }
+  const file = path.join(ev.stageDir(root, stage), `tests_run.${kind}.json`);
+  let w;
+  try { w = ev.recordTestsRun(root, stage, kind, { command, exitCode: run.exitCode, signal: run.signal, stdout: run.stdout, tap, adapter: adapted ? 'node-test' : 'none', reason, subject: s.subject, testsNode }); }
+  catch (e) { process.stderr.write(ev.writeFailLine(root, file, e) + '\n'); return 2; }
+  process.stdout.write(`\nevidence: wrote ${ev.EVIDENCE_REL}/${stage}/tests_run.${kind}.json - ${w.rec.adapter === 'none' ? `adapter none (${reason}), exit ${w.rec.exit_code}` : `${w.rec.classified || 'pass'}, ${w.rec.counts.total} test(s), ${w.rec.counts.fail} failed`}, subject ${s.subject}\n`);
+  return run.exitCode === 0 ? 0 : 1;
+}
+
 // ── CLI ───────────────────────────────────────────────────────────────────────────────
 if (require.main === module) (async () => {
   const argv = process.argv.slice(2);
-  const KNOWN = ['--lane', '--list', '--json', '--summary', '--summary-only', '--reconcile', '--write'];
+  const KNOWN = ['--lane', '--list', '--json', '--summary', '--summary-only', '--reconcile', '--write', '--stage', '--subject'];
   for (let i = 0; i < argv.length; i++) {
     if (!KNOWN.includes(argv[i])) { process.stderr.write(`verify-local: unknown argument ${JSON.stringify(argv[i])} - known: ${KNOWN.join(', ')}\n`); process.exit(2); }
-    if (['--lane', '--summary', '--reconcile'].includes(argv[i])) i++;
+    if (['--lane', '--summary', '--reconcile', '--stage', '--subject'].includes(argv[i])) i++;
   }
   const flag = (n) => argv.includes(n);
   const value = (n) => { const i = argv.indexOf(n); return i === -1 ? null : argv[i + 1]; };
   const root = repoRoot();
 
   try { validateRegistry(); } catch (e) { process.stderr.write(`\n✗ verify-local: registry invalid - ${e.message}\n`); process.exit(2); }
+
+  const stageArg = value('--stage');
+  const subjectArg = value('--subject');
+  if ((flag('--stage') && !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(String(stageArg))) || (flag('--subject') && ['red', 'green'].indexOf(subjectArg) === -1) || (flag('--subject') && !flag('--stage'))) {
+    process.stderr.write('verify-local: --subject red|green needs --stage <id> (the open stage\'s id); --stage beside a lane takes a stage id\n'); process.exit(2);
+  }
+  if (flag('--subject')) process.exit(await testsRunRecord(root, stageArg, subjectArg));
 
   if (flag('--reconcile')) {
     const m = value('--reconcile');
@@ -649,6 +711,18 @@ if (require.main === module) (async () => {
     }
   }
 
+  // The evidence path: --stage beside a lane - the candidate staged (the index is the subject), its subject
+  // taken before the first task; the lane_run record written after the summary.
+  let laneEv = null;
+  if (stageArg) {
+    const ev = require(path.join(__dirname, 'lib', 'evidence.cjs'));
+    const d = ev.indexDiff(root);
+    if (d.error) { process.stderr.write(`evidence: refused - the working tree cannot be compared with the index (${d.error})\n`); process.exit(2); }
+    if (d.path) { process.stderr.write(ev.UNSTAGED_LINE('evidence: refused', d.path) + '\n'); process.exit(2); }
+    const s = ev.subject(root);
+    if (s.error) { process.stderr.write(`evidence: refused - the subject cannot be computed (${s.error})\n`); process.exit(2); }
+    laneEv = { ev, subject: s.subject };
+  }
   const docker = selected.some((t) => t.id === 'linux') ? dockerLeg(root) : null;
   if (!quiet && docker && docker.value === null) process.stdout.write(`${DIM}note docker_leg not read (${docker.why}) - the Linux leg runs as before${RESET}\n`);
   const contents = fingerprint(root);
@@ -709,6 +783,12 @@ if (require.main === module) (async () => {
   };
   try { atomicWrite(path.join(root, LAST_DIR, `verify-last-${lane}.json`), JSON.stringify(summary, null, 2) + '\n'); } catch (_) { /* a read-only tree still gets its verdict */ }
   try { appendRunLine(root, summary); } catch (_) { /* the same */ }
+  if (laneEv) {
+    const file = path.join(laneEv.ev.stageDir(root, stageArg), 'lane_run.json');
+    try { laneEv.ev.recordLaneRun(root, stageArg, { lane, verdict: summary.verdict, durationMs: summary.totalDurationMs, taskCount: summary.taskCount, counts, subject: laneEv.subject }); }
+    catch (e) { process.stderr.write(laneEv.ev.writeFailLine(root, file, e) + '\n'); process.exit(2); }
+    if (!summaryOnly) process.stdout.write(`evidence: wrote ${laneEv.ev.EVIDENCE_REL}/${stageArg}/lane_run.json - lane ${lane}, verdict ${summary.verdict}, subject ${laneEv.subject}\n`);
+  }
   if (value('--summary')) fs.writeFileSync(value('--summary'), JSON.stringify(summary, null, 2) + '\n', 'utf8');
   if (summaryOnly) { process.stdout.write(JSON.stringify(summary, null, 2) + '\n'); process.exit(failed ? 1 : 0); }
 

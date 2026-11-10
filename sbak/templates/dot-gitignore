@@ -40,6 +40,10 @@
 .claude/channel/outgoing.md
 .claude/channel/present.*.json
 .claude/channel/approval.json
+# M34.6.B the channel's refusal rows and the stage-end publish lock (local; the two logs above stay
+# tracked). The evidence a stage leaves, .claude/evidence/<stage>/, is committed: never ignore it.
+.claude/channel/refusals.jsonl
+.claude/channel/publish.lock
 
 # Build-receipt reports (rendered JSON/HTML/MD views written by
 # `node scripts/build-receipts.cjs render`; local observability output). This

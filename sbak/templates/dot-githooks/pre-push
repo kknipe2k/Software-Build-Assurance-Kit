@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.9
+# @kit-version 1.0.10
 # .githooks/pre-push  —  the fast lane: the tests your push affects, the open milestone's
 # own tests, and the always-tagged guards, on the native leg. The full matrix (Linux-in-
 # Docker + native, every test) is the `release` lane, run by /closeout, /verify and the
@@ -16,4 +16,9 @@ set -e
 # not only the final file against the base. The list is docs/append-only-ledgers.txt (the
 # same file CI reads); no list present (Lite, or an unarmed project) means one plain line.
 if [ -f docs/append-only-ledgers.txt ]; then node validators/check-append-only.cjs --per-commit --ledgers docs/append-only-ledgers.txt || exit 1; else echo "pre-push: no docs/append-only-ledgers.txt - append-only leg skipped"; fi
+# The evidence path's transport check (M34.6.B): every stage commit in the pushed range (a
+# single-parent commit whose diff touches .claude/evidence/<stage>/gate.json) must carry a committed
+# lane_run.json for its own subject with verdict pass; it reads git's ref feed on stdin. Any other
+# commit is covered by the lane below. Without scripts/evidence.cjs no stage was opened on the path.
+if [ -f scripts/evidence.cjs ]; then node scripts/evidence.cjs --pre-push || exit 1; fi
 node scripts/verify-local.cjs --lane fast

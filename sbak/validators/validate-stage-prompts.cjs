@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.9
+// @kit-version 1.0.10
 // validators/validate-stage-prompts.js
 //
 // Validates stage prompts embedded in Phase docs against the schemas defined
@@ -281,8 +281,9 @@ function validateBlock(block, filePath, { allowPlaceholders }) {
     // its real findings count. A <verifier_stage_prompt> WITHOUT a <pass
     // name="calibration_self_test"> leaves the plan-challenge UNPROVEN (a rubber-stamping
     // verifier reads as "Sound") -> BLOCK. Honest locus: the floor here only checks the pass is
-    // WIRED; the catch is judgment recorded at V-time as the FNR (validators/validate-
-    // calibration.cjs is the set/findings floor; the FNR is the adversary). Parallel to the
+    // WIRED; the catch is agent judgment (the verifier's verdicts) and the FNR is the scorer's
+    // (node scripts/calibration-score.cjs, run by the orchestrator; validators/validate-
+    // calibration.cjs is the set/findings floor). Parallel to the
     // plan_challenge requirement below.
     const calBlock = /<pass\b[^>]*\bname=["']calibration_self_test["'][\s\S]*?(?:\/>|<\/pass>)/i.exec(liveXml);
     if (!calBlock) {

@@ -97,7 +97,7 @@ A validator should:
 - Confirm the root tag is one of the five valid schemas
 - Confirm `id` attribute matches the format
 - Confirm all required tags for the schema are present
-- Confirm no foreign tags appear (every tag must be in the protocol)
+- Confirm no foreign tags appear (every tag must be in the protocol; the kit's validator does not check this, so it is a review finding)
 
 The kit ships an implementation at `validators/validate-stage-prompts.cjs`. Use it.
 
@@ -176,7 +176,7 @@ Reference form (required when the Phase doc has a "Key constraints" or equivalen
 ```xml
 <scope_locks ref="docs/build-prompts/M02-<title>.md" section="Key constraints"/>
 ```
-Use one form or the other, never both. Validator rejects inline content if the named section exists in the Phase doc (strict reference-first; v1.2 hardening).
+Use one form or the other, never both. Inline content where the named section exists in the Phase doc is a review finding (strict reference-first; v1.2); the validator does not check it.
 ### `<gates milestone="M[NN]"/>`
 Required. Reference to the gate matrix. The agent looks up the milestone row in `docs/gates.md` to see which gates are live. Self-closing tag with `milestone` attribute.
 ```xml
@@ -282,7 +282,23 @@ The red-stop adds a third approval gate to the per-stage loop. Without it the lo
 </await_red_approval>
 ```
 
-To turn the red-stop off for a project (e.g., Lite tier, expert solo dev), set `red_review: off` in `project-config.md`; the agent then runs the two-gate loop. The validator treats this tag as optional, so neither presence nor absence is an error — it is a behavioral default, not a structural requirement.
+The red stop has no off switch. In a Claude Code session with the kit's settings loaded, the red gate's hook refuses an implementation edit while a work stage is open and unapproved, at every tier (deterministic enforcement); no toggle in `project-config.md` turns it off. The validator treats this tag as optional, so neither presence nor absence is an error — it is a behavioral default, not a structural requirement.
+
+### The evidence path
+
+A stage leaves its acceptance evidence as records under `.claude/evidence/<stage>/`, committed with the stage, that a later reader can check (observed evidence): the RED and the GREEN runs (`tests_run.red.json` and `tests_run.green.json`, written by `node scripts/verify-local.cjs --stage <id> --subject red|green`), the lane run (`lane_run.json`, written by `node scripts/verify-local.cjs --lane fast --stage <id>`), the lifecycle (`lifecycle.jsonl`, appended by the open, the release, the stage-end publish, the orchestrator's accept and the clear), and `gate.json` with `manifest.json`, written by the stage-end publish before the commit. The release refuses a RED that is not bound to the approved tests, and the stage-end publish refuses a GREEN or a lane run that is not bound to the candidate (deterministic enforcement); whether the failing tests are the right ones stays the orchestrator's judgment on the packet's `red-failing:` line (agent judgment). A stage opened before this release has no lifecycle and is judged as before, and one line says so.
+
+Every record names its subject: the sha256 over the index's path and blob lines excluding .claude/evidence/, .claude/channel/ and retrospectives/ (one constant in scripts/lib/evidence.cjs), so a record can describe the tree it rides in without describing itself; a writer refuses while the working tree differs from the index outside those three folders, so the builder stages the candidate (git add) before the RED run, the GREEN run, the lane and the stage-end publish.
+
+Fail-soft is reversed for the seven required evidence records and nothing else: stage_opened, gate_probed liveness, red_approved, tests_run RED, tests_run GREEN, lane_run and gate.json, with stage_cleared checked at the next open. When one of them cannot be written its writer refuses, and the boundary that reads it refuses when it is absent or contradictory (deterministic enforcement at stage-active, the release, the stage-end publish, the pre-commit and the closeout check); every other record keeps the M34 stage A rule: written when possible, instrumentation_degraded when not, never a refusal (observed evidence, diagnostic).
+
+One host, one runner adapter, one transport: Claude Code at 2.1.295 or later, the node --test reporter read by scripts/verify-local.cjs, and the stage commit; any other host, any other test runner (its RED is taken on its exit code with the labels unread, and the orchestrator judges whether the failures are the approved tests), an artifact store and a separate evidence ref are unsupported on this path. The pre-push hook and the ci workflow check every stage commit in the pushed range against its committed lane run (deterministic enforcement at `node scripts/evidence.cjs --pre-push` and `--transport-check`), and `node scripts/evidence.cjs --stage <id> --verify` re-hashes a stage's records against its manifest (observed evidence).
+
+On Windows a killed test process and a test file that fails to load both reach node --test as exit code 1 with no signal, so a RED there whose only failures are file-level is classified cancelled_or_load and the release refuses it, naming both readings (deterministic enforcement at the release): make the test fail by an assertion, or run the RED on a POSIX host. The records are checked against each other and against the commit, never against their author: anyone who can write the repository can rewrite a record together with its manifest hash and evidence.cjs --verify still passes, so a fabricated record is outside the local trust boundary this path claims (observed evidence, not proof of authorship).
+
+The stage-end publish refuses a path changed since the approval's base that lies outside the stage's allowed set (the paths its section names in backticks, their twins, the red gate's test and document globs, the stage's measurements and the excluded prefixes) unless the packet carries an out-of-scope:<path> <why> line for it, and gate.json records each line as out_of_scope (deterministic enforcement at the stage-end publish); the check sees paths, never contents, so a call added inside a named file is invisible to it and stays the orchestrator's reading of the diff (agent judgment). Before the stamp ask the orchestrator reads the bundle through `node scripts/evidence.cjs --stage <id> --review`, which writes nothing (observed evidence), and answers the review contract's five questions in its manual (agent judgment).
+
+The evidence path adds no owner word: the words stay /send, /send --approval with its click, pass or fail with a note, commit and push (human authorization); the accepted state is written by the orchestrator's channel.cjs accept on the stamp it already transcribes, and a resolved: line is the builder's, in a packet the orchestrator already adjudicates (agent judgment).
 
 ### `<status_log>`
 Optional (default-on at Full). The build appends a one-line checkpoint to `.claude/build-status.md` at meaningful moments — red tests written, green achieved, gate results, current step — so an orchestrator consultation can ground in the build's in-flight state without the user hand-carrying routine progress. Uncommitted, gitignored, cleared at stage close. Courier relief, not a contract.
@@ -359,7 +375,7 @@ Reference form (required when the Phase doc has a detailed `X.2 Files to Change`
 ```xml
 <deliverable ref="docs/build-prompts/M02-<title>.md" section="A.3 Detailed Changes"/>
 ```
-Use one form or the other, never both. Items in inline form are implicitly ordered (top-to-bottom = implementation order); items in the referenced section are ordered by their position in that section. Validator rejects inline content if the named section exists in the Phase doc.
+Use one form or the other, never both. Items in inline form are implicitly ordered (top-to-bottom = implementation order); items in the referenced section are ordered by their position in that section. Inline content where the named section exists in the Phase doc is a review finding; the validator does not check it.
 
 ### `<execution_steps>`
 Required. Procedural anchor: the named sequence the agent walks during the stage. Provides the work-cycle skeleton without restating the playbook's internal rules. Each `<step>` names a phase the agent moves through; the playbook (`BUILD-PLAYBOOK.md`) defines what each named step entails.
@@ -397,7 +413,7 @@ Reference form (required when the Phase doc has a `X.4 Tests` or equivalent sect
 ```xml
 <acceptance_criteria ref="docs/build-prompts/M02-<title>.md" section="A.4 Tests"/>
 ```
-Use one form or the other, never both. Validator rejects inline content if the named section exists in the Phase doc.
+Use one form or the other, never both. Inline content where the named section exists in the Phase doc is a review finding; the validator does not check it.
 ### `<read_prior_stages>`
 Required for Stage B onward; omitted for Stage A. References to prior stage retrospectives' "Decisions for next stage" sections. The agent reads these as the first action in the stage and applies the decisions.
 ```xml
@@ -436,11 +452,11 @@ If any check fails, the agent surfaces the failure and stops — does not procee
 
 ### `<schema_drift_check>`
 
-Optional (v1.3+). Verify generated types (e.g., language types generated from `schemas/*.json`) match the schema source-of-truth committed to the repo. Wraps the project's regen-and-check command as a stage-level gate so the failure surfaces at pre-flight rather than mid-implementation. Addresses the recurring pattern where hand-maintained types drift from the schema source-of-truth (per `CLAUDE.md` §14 if the project uses schemas-as-source-of-truth).
+Optional (v1.3+). Verify generated types (e.g., language types generated from `schemas/*.json`) match the schema source-of-truth committed to the repo. The agent runs the project's regen-and-check command at pre-flight (agent judgment; no script reads this tag), so the failure surfaces before implementation rather than in the middle of it. Addresses the recurring pattern where hand-maintained types drift from the schema source-of-truth (per `CLAUDE.md` §14 if the project uses schemas-as-source-of-truth).
 
 Self-closing form supported. Optional `gate="..."` attribute names the specific gate command to run (project-specific; common forms: `cargo xtask regenerate-types --check`, `npm run codegen:check`, `make check-codegen`).
 
-Validator behavior (v1.3 lean): structural — error if the tag appears outside a work-stage prompt.
+Validator behavior: none. The validator does not read this tag; its placement (a work-stage prompt only) is a review finding.
 
 Schema: work-stage only.
 
@@ -450,7 +466,7 @@ Example:
 <schema_drift_check gate="<project regen-and-check command>"/>
 ```
 
-When this tag appears in a stage prompt, the agent runs the gate command after STEP 2 (implement) and BEFORE STEP 3 (verify_gates); a non-zero exit fails the stage immediately and the agent surfaces "schema drift detected — regenerate types or update the schema." Skip this tag if the project does not use generated types.
+When this tag appears in a stage prompt, the agent runs the gate command after STEP 2 (implement) and BEFORE STEP 3 (verify_gates); on a non-zero exit the agent stops the stage and surfaces "schema drift detected — regenerate types or update the schema." Skip this tag if the project does not use generated types.
 
 ### `<fan_out_grep>`
 
@@ -781,14 +797,14 @@ Any **presence-as-effectiveness** path the floors cannot see is a finding. **B�
 
 ### The required calibration self-test pass (v1.8+ — G14)
 
-Every `<verifier_stage_prompt>` must **also** carry a **`<pass name="calibration_self_test">`** inside `<verification_passes>`, and it is the pass the verifier runs **first**. Where the plan-challenge (above) *runs*, nothing yet proves it *works* — a verifier that misses a planted defect still reports "Sound." This pass closes that: the verifier **opens** by running its plan-challenge against the **seeded-defect calibration set** (`prompts/calibration/` — one fixture per §8.5 escape class, each with a sealed ground-truth label in `labels/`) and must catch **every** seed — **false-negative rate (FNR) = 0** — *before* any real finding counts. The result (seeds caught / FNR) is recorded as a `calibration` evidence block in the findings (`templates/VERIFIER-FINDINGS-TEMPLATE.md`). A `<verifier_stage_prompt>` **without** this pass fails schema validation (**block**) — the plan-challenge would otherwise be unfalsifiable. This is the adversary-side analog of G9's mutation-kill.
+Every `<verifier_stage_prompt>` must **also** carry a **`<pass name="calibration_self_test">`** inside `<verification_passes>`, and it is the pass the verifier runs **first**. Where the plan-challenge (above) *runs*, nothing yet proves it *works* — a verifier that misses a planted defect still reports "Sound." This pass closes that: the verifier **opens** by running its plan-challenge against the **seeded-defect calibration set** (`prompts/calibration/` — one fixture per §8.5 escape class, each with a sealed ground-truth label in `labels/`) and must catch **every** seed — **false-negative rate (FNR) = 0** — *before* any real finding counts. The result (seeds caught / FNR) is the scorer's `calibration` block in the findings (`templates/VERIFIER-FINDINGS-TEMPLATE.md`), never the verifier's own record. The verifier writes only its blind verdicts there (a `calibration-verdicts` block, one line per fixture, agent judgment) and never the score: the orchestrator runs `node scripts/calibration-score.cjs`, which writes the `calibration` block bound to those verdicts by their sha256 (observed evidence), and `validators/validate-calibration.cjs` refuses a Sound findings file without that block, with verdicts changed after scoring, or with an FNR other than 0 (deterministic enforcement at the pre-commit). A `<verifier_stage_prompt>` **without** this pass fails schema validation (**block**) — the plan-challenge would otherwise be unfalsifiable. This is the adversary-side analog of G9's mutation-kill.
 
 **The sealing invariant.** The verifier reads `prompts/calibration/fixtures/` during the challenge; it **never** reads `labels/`. If the ground-truth answer sat in the fixture the verifier reads, FNR = 0 would prove nothing. `validators/validate-calibration.cjs` enforces the seal (a fixture containing its own `expected:` / `must-flag` answer is a finding).
 
-**Honest locus (G14, non-negotiable).** `validators/validate-calibration.cjs` is the **static floor only** — it proves the set exists, shadows the full catalog, is labeled + sealed, and that this pass is **wired**. The **catch is agent judgment, recorded at V-time as the FNR**; it **cannot** run in a pre-commit hook (you can't run a judge in a smoke test). Floor (present + wired) + adversary (the V-run FNR) = a real gate; neither alone is. If the verifier's own FNR > 0 (it misses a seed), the verifier-proof worked and the milestone has a real finding (`merge_gate` structural signal).
+**Honest locus (G14, non-negotiable).** `validators/validate-calibration.cjs` is the **static floor only** — it proves the set exists, shadows the full catalog, is labeled + sealed, and that this pass is **wired**. The **catch is agent judgment** (the verifier's verdicts) and the **rate is the scorer's** (observed evidence, written by the orchestrator's run, never by the verifier); the judging **cannot** run in a pre-commit hook (you can't run a judge in a smoke test). Floor (present + wired) + adversary (the verifier's verdicts, scored by the program) = a real gate; neither alone is. If the scored FNR > 0 (the verifier missed a seed), the verifier-proof worked and the milestone has a real finding (`merge_gate` structural signal).
 
 ```xml
-<pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; record seeds-caught / FNR as the calibration evidence block. Dogfoods G14: if YOU miss a seed, the verifier-proof works and the milestone has a real finding"/>
+<pass name="calibration_self_test" harness="run the plan-challenge against prompts/calibration/ — FNR must be 0 (catch every seeded defect) before any real finding counts; write the blind verdicts in the calibration-verdicts block; the orchestrator's scorer records seeds-caught / FNR as the calibration evidence block. Dogfoods G14: if YOU miss a seed, the verifier-proof works and the milestone has a real finding"/>
 ```
 
 ## 8.6 Refactor-only tags
@@ -894,7 +910,7 @@ Required. The expert lens this pass reviews through — the one kind of expert w
 
 ### `<scope>`
 
-Required. The single dimension this pass covers — and nothing else. Findings outside the dimension are noted-and-parked, not chased (scope prevents drift across passes). Distinct from the verifier's `<scope_to_verify>` (which names code paths to check against a contract); `<scope>` names the *review dimension*.
+Required. The single dimension this pass covers — and nothing else. Findings outside the dimension are noted-and-parked, not chased (the scope keeps a pass from drifting into another, judged at review). Distinct from the verifier's `<scope_to_verify>` (which names code paths to check against a contract); `<scope>` names the *review dimension*.
 
 ```xml
 <scope>
@@ -973,7 +989,7 @@ Estimated wall-clock duration. Informs staging boundaries, not deliverable size 
 ```
 ## 10. Authoring rules
 One stage per fenced block. Don't combine stages. The Phase doc may have many fenced blocks but each contains exactly one root element.
-No foreign tags. Every tag inside a stage prompt must be in this protocol. Adding a new tag means updating this doc first (and bumping the protocol version per Part 13). Drift is a bug.
+No foreign tags. Every tag inside a stage prompt must be in this protocol. Adding a new tag means updating this doc first (and bumping the protocol version per Part 13). Drift is a bug, and a foreign tag is a review finding: the validator does not check for one.
 No HTML escaping inside `<context>` or prose tags unless required. XML inside fenced markdown blocks parses cleanly with literal angle brackets in attribute values via `&lt;` and `&gt;`. Use them only when the text contains XML-meaningful characters (e.g., "<30 min").
 Self-closing for reference tags. When a tag points at an external file with no inline body, use the self-closing form: `<gates milestone="M01"/>` not `<gates milestone="M01"></gates>`.
 Stable child element names. Within `<deliverable>`, every child is `<item>`. Within `<scope_locks>`, every child is `<lock>`. Within `<acceptance_criteria>`, every child is `<criterion>`. Within `<execution_steps>`, every child is `<step>`. Within `<read_reference>`, every child is `<file>`. Within `<execution_warnings>`, every child is `<warning>`. Within `<gotchas_graduation>`, every child is `<stage_review>`. This consistency makes validation and aggregation simple.
@@ -984,11 +1000,11 @@ For audit-pass stages: `<context>` → `<persona>` → `<scope>` → `<read_firs
 Consistent ordering makes diffs across milestones immediately scannable.
 Reference-first **strict** for content-heavy tags (v1.2 hardening). Tags that support both inline and reference forms — currently `<deliverable>`, `<acceptance_criteria>`, `<scope_locks>`, `<commit_message>`, `<gap_analysis_requirements>` — **must use the reference form when the corresponding Phase doc section exists**. The Phase doc's `X.2 Files to Change`, `X.3 Detailed Changes`, `X.4 Tests`, `X.6 Commit Message`, and milestone-level `Key constraints` sections are the canonical locations for content; the prompt references rather than restates them.
 Validator behavior:
-- If the Phase doc has a section matching the tag's expected anchor (e.g., `### A.3 Detailed Changes` for the Stage A `<deliverable>`), inline content in that tag is **rejected** (error). Authors must use the reference form.
+- If the Phase doc has a section matching the tag's expected anchor (e.g., `### A.3 Detailed Changes` for the Stage A `<deliverable>`), inline content in that tag is a review finding. Authors must use the reference form; the validator does not check it.
 - If no matching section exists, inline form is permitted (e.g., a single-stage milestone with no `X.3` section, or a stage whose content is genuinely too small to warrant a Phase doc section).
 - The validator finds Phase doc sections by markdown-AST heading lookup against the `section="..."` attribute string — renderer-agnostic, slugifier-agnostic.
 Section-name resolution (drops URI fragments — v1.2 anchor-stability fix). Reference tags use the `section="..."` attribute, not URL fragment notation. The validator parses the referenced markdown file's AST, finds the heading whose text matches the `section` attribute (case-sensitive, exact match), and confirms the heading exists. Renderer-dependent slugification (`### A.6 Commit Message` → `#a6-commit-message` on GitHub vs `#a-6-commit-message` on GitLab/mdBook vs different again on VS Code preview) becomes irrelevant.
-Never use both forms in the same tag. A tag with `ref="..."` must be self-closing (or contain only nested allowed children like `<gotchas_graduation>` for `<gap_analysis_requirements>`); a tag with inline list-content must not have a `ref` attribute. Validation enforces this.
+Never use both forms in the same tag. A tag with `ref="..."` must be self-closing (or contain only nested allowed children like `<gotchas_graduation>` for `<gap_analysis_requirements>`); a tag with inline list-content must not have a `ref` attribute. Review enforces this; the validator does not check it.
 Gotchas graduation rule (v1.2 enforcement). Stage-specific `<gotchas>` are **per-stage scratch space**. Across a milestone, every per-stage `<gotchas>` entry must be evaluated at closeout via `<gotchas_graduation>` (see Section 8) and assigned a disposition: `kept | graduated | resolved | expired`. If a trap recurs in 2+ stages of the same milestone (or across milestones), promote it to `docs/gotchas.md` and remove it from per-stage tags. The closeout `<gotchas_graduation>` slot is the forcing function — without it, per-stage `<gotchas>` would accumulate as discipline decay sets in.
 
 The version banner & grandfathering — **banner-less = current.** A Phase doc declares its protocol version with a `**Protocol version:** vN.M` banner near the top. Version-gated rules (the G9 `<test_honesty>` slot, v1.7+; the G13 `<risk_declaration>` matrix, v1.8+) key their requirement off that banner. **The grandfather rule:** a doc with an **explicit pre-bump banner** (e.g. `v1.0`, `v1.6`) is exempt from rules introduced after its declared version — that's the genuinely-old case the banner records honestly. **A banner-LESS doc is treated as *current* (must comply), NOT grandfathered** — only an *explicit* pre-bump banner exempts. Under a "no banner = grandfathered" rule, any new doc could dodge a version-gated rule by simply omitting the banner — an omission-escape inherent to *every* banner-gated rule, not just one. **History is not retro-failed:** the version-gated validators (`validate-test-honesty.cjs`, `validate-risk-matrix.cjs`) run on the **changed set only** (`--staged` in the pre-commit), never `--all` over a repo's phase-doc history, so a committed-but-untouched banner-less older doc is never re-checked; the only `--all` invocation in the framework is the **version-agnostic** schema validator (`validate-stage-prompts.cjs`), which enforces no version-gated rule. The rule is applied **in lockstep** across both version-gated validators — drop it from one and a doc still dodges the other.
@@ -1001,12 +1017,13 @@ A validation script lives at `scripts/validate-stage-prompts.py` (or your prefer
 - Confirms the root tag is one of `work_stage_prompt`, `verifier_stage_prompt`, `refactor_stage_prompt`, `closeout_stage_prompt`, or `audit_pass_prompt`
 - Confirms `id` attribute matches `M[0-9]{2}\.[A-Z]`
 - Confirms all required tags for the schema are present (including `<commit_message>`, `<execution_steps>`, and — for closeout — `<gap_analysis_requirements>` containing `<gotchas_graduation>`)
-- Confirms no foreign tags appear
-- Confirms reference-first tags use either inline form OR `section="..."` reference form, never both (the v1.0/v1.1 mixing-rule, retained as error)
-- **Strict reference-first (v1.2):** if the Phase doc has a section matching the expected anchor for a content-heavy tag (`<deliverable>`, `<acceptance_criteria>`, `<scope_locks>`, `<commit_message>`), inline content in that tag is rejected — author must use reference form
 - `<disposition>` values inside `<gotchas_graduation>` must be one of: `kept`, `graduated`, `resolved`, `expired`
 - Every prior stage in the milestone must have a `<stage_review id="...">` entry inside the closeout's `<gotchas_graduation>` (counted by parsing the milestone's Phase doc for stage headings)
 - For `expired` disposition, `<target>` must include rationale beyond bare `n/a` (a single line minimum; validator checks length > "n/a" alone)
+**Review checks (the validator does not run these):**
+- no foreign tags appear
+- reference-first tags use either inline form OR `section="..."` reference form, never both
+- **Strict reference-first (v1.2):** if the Phase doc has a section matching the expected anchor for a content-heavy tag (`<deliverable>`, `<acceptance_criteria>`, `<scope_locks>`, `<commit_message>`), inline content in that tag is a review finding: the author uses the reference form
 **Warnings (surface in PR output, don't block):**
 - Confirms ordering matches the recommended order
 - Cross-checks: every retrospective referenced in `<read_prior_stages>` exists; every milestone in `<read_prior_milestones>` has the named gap-analysis section + summary section; every file in `<read_first>` and `<read_reference>` exists; every `section="..."` value on a reference tag resolves to a real Phase doc heading via markdown-AST lookup; the milestone in `<gates milestone="...">` matches the Phase doc's milestone
@@ -1207,7 +1224,7 @@ Missing `<read_prior_stages>` on Stage B+. Single most common protocol drift. Pe
 `<scope_locks>` repeated from spec verbatim. The locks should be the active constraints for this stage, not a copy of the entire spec scope section. Reference broad scope via `<read_first>`; use `<scope_locks>` for the specific things this stage might tempt the agent to violate.
 Closeout missing `<append_only_verification>`. The whole point of the closeout is the immutable ledger entry. Omitting the verification tag means the ledger could land mutated and the next milestone inherits a corrupted history.
 Closeout with a `<deliverable>` (singular) tag. That's the work-stage tag. Closeouts use `<deliverables>` (plural) because they always produce three: summary, ledger entry, draft PR description. If your closeout has only one, it's not a closeout.
-Foreign tags introduced silently. Adding `<priority>` or `<owner>` or `<estimate>` ad-hoc means future stages won't have them and validation breaks across milestones. New tags require updating this protocol first (and bumping its version).
+Foreign tags introduced silently. Adding `<priority>` or `<owner>` or `<estimate>` ad-hoc means future stages won't have them and the prompts stop matching across milestones (a review finding; the validator does not check for foreign tags). New tags require updating this protocol first (and bumping its version).
 `<gates>` with the `milestone` attribute pointing at the wrong milestone. Copy-paste error from a prior milestone's prompt. The CI validator catches this; humans miss it.
 `<approval_surface>` reordered without reason. Order matters because the human reads top-down. The recommended order has cross-machine state first (so an orchestration session on a different machine sees actual project state immediately), diff next (because that's what the human cares about most for THIS stage), and the "I will not commit" statement last (because it's the verbal anchor of the do-not-commit rule). Reorder only with a stated reason.
 
@@ -1215,9 +1232,9 @@ Foreign tags introduced silently. Adding `<priority>` or `<owner>` or `<estimate
 Missing `<commit_message>`. Every stage prompt requires a `<commit_message>` slot — almost always referencing the pre-authored commit in the Phase doc's `X.6 Commit Message` section. Omitting it means the agent drafts a commit ad-hoc, which produces inconsistent commit-message style across milestones and forces the human to evaluate each one as a separate review item.
 `<read_prior_milestones>` on Stage B+ within the same milestone. Stage B+ uses `<read_prior_stages>` for within-milestone retrospective reads. `<read_prior_milestones>` is for absorbing prior milestone carry-forward — overwhelmingly Stage A of a non-first milestone. Putting it on Stage B+ is a sign of confusing the two read patterns; the validator catches this.
 `<read_prior_milestones>` on Stage A of the first milestone. M01.A has no prior milestone to absorb. The tag is omitted entirely; not "empty" but absent. (Same rule as `<read_prior_stages>` being absent on Stage A.)
-Mixing inline and reference forms in the same tag. `<deliverable ref="...md" section="..."><item>...</item></deliverable>` is a schema violation. Pick one form. The validator rejects the mix because the precedence rule (which wins?) is genuinely ambiguous and the right answer is to make the choice explicit at authoring time.
+Mixing inline and reference forms in the same tag. `<deliverable ref="...md" section="..."><item>...</item></deliverable>` is a schema violation. Pick one form. Review rejects the mix (the validator does not check it) because the precedence rule (which wins?) is genuinely ambiguous and the right answer is to make the choice explicit at authoring time.
 **v1.2 anti-patterns (new):**
-Inline content in a tag whose Phase doc section exists (v1.2 strict reference-first). If `M02-<title>.md` has a heading `### A.3 Detailed Changes`, the Stage A `<deliverable>` must use `ref="docs/build-prompts/M02-<title>.md" section="A.3 Detailed Changes"` — inline `<item>` lists are rejected by the validator. The drift failure mode (prompt and Phase doc diverging) is the reason; v1.2 makes the rule strict instead of advisory.
+Inline content in a tag whose Phase doc section exists (v1.2 strict reference-first). If `M02-<title>.md` has a heading `### A.3 Detailed Changes`, the Stage A `<deliverable>` must use `ref="docs/build-prompts/M02-<title>.md" section="A.3 Detailed Changes"` — inline `<item>` lists are a review finding (the validator does not check them). The drift failure mode (prompt and Phase doc diverging) is the reason; v1.2 makes the rule strict instead of advisory.
 URI-fragment ref form (e.g., `ref="...md#A.3"`) instead of section-name form (`ref="...md" section="A.3 Detailed Changes"`). The fragment form is renderer-dependent (GitHub vs GitLab vs mdBook vs VS Code preview each slugify differently) and brittle — v1.2 drops it entirely. Use `section="..."` and let the validator resolve the heading via markdown-AST lookup. v1.0-grandfathered prompts (M01-M02) are exempt via the version banner in their headers.
 Missing `<execution_steps>`. v1.2 requires this slot in every work stage prompt. Omitting it means the procedural sequence (write_failing_tests → implement → verify_gates → fill_retrospective → surface) is invisible to the agent — it has to derive the cycle from the playbook each time. The slot is the procedural anchor.
 Missing `<gotchas_graduation>` in closeout. v1.2 requires the subsection inside `<gap_analysis_requirements>`. Without it, per-stage `<gotchas>` accumulate across milestones with no forcing function for graduation to `docs/gotchas.md` — discipline decay sets in by M05 or M06.
@@ -1245,7 +1262,7 @@ v1.6 — **Fifth schema: `<audit_pass_prompt>`** (the `audit` operating mode's d
 
 v1.5 — **Fourth schema: `<refactor_stage_prompt>`** (Stage R, the refactor health check). Mirrors `<verifier_stage_prompt>`; the only structural deltas are `<scope_to_refactor>` (replaces `<scope_to_verify>`) and `<refactor_passes>` (replaces `<verification_passes>`). `<findings_format>` + `<merge_gate>` are shared shapes pointed at refactor targets (`REFACTOR-FINDINGS-TEMPLATE.md`, `D.refactor`). Required tags defined in §8.6; the bias-guard read-first is one step stricter than the verifier's (omits prior retros **and** prior R findings). Validator `SCHEMAS` table + smoke coverage added in lockstep (the lockstep rule of §0). Also: the two illustrative `<ci_check name="...">` examples renamed to `append-only-ledger` — the shared check's real name (the old per-project check name is gone from this protocol).
 
-v1.4 — One additive optional tag — `<await_red_approval>`, the red-stop gate. Adds a third approval gate to the per-stage loop (plan-approval → **red-approval** → stage-end): after the failing tests are written and confirmed red, the agent stops and waits for the user to approve the *test design* before implementing to green, catching shallow or wrong-contract tests at the cheapest moment. **Default-on at Full** (inserted whether or not the tag is present); toggle off via `red_review: off` in `project-config.md`. The validator treats the tag as optional — neither presence nor absence is an error; it is a behavioral default, not a structural requirement. See §"`<await_red_approval>`".
+v1.4 — One additive optional tag — `<await_red_approval>`, the red-stop gate. Adds a third approval gate to the per-stage loop (plan-approval → **red-approval** → stage-end): after the failing tests are written and confirmed red, the agent stops and waits for the user to approve the *test design* before implementing to green, catching shallow or wrong-contract tests at the cheapest moment. **Default-on** (inserted whether or not the tag is present); the toggle this entry named was never read by any script, and the protocol no longer offers one. The validator treats the tag as optional — neither presence nor absence is an error; it is a behavioral default, not a structural requirement. See §"`<await_red_approval>`".
 
 v1.3 — Six additive changes informed by cross-stack-integration friction and cross-session-blindness incidents observed in early milestones. Five new optional tags + one tightening of `<approval_surface>`:
 1. **New optional slot `<pre_flight_check>`** (work stages). Pre-stage sanity checks (branch state, prior-stage commit presence, env vars, dep availability) the agent runs BEFORE any code is written. Pairs with cross-stack-integration stages where environment dependencies are easy to miss.
@@ -1262,7 +1279,7 @@ v1.2 — Eight additive/hardening changes informed by early-milestone retrospect
 2. **New required slot `<execution_steps>`** in work stages. Named procedural anchor — `write_failing_tests → implement → verify_gates → fill_retrospective → surface`. Replaces inline STEP 1–5 prose that previously lived in each prompt; the slot resolves to playbook sections rather than restating them.
 3. **New optional slot `<read_reference>`** (both schemas). Files for archetypal pattern reference (e.g., "see `src/<module>/<archetype-file>.<ext>` as `*_with` archetype"). Distinct from `<read_first>` (orientation) and `<read_prior_stages>` (within-milestone retrospectives). `purpose` attribute required (warning in v1.2, promotes to error in v1.3).
 4. **New optional slot `<execution_warnings>`** (both schemas). Inline operational warnings — workflow-time guardrails that apply during stage execution (cost concerns, side-effecting commands). Distinct from `<gotchas>` (pre-flight implementation traps) and `<scope_locks>` (deliverable-shape constraints).
-5. **Reference-first STRICT.** v1.0/v1.1 had reference-first as the default-but-not-required pattern. v1.2 makes it strict: if the Phase doc has a section matching the expected anchor for a content-heavy tag, inline content in that tag is rejected by the validator (error). Forces authors to commit to one source of truth and prevents prompt-vs-Phase-doc drift.
+5. **Reference-first STRICT.** v1.0/v1.1 had reference-first as the default-but-not-required pattern. v1.2 makes it strict: if the Phase doc has a section matching the expected anchor for a content-heavy tag, inline content in that tag is a review finding (the validator does not check it). The rule asks authors to commit to one source of truth, against prompt-vs-Phase-doc drift.
 6. **Gotchas graduation rule + `<gotchas_graduation>` enforced in closeout.** New required subsection inside `<gap_analysis_requirements>`. Audits per-stage `<gotchas>` entries across the milestone with disposition enum: `kept | graduated | resolved | expired`. The `expired` disposition requires rationale in `<target>` beyond bare `n/a`. Validator: every prior stage must have a `<stage_review>` entry; disposition values must match the enum; `expired` rationale length is checked.
 7. **Lean validator.** v1.2 ships with structural checks as errors (block CI) and cross-file resolution checks as warnings (surface in PR output, do not block). Cross-checks promote to errors in v1.3 once the cross-check logic survives 3+ milestones without false positives. Reduces brittleness during the v1.2 → v1.3 transition.
 8. **Grandfathering of pre-v1.2 Phase docs.** Phase docs authored before v1.2 (using URI-fragment refs, inline content, no `<execution_steps>`, etc.) carry a `**Protocol version:** v1.0 (pre-XML-schema; grandfathered).` header banner that exempts them from v1.2 validator rules. v1.2 applies to all Phase docs authored after the protocol's adoption.

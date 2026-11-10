@@ -40,12 +40,12 @@
 
 ## Per stage (M01.A, then B, ...)
 
-1. In the Orch terminal, `/listen` puts that session on the stage first - a stage opens only while the orchestrator is listening or present (typed into in the last 30 minutes) - and from then on the Builder's packets reach it on their own. Then open a **fresh** Builder session and run `/stage M01 A`. It opens the Phase doc, extracts the stage's `X.5 CLI Prompt`, and marks the stage open (`.claude/stage-active`), which arms the PROC-001 red-gate un-approved. Hand-pasting the `X.5` block is the equivalent manual path.
+1. In the Orch terminal, `/listen` puts that session on the stage first - a stage opens only while the orchestrator is listening (a recent prompt in its window does not count) - and from then on the Builder's packets reach it on their own. Then open a **fresh** Builder session and run `/stage M01 A`. It opens the Phase doc, extracts the stage's `X.5 CLI Prompt`, and marks the stage open (`.claude/stage-active`), which arms the PROC-001 red-gate un-approved. Hand-pasting the `X.5` block is the equivalent manual path.
 2. **First response should echo the stamp: `[read-first stamp] role=work, op=greenfield, loaded N of M files (M on the manifest, read at their when:), 0 skipped.`** If it doesn't, the agent skipped orientation - exit and restart.
 3. **Gate 1 - plan.** Builder surfaces deliverable + test plan and publishes it as the gate-1 packet, which travels the channel to Orch by itself. You adjudicate what Orch surfaces; its reply reaches the Builder when you type `/send`.
 4. **Gate 2 - red.** Builder writes failing tests, surfaces them as the red-stop packet, and stops. The red-gate hook blocks implementation edits until `/approve-red` writes the approval marker - the marker is the unlock, never approval wording alone. **The release rides the packet (M22 ruling 5):** in the two-brain flow, the Orch verdict packet ends with the explicit line `RED-RELEASE: approved - builder, run node scripts/approve-red.cjs --stage <id> --release-seq <n>`, and the Builder acts **only on that line** (the command's ask prompt is your release click). Approval language without the line **is not a release** - the Builder stops and tells you `/approve-red` is required. Carried by `/send --approval`, that verdict arrives as an approval request the Builder surfaces but cannot consume: your `/approve-red` is the only thing that releases it.
 5. **Gate 3 - stage-end.** Builder implements until tests and validators are green, then surfaces gates + retro + draft commit as the stage-end packet, which travels the channel to Orch for adjudication with you; the orchestrator commits on your stamp word - the Builder never commits. The release lane runs at closeout, Stage V and version tags, and inside a work stage at most once, on the final bytes, before the stage-end packet, which names that run; a second run needs a `release-run-reason:` line in the packet. **The stamp is asked-and-transcribed (M22 ruling 4):** at the stage end the orchestrator asks for your verdict (pass/fail + optional note) and transcribes your reply verbatim into the retro's user-stamp block, marked `transcribed:` - you never hand-edit the retro; the verdict's content stays yours alone.
-6. **Commit only - no push between stages.** The orchestrator commits; the push happens at the milestone PR after closeout. Committing closes the stage markers (`node scripts/stage-active.cjs --clear`, run by the orchestrator in the build worktree).
+6. **Commit only - no push between stages.** The orchestrator commits; the push happens at the milestone PR after closeout. Committing closes the stage markers (`node scripts/stage-active.cjs --clear --tree <the build worktree>`, run by the orchestrator from its own tree).
 7. **Exit Claude** in the Builder terminal (keep the terminal open).
 8. Open a fresh Claude for the next stage and go back to step 1.
 
@@ -92,7 +92,7 @@ The one canonical statement of the shipped Stage R design (authority: `BUILD-PLA
 
 ## If a session dies mid-stage (recovery)
 
-- Exit and reopen a fresh session, then run the same `/stage` again: it re-marks the stage open and clears any stale red approval (a fresh stage always starts un-approved), so the gates re-arm instead of trusting leftover state.
+- Exit and reopen a fresh session, then run the same `/stage` again: it re-marks the stage open and removes any stale red-approved marker (a fresh stage always starts un-approved), so the gates re-arm instead of trusting leftover state.
 - Partial work is still in the working tree; nothing is lost. Gates 1-3 re-run from where the artifacts actually are.
 - The `/clear` doctrine in Setup covers the orientation half: `/clear` and exit + restart both re-fire orientation.
 

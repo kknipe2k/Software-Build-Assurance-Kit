@@ -34,7 +34,7 @@ Each tier is a **default toggle bundle**. You can override any individual toggle
 ```
                    Lite          Full (default)
 Discovery Qs       2             5
-Scaffold files     ~54           ~121
+Scaffold files     ~56           ~124
 Approvals/stage    1 (per-PR)    1 (per-stage)
 Retro axes         1             2
 Ledger             CHANGELOG     append-only* (+ CI when risk-armed)
@@ -59,7 +59,7 @@ Tier isn't only a ceremony dial — at **Full** it splits the agent into two dis
 - **Orchestrator** — authors Phase docs / ADRs, adjudicates build surfaces, routes Verifier findings, sequences milestones, runs PRs. Governed by `ORCHESTRATOR.md` (generated at bootstrap at Full).
 - **Build** — executes one stage per fresh session from a §X.5 prompt. Governed by `CLAUDE.md` + the stage prompt; never reads `ORCHESTRATOR.md`.
 
-The human is the serializing conduit between them. At **Lite** tier the two roles collapse into a single session — no separate orchestrator, no `ORCHESTRATOR.md`. This is a structural consequence of tier, not a toggle; see `BUILD-PLAYBOOK.md` §2.2 for the role model and `ORCHESTRATOR.md` §1 for how the two roles are physically hosted (two CLIs + git worktrees on one machine is the recommended topology).
+The channel serializes them, and the human gives the four words (the release, the stamp, commit and push). At **Lite** tier the two roles collapse into a single session — no separate orchestrator, no `ORCHESTRATOR.md`. This is a structural consequence of tier, not a toggle; see `BUILD-PLAYBOOK.md` §2.2 for the role model and `ORCHESTRATOR.md` §1 for how the two roles are physically hosted (two CLIs + git worktrees on one machine is the recommended topology).
 
 ---
 
@@ -346,7 +346,7 @@ off_track_check: brief | advisory | enforced
 |---|---|---|---|---|
 | `brief` | Per-stage off-track line in the brief retro + a one-line closeout sanity check | One-line note in `CHANGELOG.md` (no separate log) | Advisory only | Lite |
 | `advisory` | Per-stage line (mandatory) + full closeout check | `docs/off-track-log.md`, append-only **advisory** (honor-system) | Surfaced; a standing unjustified inversion is a closeout warning | Full (the default) |
-| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, append-only **CI-enforced** (joins the `append-only-ledger.yml` set) | **G8 hard gate**: a standing unjustified inversion blocks the milestone PR | Explicit choice (or ride the risk-armed ledger set) |
+| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, on the append-only list (as at every value), checked in CI only in a project with a declared risk trigger | **G8**: judged by the agent and logged by a person; the enforced setting (a script that blocks the milestone PR on a standing unjustified inversion) is proposed for M36 | Explicit choice (or ride the risk-armed ledger set) |
 
 Defaults: **Lite = `brief`, Full = `advisory`**; `enforced` stays an explicit-choice escalation (a toggle ships with a default per tier so existing projects don't break on upgrade — §9). The **`/on-track` command is available at every value** — the toggle governs only the *mandatory* paths and the gate, never the on-demand review. Both clauses of G8 hold regardless of value: no unjustified inversion, and `docs/backlog.md` is HITL co-authored (no AI-only re-rank, status flip, scope change, or `Depends on` edit reaches the committed doc — that clause is what keeps "off track" falsifiable).
 
@@ -621,7 +621,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Lite
 
 - One discovery conversation (~15 minutes): what is this, what isn't it, success criteria.
-- Bootstrap generates ~54 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
+- Bootstrap generates ~56 files: `CLAUDE.md`, `project-config.md`, `docs/identity.md`, `docs/scope.md`, `CHANGELOG.md`, `.gitattributes`, `.claude/` hook + read-first list + settings, the local verification harness (`scripts/verify-local.cjs`) + committed git hooks (`.githooks/`), the M01 markdown task doc.
 - Per stage: agent codes, surfaces a brief retrospective paragraph, you approve at PR time.
 - No append-only ledger. No formal ADRs (use commit messages). No cumulative closeout review.
 - Web-verify defaults: agent leans on current best practices for library choices, version pins, idiomatic patterns.
@@ -630,7 +630,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~121 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +3 files when a declared risk trigger arms the ledger CI, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`.)
+- Bootstrap generates ~124 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +3 files when a declared risk trigger arms the ledger CI, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`.)
 - Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
 - Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.

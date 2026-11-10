@@ -39,7 +39,7 @@ risk_triggers: {{RISK_TRIGGERS}}  <!-- [] or a comma-list of the declared risk s
 | hook_enforcement | {{HOOK_ENFORCEMENT}} | enforced / advisory / disabled |
 | explanation_mode | {{EXPLANATION_MODE}} | verbose / standard / terse |
 | shell | {{SHELL}} | cmd / powershell / bash - the shell the person pastes launch blocks into: asked once in discovery on a win32 host, recorded as bash on POSIX without asking. Every printed launch block renders in it, the variable on its own line. Unset: cmd on win32, bash elsewhere. |
-| red_review | {{RED_REVIEW}} | on / off — red-stop gate: pause after tests are red for test-design approval before implementing green. Default `on` at Full, `off` at Lite. |
+| red_review | {{RED_REVIEW}} | on / off, recorded by the calibration and read by no script. The red stop has no off switch: in a Claude Code session the red gate's hook refuses an implementation edit on an open, unapproved work stage at every tier. |
 | verbosity | {{VERBOSITY}} | terse / standard / verbose — meta-dial: sets explanation_mode + web_verify + pre_write_surface + retro narration together (each still overridable). Default `standard` for every project (the expertise ask was retired at M26.D — KF-07). |
 | pre_write_surface | {{PRE_WRITE_SURFACE}} | always / spec_and_plan_only / none — which artifacts are surfaced before writing vs written-then-reviewed. Default `spec_and_plan_only` (calibration-core.json defaults). Set by `verbosity`. |
 | gap_analysis_cadence | {{GAP_ANALYSIS_CADENCE}} | per_milestone / per_release — when the full gap-analysis ledger entry is written. Default `per_release` (summary + CHANGELOG at intermediate closeouts); `per_milestone` is the explicit-choice escalation. |
