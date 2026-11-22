@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/build-receipts.cjs
 //
 // The build-receipts CLI — diagnostics (M20.6.A) + collectors (M20.6.C) + the
@@ -221,21 +221,46 @@ function normalize(input) {
   // ruling so the frozen 13-section top level stays untouched).
   const controls = [];
   let verifierFindings = 0;
+  let findingsFixed = 0;
   for (const k of keyed) {
     if (k.rec.kind === 'control') controls.push({ id: k.id, stage: k.rec.stage || null, control: k.rec.control || null, text: claimText(k.rec) });
-    if (k.rec.kind === 'verifier-finding') verifierFindings += 1;
+    if (k.rec.kind === 'verifier-finding') {
+      verifierFindings += 1;
+      if (k.rec.fixed === true) findingsFixed += 1;
+    }
   }
-  const gates = { controls: controls, verifier_findings: verifierFindings, release_origin: deriveReleaseOrigin(events) };
+  // M34.5.F.10: "caught and fixed" counts only findings marked fixed by a structured
+  // status: or fix: line. With no findings file read, the count has no source: null
+  // (UNKNOWN), never zero. findings_files comes from collectArc; a direct caller that
+  // passes finding records without it has read at least one file.
+  const findingsFiles = (typeof input.findings_files === 'number') ? input.findings_files : null;
+  const fixedKnown = (typeof findingsFiles === 'number' && findingsFiles > 0) || verifierFindings > 0;
+  const gates = {
+    controls: controls, verifier_findings: verifierFindings,
+    findings_files: findingsFiles, findings_fixed: fixedKnown ? findingsFixed : null,
+    release_origin: deriveReleaseOrigin(events),
+  };
 
   // decisions — the human verdicts (binary stamps, CHANGELOG verdicts): read,
-  // never invented.
+  // never invented. A milestone whose verdict is not a structured word is a decision
+  // with verdict null and its raw line (M34.5.F.10): the cover shows UNKNOWN for it.
   const decisions = [];
   for (const k of keyed) {
-    if (k.rec.kind === 'stage-rework' && k.rec.stamp) {
+    if (k.rec.kind === 'stage-rework' && k.rec.stamp && (k.rec.stamp.verdict != null || k.rec.stamp.score != null)) {
       decisions.push({ id: k.id, stage: k.rec.stage || null, verdict: k.rec.stamp.verdict != null ? k.rec.stamp.verdict : ('score ' + k.rec.stamp.score) });
     }
     if (k.rec.kind === 'milestone' && k.rec.verdict) {
       decisions.push({ id: k.id, milestone: k.rec.milestone, verdict: k.rec.verdict });
+    } else if (k.rec.kind === 'milestone' && Array.isArray(k.rec.unread) && k.rec.unread.some((u) => u.field === 'verdict')) {
+      decisions.push({ id: k.id, milestone: k.rec.milestone, verdict: null, unread: k.rec.unread.find((u) => u.field === 'verdict').line });
+    }
+  }
+  // Every claim a collector read from a field line outside its vocabulary is quoted
+  // here as UNKNOWN: the report says what it could not read, never what it guessed.
+  for (const k of keyed) {
+    if (!Array.isArray(k.rec.unread)) continue;
+    for (const u of k.rec.unread) {
+      coverage.push('not a structured claim, shown as UNKNOWN: ' + (k.rec.source || 'unknown source') + ': "' + String(u.line) + '"');
     }
   }
 
@@ -326,7 +351,9 @@ function normalize(input) {
   for (const k of keyed) {
     const c = collect.classify(k.rec);
     if (heads[c]) {
-      heads[c].push({ id: k.id, kind: k.rec.kind, text: claimText(k.rec), source: k.rec.source || '', evidence: String(k.rec.evidence || '') });
+      const item = { id: k.id, kind: k.rec.kind, text: claimText(k.rec), source: k.rec.source || '', evidence: String(k.rec.evidence || '') };
+      if (typeof k.rec.milestone === 'string' && k.rec.milestone) item.milestone = k.rec.milestone;
+      heads[c].push(item);
     } else {
       unclassified += 1;
     }
@@ -352,14 +379,38 @@ function normalize(input) {
   const limitations = Array.from(limSet).sort();
 
   // provenance — one entry per distinct source: commit|dirty state, collector
-  // version, claim basis.
+  // version, claim basis. A source whose records are bound to more than one commit
+  // never shows one of them as if it were the source's (M34.5.F.10): git shows the
+  // range of the collected commits, oldest..newest by commit date, with their count;
+  // any other source lists its commits.
   const provMap = new Map();
+  const provCommits = new Map();
+  const gitSeen = [];
   for (const k of keyed) {
     const p = k.rec.receipt && k.rec.receipt.predicate && k.rec.receipt.predicate.provenance;
-    if (!p || typeof p.source !== 'string' || provMap.has(p.source)) continue;
+    if (!p || typeof p.source !== 'string') continue;
+    if (p.source === 'git' && k.rec.kind === 'commit' && k.rec.hash) gitSeen.push({ hash: String(k.rec.hash), date: String(k.rec.date || ''), seq: Number.isInteger(k.rec.seq) ? k.rec.seq : null });
+    if (p.commit) { if (!provCommits.has(p.source)) provCommits.set(p.source, new Set()); provCommits.get(p.source).add(String(p.commit)); }
+    if (provMap.has(p.source)) continue;
     const entry = { source: p.source, collector_version: p.collector_version, basis: p.basis };
     if (p.commit) entry.commit = p.commit; else if (p.dirty) entry.dirty = true;
     provMap.set(p.source, entry);
+  }
+  for (const [src, entry] of provMap) {
+    const set = provCommits.get(src);
+    if (src === 'git' && gitSeen.length > 1) {
+      // Oldest first: git log's own order when the records carry it (seq 0 the newest),
+      // else the commit date with the hash breaking a tie.
+      const bySeq = gitSeen.every((x) => x.seq !== null);
+      gitSeen.sort((a, b) => (bySeq ? b.seq - a.seq
+        : (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : 0))));
+      delete entry.commit;
+      entry.range = gitSeen[0].hash + '..' + gitSeen[gitSeen.length - 1].hash;
+      entry.commits = gitSeen.length;
+    } else if (set && set.size > 1) {
+      delete entry.commit;
+      entry.commit_list = Array.from(set).sort();
+    }
   }
   const provenance = Array.from(provMap.keys()).sort().map((s) => provMap.get(s));
 
@@ -394,6 +445,15 @@ function esc(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+// The pinned cell of one provenance entry (M34.5.F.10): its commit, git's range with
+// the commit count, a source's commit list, or the stated dirty tree.
+function provPinned(p) {
+  if (p.commit) return String(p.commit);
+  if (p.range) return String(p.range) + ' (' + String(p.commits) + ' commits)';
+  if (Array.isArray(p.commit_list)) return p.commit_list.length + ' commits: ' + p.commit_list.join(', ');
+  return p.dirty ? 'dirty tree (stated)' : '';
 }
 
 // KF-42 (M26.F): durations HUMANIZE in every human-facing surface — "1105725 ms"
@@ -470,6 +530,7 @@ function coverMode(model) {
 function verdictTone(label, mode) {
   const s = String(label).toLowerCase();
   if (/^sound/.test(s)) return 'good';                        // "sound" AND "sound with fixes" -> green
+  if (/^strong/.test(s)) return 'good';                       // the closeout's "strong" -> green; "rough but shipped" and "recovery needed" stay amber
   if (mode === 'bug_fix' && /fixed|pass/.test(s)) return 'good';
   if (/fail|blocked/.test(s)) return 'crit';
   return 'warn';                                              // a non-sound verdict is an amber caveat
@@ -485,8 +546,12 @@ function coverVerdict(model) {
     const fixed = decisions.some((d) => d && d.verdict);   // a fix outcome only when a verdict exists
     return fixed ? { label: 'Fixed', tone: 'good' } : { label: COVER_UNKNOWN, tone: 'unknown' };
   }
-  let label = null;
-  for (const d of decisions) { if (d && d.milestone && d.verdict) label = d.verdict; } // last milestone wins
+  // The last milestone governs (M34.5.F.10): when its verdict is not a structured
+  // word, the cover is UNKNOWN with its raw line, never an older milestone's word.
+  let last = null;
+  for (const d of decisions) { if (d && d.milestone) last = d; }
+  if (last && !last.verdict) return { label: COVER_UNKNOWN, tone: 'unknown', raw: last.unread || null };
+  let label = last ? last.verdict : null;
   if (label === null) { for (const d of decisions) { if (d && d.verdict) label = d.verdict; } }
   if (label === null) return { label: COVER_UNKNOWN, tone: 'unknown' };
   return { label: titleCaseVerdict(label), tone: verdictTone(label, mode) };
@@ -498,36 +563,51 @@ function coverUnknownTile(key, label, note) {
 function coverControlsTile(gates) {
   // Label<->source agreement (owner ratified): gates.controls.length is a count
   // of DEMONSTRATED CONTROLS, not a check tally — so the word is "Controls".
+  // M34.5.F.10: a control counts only from a structured red-first: record, so zero
+  // controls means no source for the count: UNKNOWN, never a zero.
   const controls = (gates && Array.isArray(gates.controls)) ? gates.controls : null;
   return {
     key: 'checks', label: 'Controls',
-    value: (controls === null ? COVER_UNKNOWN : String(controls.length)),
+    value: ((controls === null || controls.length === 0) ? COVER_UNKNOWN : String(controls.length)),
     status: (controls && controls.length > 0) ? 'good' : 'unknown',
     note: 'demonstrated controls',
   };
+}
+// Caught and fixed (M34.5.F.10): findings marked fixed by a structured status: or
+// fix: line; null when no findings file was read (no source), so UNKNOWN.
+function coverFixed(model) {
+  const g = model.gates || {};
+  return coverNum(g.findings_fixed);
 }
 function coverTile(key, model, verdict) {
   const g = model.gates || {};
   const asr = model.assurance || {};
   switch (key) {
     case 'verdict':
-      return { key: key, label: 'Verdict', value: verdict.label, status: verdict.tone, note: 'human verdict' };
+      return { key: key, label: 'Verdict', value: verdict.label, status: verdict.tone, note: verdict.raw ? 'not a structured verdict: "' + verdict.raw + '"' : 'human verdict' };
     case 'outcome':
       return { key: key, label: 'Outcome', value: verdict.label, status: verdict.tone, note: 'fix outcome' };
     case 'caught_fixed': {
-      const vf = coverNum(g.verifier_findings);
+      const fx = coverFixed(model);
       return {
         key: key, label: 'Caught & fixed',
-        value: (vf === null ? COVER_UNKNOWN : String(model.gates.verifier_findings)),
-        status: (vf && vf > 0) ? 'good' : 'unknown', note: 'verifier findings',
+        value: (fx === null ? COVER_UNKNOWN : String(fx)),
+        status: fx === null ? 'unknown' : (fx > 0 ? 'good' : 'warn'),
+        note: fx === null ? 'no verifier findings file read' : 'findings marked fixed (status: or fix: line)',
       };
     }
     case 'checks':
       return coverControlsTile(g);
     case 'stages_shipped': {
+      // Distinct milestones (M34.5.F.10): a CHANGELOG entry, a completion and a
+      // release row for one milestone count once.
       const shipped = Array.isArray(model.shipped) ? model.shipped : [];
-      const n = shipped.filter((s) => s && (s.kind === 'milestone-complete' || s.kind === 'release-transition' || s.kind === 'milestone')).length;
-      return { key: key, label: 'Stages shipped', value: String(n), status: n > 0 ? 'good' : 'unknown', note: 'milestone / release' };
+      const ms = new Set();
+      for (const s of shipped) {
+        if (s && (s.kind === 'milestone-complete' || s.kind === 'release-transition' || s.kind === 'milestone')) ms.add(s.milestone || s.id);
+      }
+      const n = ms.size;
+      return { key: key, label: 'Milestones shipped', value: String(n), status: n > 0 ? 'good' : 'unknown', note: 'distinct milestones: an entry, a completion or a release row' };
     }
     case 'coverage': {
       const recs = coverNum0(asr.records);
@@ -556,19 +636,25 @@ function coverTile(key, model, verdict) {
   }
 }
 
+// The loop lights a step only on its own record (M34.5.F.10): red-first on a
+// structured control, fresh verifier on a findings file read or a milestone's
+// structured verdict (a stamp is the owner's, not the verifier's), fix loop on a
+// finding marked fixed.
 function coverLoop(model) {
   const g = model.gates || {};
   const controls = Array.isArray(g.controls) ? g.controls : [];
-  const findings = coverNum0(g.verifier_findings);
   const shipped = Array.isArray(model.shipped) ? model.shipped : [];
-  const broke = Array.isArray(model.broke) ? model.broke : [];
   const decisions = Array.isArray(model.decisions) ? model.decisions : [];
+  const files = coverNum(g.findings_files);
+  const verifierRan = (files !== null ? files > 0 : coverNum0(g.verifier_findings) > 0)
+    || decisions.some((d) => d && d.milestone && d.verdict);
+  const fixed = coverFixed(model);
   return [
     { step: 'spec', on: true },
     { step: 'red-first', on: controls.length > 0 },
     { step: 'build', on: shipped.length > 0 },
-    { step: 'fresh verifier', on: findings > 0 || decisions.length > 0 },
-    { step: 'fix loop', on: broke.length > 0 || findings > 0 },
+    { step: 'fresh verifier', on: verifierRan },
+    { step: 'fix loop', on: fixed !== null && fixed > 0 },
     { step: 'receipt', on: true },
   ];
 }
@@ -590,11 +676,11 @@ function coverageRows(model) {
 function coverHeadline(model, mode, verdict) {
   const asr = model.assurance || {};
   const recs = coverNum(asr.records);
-  const vf = coverNum(model.gates && model.gates.verifier_findings);
+  const fx = coverFixed(model);
   const head = (verdict.label === COVER_UNKNOWN) ? 'Build receipt' : verdict.label;
   const tail = [mode];
   if (recs !== null) tail.push(recs + ' records');
-  if (vf !== null) tail.push(vf + ' caught & fixed');
+  tail.push(fx === null ? 'caught & fixed ' + COVER_UNKNOWN : fx + ' caught & fixed');
   return head + ' - ' + tail.join(', ') + '.';
 }
 function coverSubline(model) {
@@ -936,21 +1022,27 @@ function renderHtml(model) {
     return 'a verdict string recorded verbatim from the source document - shown as recorded.';
   };
   const matrixWords = MATRIX_OUTCOMES.map((p) => p[0]);
-  const recordedExtra = [...new Set(dec.map((d) => String(d.verdict)))].filter((v) => matrixWords.indexOf(v) === -1);
+  const verdictWord = (d) => (d.verdict == null ? COVER_UNKNOWN : String(d.verdict));
+  const recordedExtra = [...new Set(dec.filter((d) => d.verdict != null).map((d) => String(d.verdict)))].filter((v) => matrixWords.indexOf(v) === -1);
   push('<details id="verdict-legend"><summary>What the verdict words mean - the full outcome set</summary>\n' +
     '<p>Stage and milestone outcomes come from the outcome matrix (BUILD-PLAYBOOK §4.4): every retrospective ends in exactly one of the four outcomes below. This ledger also records the additional verdict vocabularies listed after them.</p>\n<ul>\n');
   for (const p of MATRIX_OUTCOMES) push('<li><strong>' + esc(p[0]) + '</strong> - ' + esc(p[1]) + '</li>\n');
   for (const v of recordedExtra) push('<li><strong>' + esc(v) + '</strong> - ' + esc(explainRecorded(v)) + '</li>\n');
+  if (dec.some((d) => d.verdict == null)) push('<li><strong>' + esc(COVER_UNKNOWN) + '</strong> - the source document carries no structured verdict line; the row below quotes what was read there, and no verdict is inferred from it.</li>\n');
   push('</ul>\n</details>\n');
   if (dec.length === 0) push('<p class="none">no recorded verdicts</p>\n');
   else {
     // req 9: the list collapses to its computed truth — the count and per-verdict
     // breakdown are tallied from the rows themselves.
     const vCounts = {};
-    for (const d of dec) { const v = String(d.verdict); vCounts[v] = (vCounts[v] || 0) + 1; }
+    for (const d of dec) { const v = verdictWord(d); vCounts[v] = (vCounts[v] || 0) + 1; }
     const breakdown = Object.keys(vCounts).map((v) => esc(v) + ' ×' + vCounts[v]).join(', ');
     push('<details><summary>' + dec.length + ' recorded verdicts - ' + breakdown + '</summary>\n<ul>\n');
-    for (const d of dec) push('<li>' + esc(d.stage || d.milestone || '') + ': ' + esc(d.verdict) + ' <span class="label">' + esc(d.id) + '</span></li>\n');
+    for (const d of dec) {
+      push('<li>' + esc(d.stage || d.milestone || '') + ': ' + esc(verdictWord(d)) +
+        (d.verdict == null && d.unread ? ' <span class="unknown">not a structured verdict, recorded as: "' + esc(d.unread) + '"</span>' : '') +
+        ' <span class="label">' + esc(d.id) + '</span></li>\n');
+    }
     push('</ul>\n</details>\n');
   }
 
@@ -1043,7 +1135,7 @@ function renderHtml(model) {
   push('<details><summary>' + prov.length + ' provenance sources - expand for the pinned-commit table</summary>\n' +
     '<table>\n<tr><th>source</th><th>pinned</th><th>collector</th><th>basis</th></tr>\n');
   for (const p of prov) {
-    push('<tr><td>' + esc(p.source) + '</td><td>' + esc(p.commit ? p.commit : (p.dirty ? 'dirty tree (stated)' : '')) + '</td><td>' +
+    push('<tr><td>' + esc(p.source) + '</td><td>' + esc(provPinned(p)) + '</td><td>' +
       esc(p.collector_version || '') + '</td><td>' + esc(p.basis || '') + '</td></tr>\n');
   }
   push('</table>\n</details>\n');
@@ -1171,7 +1263,7 @@ function renderMarkdown(model) {
   L.push('');
   L.push('## Provenance');
   for (const p of (model.provenance || [])) {
-    L.push('- ' + san(p.source) + ' — ' + (p.commit ? 'commit ' + san(p.commit) : 'dirty tree (stated)') + ' · collector ' + san(p.collector_version || '') + ' · ' + san(p.basis || ''));
+    L.push('- ' + san(p.source) + ' — ' + (p.commit ? 'commit ' + san(p.commit) : san(provPinned(p))) + ' · collector ' + san(p.collector_version || '') + ' · ' + san(p.basis || ''));
   }
   L.push('');
   return L.join('\n');
@@ -1226,8 +1318,10 @@ const OPERATING_MODES = ['greenfield', 'bug_fix', 'audit', 'research_publish'];
 // the mode names inside a comment, and a commented mention is not a
 // declaration.
 function readOperatingMode(cwd) {
-  let text;
-  try { text = fs.readFileSync(path.join(cwd, 'project-config.md'), 'utf8'); } catch (_) { return undefined; }
+  // The committed project-config.md (M34.5.F.10): the report reads the commit it
+  // names, so an uncommitted edit to the mode is not in it.
+  let text = collect.readCommitted(cwd, 'project-config.md');
+  if (text === null || text === undefined) return undefined;
   // Strip HTML comments to FIXPOINT, not once — a single pass leaves a live `<!--`
   // on crafted overlap (js/incomplete-multi-character-sanitization; flagged by CodeQL
   // in an adopting repo, UAT 2026-07). The 4-value allowlist below already bounds the
@@ -1412,6 +1506,7 @@ function gatherModelInput(cwd, range, ledgerDirs) {
   const td = readTokenDeclarations(tokenDirs);
   for (const n of td.notes) extraCoverage.push(n);
   const modelInput = { identity: identity, records: arc.records, events: events, coverage: arc.coverage.concat(extraCoverage) };
+  if (typeof arc.findings_files === 'number') modelInput.findings_files = arc.findings_files;
   if (td.tokens) modelInput.tokens = td.tokens;
   return modelInput;
 }

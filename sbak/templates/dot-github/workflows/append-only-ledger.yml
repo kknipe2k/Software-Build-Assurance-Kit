@@ -6,24 +6,30 @@ name: append-only-ledger
 # content (appends only ever go at the end, newest at the bottom). Any edit,
 # reorder, or deletion of prior bytes breaks the prefix and fails the job.
 #
-# Tier behavior (see project-config.md `ledger` toggle):
-#   * Full     — make this a REQUIRED status check in branch protection. A
-#                prior-line edit then blocks the PR (append_only_enforced).
-#   * Standard — keep the workflow but leave it non-required: it reports a
-#                violation without blocking (append_only_advisory).
-#   * Lite     — no ledgers; delete this workflow.
+# When it exists (see project-config.md `ledger` toggle): the bootstrap generates this workflow
+# only in a Full project with a declared risk trigger (armed). Make it a REQUIRED status check in
+# branch protection there and a prior-line edit then blocks the PR (append_only_enforced); left
+# non-required it reports a violation without blocking. A Full project with no risk trigger
+# (unarmed) has no workflow and no ledger list: its ledgers are unchecked in CI and the pre-push
+# leg skips them.
 #
-# To add or remove a ledger, edit docs/append-only-ledgers.txt — that is the ONLY place:
-# the same file the pre-push hook's append-only leg reads, so the hook and CI never
-# disagree about what is a ledger. Do NOT split into per-ledger jobs; the checker takes
-# many paths at once.
+# To add a ledger, append its path to docs/append-only-ledgers.txt, the same file the
+# pre-push hook's append-only leg reads, so the hook and CI never disagree about what is a
+# ledger. To remove one, delete its line and add an exception line naming that commit
+# (`<sha> docs/append-only-ledgers.txt <reason>` in docs/append-only-exceptions.txt): the
+# list is read at the base as well as the head, so a dropped ledger is otherwise refused.
+# Do NOT split into per-ledger jobs; the checker takes many paths at once.
 #
-# The check WALKS EVERY COMMIT (M32.B): `--per-commit` compares each commit's ledgers
-# against its first parent's, so a rewrite inside the branch is caught even when the
-# final file still extends the base. `--head` is the PR head sha because the
-# pull_request checkout is a synthetic merge (HEAD^1 = base, HEAD^2 = the PR head) and
-# a walk from that HEAD would be one step. Owner-approved rewrites go in an
-# `--exceptions` file, printed on every run (see the checker's header).
+# What is checked (M32.B; M34.5.F.9): every commit of the pull request's branch against its
+# first parent (deterministic enforcement). `--head` is the PR head sha because the
+# pull_request checkout is a synthetic merge (HEAD^1 = base, HEAD^2 = the PR head) and a
+# walk from that HEAD would be one step. The ledgers are the union of
+# docs/append-only-ledgers.txt at the base and at the head, so a change that drops a ledger
+# from the list is itself refused unless docs/append-only-exceptions.txt names it. A rewrite
+# a person approves is a line in docs/append-only-exceptions.txt (human authorization), read
+# at the head commit and printed on every run; the checker does not check who wrote it.
+# Limit: this workflow runs on pull requests only. A direct push to a branch the kit does
+# not protect is checked by the pre-push leg only, and the kit sets no branch protection.
 #
 # NOTE on docs/sessions.md (added M27.D, KF-48 instance 2). The generated
 # templates/sessions.md has always told every project "CI enforces via diff check",

@@ -1,13 +1,17 @@
 name: validate-stage-prompts
 
 # Validates every Phase doc's stage prompts against the schemas in
-# STAGE-PROMPT-PROTOCOL.md. Runs on every PR that touches Phase docs.
+# STAGE-PROMPT-PROTOCOL.md. Runs on every PR that touches Phase docs: the one
+# Phase-doc path set (docs/build-prompts/, docs/bugfix/, proposals/M*.md), the
+# set the stage reader and the pre-commit read (M34.5.F.8).
 # Catches structural drift before a milestone branches off.
 
 on:
   pull_request:
     paths:
       - 'docs/build-prompts/**'
+      - 'docs/bugfix/**'
+      - 'proposals/M*.md'
       - 'sbak/STAGE-PROMPT-PROTOCOL.md'
       - 'validators/validate-stage-prompts.cjs'
 

@@ -63,7 +63,7 @@ In a fresh session, read these in order before writing any code or making decisi
 | 6 | `docs/scope.md` | The phased milestone scope; what's in/out per version |
 | 7 | `docs/gates.md` | The gate matrix indexed by milestone |
 | 8 | `docs/build-prompts/M[N]-*.md` | The active milestone (if applicable) |
-| 9 | `spec/project-spec.md` (relevant sections) | Whatever the active milestone touches |
+| 9 | `spec/project-spec.md` (relevant sections; where `spec/live-spec.md` exists beside it, that is the current spec) | Whatever the active milestone touches |
 | 10 | `docs/style.md` | Stack-specific style and naming conventions |
 | 11 | `docs/gotchas.md` | Project-specific traps that have bitten before |
 | 12 | `docs/adr/` | ADRs by topic; at minimum any flagged in the active milestone's references |

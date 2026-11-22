@@ -1,0 +1,15 @@
+# docs/append-only-exceptions.txt - the rewrites of an append-only ledger that a person approved.
+#
+# Read by both enforcement points of validators/check-append-only.cjs, the pre-push hook and the
+# CI workflow, at the head commit being pushed or checked, never from the working tree: a line
+# loosens a check only once it is committed. One approval per line:
+#
+#   <sha> <path> <reason>
+#
+# <sha> is the commit that rewrote the ledger (7 to 40 hex characters), <path> the ledger it
+# rewrote (or docs/append-only-ledgers.txt, for a commit that drops a ledger from the list), and
+# <reason> why the rewrite was approved. Every run prints each line it loads and each one it
+# applies. Add a line in a new commit after the commit it names. This file is itself append-only,
+# so a line is never edited or removed. The checker reads a line's shape and applies it only at a
+# walked commit whose sha starts with its prefix; it does not check that the commit exists or who
+# wrote it: the line's own commit records the approval (human authorization).

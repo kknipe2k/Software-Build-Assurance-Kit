@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.10
+# @kit-version 1.0.11
 # .githooks/pre-push  —  the fast lane: the tests your push affects, the open milestone's
 # own tests, and the always-tagged guards, on the native leg. The full matrix (Linux-in-
 # Docker + native, every test) is the `release` lane, run by /closeout, /verify and the
@@ -9,16 +9,40 @@
 #
 # Activated by: git config core.hooksPath .githooks
 #   (run `node scripts/install-hooks.cjs` once after cloning).
-# Emergency override: git push --no-verify  (logged, never routine; it cannot
-# bypass the required PR check — see docs/gates.md).
+# Emergency override: git push --no-verify skips this hook, and nothing records the skip (not
+# logged; never routine). After it only the pull-request check runs, where the project has one, on
+# the pull request's own copy of the validators; it blocks a merge only where the repository owner
+# made it a required check in branch protection, which the kit does not set (see docs/gates.md).
 set -e
-# The append-only leg (M32.B): every commit in the push must extend its parent's ledgers,
-# not only the final file against the base. The list is docs/append-only-ledgers.txt (the
-# same file CI reads); no list present (Lite, or an unarmed project) means one plain line.
-if [ -f docs/append-only-ledgers.txt ]; then node validators/check-append-only.cjs --per-commit --ledgers docs/append-only-ledgers.txt || exit 1; else echo "pre-push: no docs/append-only-ledgers.txt - append-only leg skipped"; fi
+# git's ref feed (M34.5.F.5): the refs being pushed arrive on this hook's input; read once, byte for
+# byte (the x keeps the final newline), and replayed to your chained pre-push and to the evidence check.
+sbak_refs=$(cat; printf x); sbak_refs=${sbak_refs%x}
+sbak_feed() { printf '%s' "$sbak_refs"; }
+# Your own hooks, chained (M34.5.F.5): on your word, kit-update --adopt --hooks chain records the
+# folder your hooks ran from in this clone's git config (sbak.hooksChain). Your pre-push there runs
+# first, with git's arguments and the ref feed; a refusal from it refuses the push, and the kit's
+# checks below run only after it passes. With no chain declared this does nothing.
+if sbak_chain=$(git config --get sbak.hookschain 2>/dev/null); then
+  sbak_dir=${sbak_chain#*:}
+  case "$sbak_chain" in default:*) sbak_dir="$(git rev-parse --git-common-dir)/hooks" ;; esac
+  case "$sbak_dir" in "~/"*) sbak_dir="$HOME/${sbak_dir#"~/"}" ;; esac
+  if [ ! -d "$sbak_dir" ]; then
+    echo "NOTE  pre-push: the chained hooks folder $sbak_dir (git config sbak.hooksChain) is absent, so only the kit's checks ran" >&2
+  elif [ "$(cd "$sbak_dir" && pwd -P)" = "$(cd .githooks 2>/dev/null && pwd -P)" ]; then
+    echo "NOTE  pre-push: git config sbak.hooksChain names .githooks itself, so nothing was chained" >&2
+  elif [ -x "$sbak_dir/pre-push" ]; then
+    sbak_feed | "$sbak_dir/pre-push" "$@" || { sbak_rc=$?; echo "pre-push: your own hook $sbak_dir/pre-push refused the push (exit $sbak_rc); the kit's checks did not run" >&2; exit $sbak_rc; }
+  fi
+fi
+# The append-only leg (M32.B; M34.5.F.9): every ref on git's feed is walked from the remote's sha
+# (a new ref from its merge-base with the remote's default branch), every commit against its parent
+# and the remote's copy against the pushed head. The ledgers
+# are docs/append-only-ledgers.txt read at both ends and in the tree (the file CI reads); approved
+# rewrites are lines in docs/append-only-exceptions.txt. No checker (an unarmed project) means one line.
+if [ -f validators/check-append-only.cjs ]; then sbak_feed | node validators/check-append-only.cjs --pre-push --remote "$1" --ledgers docs/append-only-ledgers.txt || exit 1; else echo "pre-push: no validators/check-append-only.cjs - append-only leg skipped"; fi
 # The evidence path's transport check (M34.6.B): every stage commit in the pushed range (a
 # single-parent commit whose diff touches .claude/evidence/<stage>/gate.json) must carry a committed
 # lane_run.json for its own subject with verdict pass; it reads git's ref feed on stdin. Any other
 # commit is covered by the lane below. Without scripts/evidence.cjs no stage was opened on the path.
-if [ -f scripts/evidence.cjs ]; then node scripts/evidence.cjs --pre-push || exit 1; fi
+if [ -f scripts/evidence.cjs ]; then sbak_feed | node scripts/evidence.cjs --pre-push || exit 1; fi
 node scripts/verify-local.cjs --lane fast

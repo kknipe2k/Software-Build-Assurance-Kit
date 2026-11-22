@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.10-green" alt="Status: GA v1.0.10"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.11-green" alt="Status: GA v1.0.11"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -24,9 +24,9 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 ![Build for the next hundred commits - test-first gates, fresh-context verification, durable memory, receipts: the orchestrator and the human gate relay plan, red-test, and close decisions into a fresh build/verify/refactor session, and everything lands in the durable record of contracts, decisions, findings, and receipts](docs/assets/sbak-readme-light.png)
 
 - **[HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html)** - the visual overview. A few minutes, in your browser.
-- **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived from real commits, findings, and rework, not a staged demo.
+- **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived by the collectors from the commit it names, reading the repository's records at that commit (deterministic enforcement), not a staged demo.
 - **[WHY-THIS-KIT.md](WHY-THIS-KIT.md)** - deciding if it's worth your evening? Two pages, honest costs.
-- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.10 GA release: exactly what is claimed, what is not, and the notes for both.
+- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.11 GA release: exactly what is claimed, what is not, and the notes for both.
 
 ## How it works
 
@@ -94,13 +94,13 @@ Put `sbak-install.cjs` in the target directory - the directory you run in is the
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
 ```
 
-Windows: `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model opus` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus` in PowerShell, in place of that line.
+Windows: `set "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" && claude --model opus` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus` in PowerShell, in place of that line.
 
 ```
 sbak-install
 ```
 
-**Result:** the script carries its own instructions; Claude reads them and runs it one step at a time. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks `OK to proceed? Type install, list, or no` - `list` shows every file first. Every question ends with the exact word to type. On an existing repo you get a blast-radius report (collisions, what the kit's files would sit next to, the detected stack) to talk through before that proceed. Nothing is written before your word. It creates the git repo if there is none, runs the adopt step, and prints `Done` with the hooks live. Stay in this window: in the same session, Claude asks what you want to build. The protected writes are done, so switch back to auto mode (Shift+Tab).
+**Result:** the script carries its own instructions; Claude reads them and runs it one step at a time. It names the download URL and where the ZIP will land, shows you the checksum and attestation result, and asks `OK to proceed? Type install, list, or no` - `list` shows every file first. Every question ends with the exact word to type. On an existing repo you get a blast-radius report (collisions, what the kit's files would sit next to, the detected stack, and the git hooks your repository already runs) to talk through before that proceed; if git already runs hooks of yours, it asks chain (yours run first, then the kit's checks, in this clone) or replace (yours stop running; the previous setting is recorded). Nothing is written before your word, your git configuration included. It creates the git repo if there is none and the folder is not inside another repository, runs the adopt step, and prints `Done` with the hooks live, naming any hooks of yours it chained or replaced. Stay in this window: in the same session, Claude asks what you want to build. Switch back to auto mode now (Shift+Tab); the scaffold step asks for Manual again before it writes `.claude/`.
 
 **The attestation result** is one of four:
 
@@ -109,7 +109,7 @@ sbak-install
 - **could not run** - `gh` is there but failed (not signed in, no network). You get one retry, then type `checksum only` to go on without it.
 - **REJECTED** - the asset is not the one the repository built. Nothing is installed, and only `re-download` or `abort` continue.
 
-**Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own. If your session is in auto mode, press Shift+Tab until the mode indicator reads Manual and approve each step with a click.
+**Permissions:** the install writes `.claude/` and `.git`, which Claude Code never approves on its own. If your session is in auto mode, press Shift+Tab until the mode indicator reads Manual.
 
 **2. Say what you want.**
 
@@ -119,13 +119,13 @@ Your answer can simply be what you want - *"fix a bug"*, *"add a feature"*, *"bu
 
 ### Verify your install
 
-- [ ] The installer printed `Done` and the adopt step reported `adoption COMPLETE` (exit 0).
+- [ ] The installer printed `Done` with `adoption COMPLETE - Hooks live` (the adopt step's own verdict, read back by the installer).
 - [ ] Claude asked what you want to build in the same window, with no restart. The `[read-first stamp]` line starts every session after this one.
 - [ ] You said what you want to build and got the acceptance line.
 
-If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed; exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe; a clean re-run changes nothing.
+If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed; exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete: adopt names a required file that is absent, or a git hook that is not the kit's by content, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe; a clean re-run changes nothing.
 
-**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block, one line per check and one next command; the bootstrap-filled files (the pre-commit hook and `verify-local`) stay at the installed version and are named - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in them, file by file, and merges it three ways from the version you were on, keeping your fills (a project that records no kit pin names the version it was built on once, with `--pin`).
+**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block, one line per check and one next command; the bootstrap-filled files stay at the installed version (the pre-commit hook and `verify-local`, named, and any generated CI workflow) - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in them, file by file, and merges it three ways from the version you were on, keeping your fills (deterministic enforcement; a project that records no kit pin names the version it was built on once, with `--pin`). An edit of yours in or beside a line the release changed is written with conflict markers and the pin stays: resolve them (your judgment) and commit, with the record the run wrote, `.claude/kit-migrate.json`; on the re-run a file you resolved is kept as you committed it for this upgrade, and once no file is left with markers the pin rises, which removes the record. Or move your edit away from the changed lines, or mark the file `INTENTIONAL DIVERGENCE` and stop receiving its fixes. A kit file that is not bootstrap-filled is kept whole when you changed it, or taken whole with `--release`.
 
 **Need more detail?** Full documentation is below, or see [QUICKSTART.md](sbak/QUICKSTART.md) §1 - which also covers the manual ZIP path, adopting into an existing repo, and the clone alternate.
 
@@ -138,9 +138,11 @@ If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` -
 
 A set of documents, hooks, validators, and scripts you copy into a project/repo. They give an agent session a fixed shape: read the spec, write a failing test, get a human to look at the failing test, write the code, hand the result to a second agent that starts with no memory of the first, fix what it finds, then write down what happened.
 
+The spec it reads is two files from the bootstrap commit on: the original, which the commit floor refuses to let change (deterministic enforcement), and a live copy, the only spec that changes, and only where a hash chain from the original reaches it. Each requirement change is one file the person approves (human authorization), committed with its live-spec edit or refused (deterministic enforcement), and the milestone's closeout names what changed or says that nothing did.
+
 Three things hold that shape in place, and none of them is a document the agent can skip:
 
-- **The gates are mechanical, and they are tested like code.** Most process frameworks are prose, and agents demonstrably ignore prose. Here the floors are the shipped validators, 4 session hooks, and committed git hooks that run before a commit lands. The enforcement layer has its own regression suite in the development repository, and `sbak/scripts/bake-inheritance.cjs` ships as the proof a reader can run: it renders a real project and a planted defect must fail a baked gate. Presence is never taken for effectiveness.
+- **The gates are mechanical, and they are tested like code.** Most process frameworks are prose, and agents demonstrably ignore prose. Here the floors are the shipped validators, 4 session hooks, and committed git hooks that run before a commit lands. The enforcement layer has its own regression suite in the development repository, and `sbak/scripts/bake-inheritance.cjs` ships as the proof a reader can run: it renders a real project and a planted defect must fail a baked gate. Presence is never taken for effectiveness: `node scripts/kit-update.cjs --ready` reads every kit file it manages by content against the installed release and runs the project's mini-smoke, whose pre-commit check must refuse an assertion-free test wherever the tier renders that gate (deterministic enforcement over observed evidence); it cannot see a file the installed release does not list, or a setting outside the project.
 - **The reviewer starts blind, and has to prove it can see.** Every milestone ends with a verifier session whose read-first list structurally omits the builder's notes - a bias guard the hooks enforce rather than a convention. Before its findings count for anything, it must find every defect in a set of deliberately seeded ones. A verifier that rubber-stamps is caught by construction, not by trust.
 - **The ceremony is priced, chosen, and revisable.** Full is the default tier. You can move up or down later by telling the orchestrator, who edits one file and logs why. Nothing about the tier is baked into the code.
 
@@ -154,7 +156,7 @@ The result is a build that can tell its own story: what was decided, what broke,
 - **Not a hosted service or an agent runner.** It is files in your repository. It runs wherever your agent runs.
 - **Not a guarantee that agents stop making mistakes.** It is the set of controls that make a mistake visible and fixable while it is still cheap.
 - **Not a replacement for tests, review, or judgment.** It assumes you have those and gives them a place to stand.
-- **Not a sandbox.** The generated permission fence denies secret reads and irreversible commands at the agent's tool layer, but a subprocess the agent spawns can still read a file on disk or make changes you don't want. The fence raises the bar; the real backstops are secrets kept off disk and the OS sandbox and your judgement.
+- **Not a sandbox.** The generated permission fence denies secret reads and irreversible commands at the agent's tool layer, but a subprocess the agent spawns can still read a file on disk or make changes you don't want. Its secret deny covers every `.env` file at any depth, `.env.example` included, and `.netrc` and `.git-credentials` (deterministic enforcement), so you keep `.env.example` yourself: the agent's file tools can neither read nor write it (human authorization). The fence raises the bar; the real backstops are secrets kept off disk and the OS sandbox and your judgement.
 - **Not audited.** This framework was generated for the most part by Claude with human guidance - but no human security review has been performed on this code. See [SECURITY.md](SECURITY.md).
 - **Not checked everywhere yet.** One host, one runner adapter, one transport: Claude Code at 2.1.295 or later, the node --test reporter read by scripts/verify-local.cjs, and the stage commit; any other host, any other test runner (its RED is taken on its exit code with the labels unread, and the orchestrator judges whether the failures are the approved tests), an artifact store and a separate evidence ref are unsupported on this path. On Windows a killed test process and a test file that fails to load both reach node --test as exit code 1 with no signal, so a RED there whose only failures are file-level is classified cancelled_or_load and the release refuses it, naming both readings (deterministic enforcement at the release): make the test fail by an assertion, or run the RED on a POSIX host. The records are checked against each other and against the commit, never against their author: anyone who can write the repository can rewrite a record together with its manifest hash and evidence.cjs --verify still passes, so a fabricated record is outside the local trust boundary this path claims (observed evidence, not proof of authorship).
 
@@ -178,7 +180,7 @@ There is no guarantee that a heavyweight process framework beats a concise `CLAU
 <details>
 <summary><strong>The stage loop, step by step</strong></summary>
 
-At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows**. They never share a context. They talk through **the channel** - an append-only log in your repository over which stage packets (stage open, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions. **Approvals are never automated:** the RED release and the commit approval are your keystrokes, and the RED release reaches the builder only when you type `/send --approval`.
+At Full tier (the default), the kit runs as **two separate CLI sessions in two separate windows**. They never share a context. They talk through **the channel** - an append-only log in your repository over which stage packets (stage open, the plan, the red-stop, the stage-end, the verdicts) are picked up automatically in both directions. **Approvals are never automated:** the RED release and the commit approval are yours: the RED release is your click on its prompt in the build window, or the release command in your own terminal (human authorization), and `/send --approval` carries the orchestrator's verdict to it. Any permission prompt on record from the last two minutes counts as the click, not only the release's own (observed evidence). These are a bar-raise, not a wall: a program the agent wrote that an allow-listed command runs, and a program on your account outside the session, are outside every ask rule and hook.
 
 At start you open one window - the **bootstrap session**. It asks what you want to build, plans the project with you, and scaffolds the files - then it retires, and its last act is walking you through opening the two windows that run the build. The channel starts at that split; until then, anything that has to move between windows moves by hand.
 
@@ -198,7 +200,7 @@ After bootstrap each stage is generally run the same:
 
 1. **Read.** A session-start hook prints a short stamp naming the session's role and its reading list. The files themselves are read at the moment a step needs them, and each read is recorded; a stage cannot open its red gate on reads that never happened.
 2. **Stage Plan.** The build agent writes the plan for the entire stage. The plan travels the channel to the orchestrator for adjudication. Once approved, the orchestrator sends the approval to the build terminal, and the stage starts.
-3. **Red.** The agent writes failing tests first. A hook blocks it from touching implementation files until the test summary has reached the orchestrator, been reviewed, and you have released the gate. This is the one control that stops a test being written to fit code that already exists.
+3. **Red.** The agent writes failing tests first. A hook blocks it from touching implementation files until the test summary has reached the orchestrator, been reviewed, and you have released the gate (a bar-raise, not a wall: a program the agent writes, run by an allow-listed command, is outside the hook). This is the one control that stops a test being written to fit code that already exists.
 4. **Green.** The agent implements until the test passes and the gate line is clean.
 5. **Commit.** Once the stage is complete and clean, the orchestrator reviews and, once fully approved, recommends the commit. Once the build commits, that stage is done. That build session is complete and claude is exited from the terminal.
 6. Repeat for all standard build stages with a new build session each time.
@@ -253,9 +255,9 @@ Pick by the highest of complexity, time horizon, and audit needs. Re-tier whenev
 | Tier | For | Scaffold files | Approvals | Retrospective | Ledger | Review cost per stage |
 |---|---|---|---|---|---|---|
 | **Lite** | Under a week, low audit needs | 54 | per pull request | brief paragraph | changelog only | ~10 min |
-| **Full** (default) | a second reader, an audit need, or a multi-week horizon | 121 | per stage | process + product | append-only advisory; CI-enforced when a risk trigger is declared | ~30 min |
+| **Full** (default) | a second reader, an audit need, or a multi-week horizon | 123 | per stage | process + product | append-only advisory; CI-enforced when a risk trigger is declared | ~30 min |
 
-Declaring a risk trigger at calibration arms CI enforcement of the append-only ledger and adds 3 files to the scaffold.
+Declaring a risk trigger at calibration arms CI enforcement of the append-only ledger and adds 4 files to the scaffold.
 
 The generated project's verification floor runs in three lanes over one registry: `fast` on every push, `stage` at a stage boundary, `release` as the complete floor. Only the full floor is release evidence.
 
@@ -279,13 +281,13 @@ Skip the bootstrap entirely: run in terminal `node scripts/set-mode.cjs orchestr
 <details>
 <summary><strong>What's in the box</strong></summary>
 
-The ZIP - and the `sbak/` payload of this repository, which is the same set - is 210 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
+The ZIP - and the `sbak/` payload of this repository, which is the same set - is 214 files (the count and every row below are derived from the release manifest's assembled inventory, not hand-tallied):
 
 | Directory | Files | What it is for you |
 |---|---|---|
-| `sbak/templates/` | 118 | Copied into your project by the bootstrap; never read here. |
+| `sbak/templates/` | 121 | Copied into your project by the bootstrap; never read here. |
 | `sbak/prompts/` | 23 | The verifier's seeded-defect exam; runs itself. |
-| `sbak/validators/` | 29 | Enforcement (the project-floor validators plus mode-specific and append-only checkers, `lib/`, and docs); CI runs it. |
+| `sbak/validators/` | 30 | Enforcement (the project-floor validators plus mode-specific and append-only checkers, `lib/`, and docs); CI runs it. |
 | `sbak/scripts/` | 18 | You run 2–3, read none. |
 | `sbak/` root docs + `sbak/bootstrap/` | 21 | The methodology spine, the bootstrap playbooks, and the topology image; you read none to start. |
 | `CLAUDE.md` (ZIP root) | 1 | The agent's bootstrap instructions - auto-loaded, not for you. |
@@ -297,9 +299,9 @@ The installer, `sbak-install.cjs`, is a release asset beside the ZIP, not a file
 <details>
 <summary><strong>What's verified</strong></summary>
 
-The CI badge above is not decoration. On every push and pull request, this repository runs its own enforcement layer against itself:
+The CI badge above is not decoration. On every pull request and every push to main, this repository runs its own enforcement layer against itself (deterministic enforcement; it does not run the release verification lane):
 
-- the stage-prompt schema check, over every phase document;
+- the stage-prompt schema check, over the shipped templates;
 - an enumeration check proving every shipped validator is catalogued everywhere that claims to list them;
 - the seeded-defect calibration set, checked in both directions: no fixture may carry a verdict token, and every fixture must have a complete sealed label the verifier never reads;
 - a self-description check proving the numbers on these pages match the code they describe;
@@ -315,12 +317,12 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 **Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing.
 
-**Manual:** download `sbak-v1.0.10-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.10-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
+**Manual:** download `sbak-v1.0.11-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.11-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.10-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.11-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
@@ -330,18 +332,18 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.11-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
-set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model opus
+set "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" && claude --model opus
 ```
 
 Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.11-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -350,7 +352,7 @@ $env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus
 
 (The `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP` variable keeps Claude Code from stopping the kit's background channel watcher when memory runs low; it works only when set on the line that starts `claude`.)
 
-The adopt step verifies itself, and its exit code is the contract: exit 0 means adoption COMPLETE and it prints exactly that; anything less exits non-zero and says why.
+The adopt step verifies itself by content, and its exit code is the contract: exit 0 means adoption COMPLETE and it prints exactly that, and the installer's `Done` line carries it on an install, while an upgrade prints its `Done` line only after it (deterministic enforcement); anything less exits non-zero and says why.
 
 **Already have a project?** The installer hands you the blast-radius report before it writes. On the manual path, unzip the ZIP into that repo - the only collision is `CLAUDE.md` - then run the adopt step. The directory you run in is the directory that gets written to.
 
@@ -363,7 +365,7 @@ node sbak/templates/scripts/kit-update.cjs --adopt
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
 ```
 
-Windows: `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model opus` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus` in PowerShell, in place of the last line.
+Windows: `set "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" && claude --model opus` in cmd, `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model opus` in PowerShell, in place of the last line.
 
 One heads-up on that path: `origin` still points at the kit's repository until the bootstrap resets it at handoff - don't `git push` before then (it would target the kit, not your project). Detail: [QUICKSTART.md](sbak/QUICKSTART.md) §1.
 

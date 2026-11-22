@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/set-mode.cjs
 //
 // Atomic writer for the session ROLE dial (.claude/role). This is the SOURCE-side
@@ -143,11 +143,16 @@ function doSplit(branch) {
   process.stdout.write(`worktree created: ${target} (branch ${branch}) - role = work written there.\n`);
   const sh = pasteShell(top);
   if (sh.note) process.stdout.write(sh.note + '\n');
-  process.stdout.write(`Open the BUILD terminal and paste these lines, one at a time (${SHELL_FORMS[sh.shell].label}) - the guard refuses a wrong tree before the launch:\n\n`);
-  process.stdout.write(SHELL_FORMS[sh.shell].cd(target) + '\n');
-  process.stdout.write(`node scripts/set-mode.cjs work --expect ${target}\n`);
-  process.stdout.write(SHELL_FORMS[sh.shell].launch + '\n');
-  const others = Object.keys(SHELL_FORMS).filter((s) => s !== sh.shell).map((s) => `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)}, the same set-mode line, then ${SHELL_FORMS[s].launch}`);
+  const bad = cmdCannotCarry(target);
+  const shell = sh.shell === 'cmd' && bad ? 'powershell' : sh.shell;
+  if (shell !== sh.shell) process.stdout.write(`shell: this path holds ${bad}, which a pasted cmd line cannot carry - the PowerShell lines follow.\n`);
+  process.stdout.write(`Open the BUILD terminal and paste these lines, one at a time (${SHELL_FORMS[shell].label}) - the guard refuses a wrong tree before the launch:\n\n`);
+  process.stdout.write(SHELL_FORMS[shell].cd(target) + '\n');
+  process.stdout.write(`node scripts/set-mode.cjs work --expect ${SHELL_FORMS[shell].q(target)}\n`);
+  process.stdout.write(SHELL_FORMS[shell].launch + '\n');
+  const others = Object.keys(SHELL_FORMS).filter((s) => s !== shell).map((s) => (s === 'cmd' && bad
+    ? `cmd: none - this path holds ${bad}, which a pasted cmd line cannot carry`
+    : `${SHELL_FORMS[s].label}: ${SHELL_FORMS[s].cd(target)}, the set-mode line with --expect ${SHELL_FORMS[s].q(target)}, then ${SHELL_FORMS[s].launch}`));
   process.stdout.write(`(other shells - ${others.join(' / ')})\n`);
   // M34.6.E item 7 (R-174): a stage opens only while the orchestrator listens, so the split names it.
   process.stdout.write('\nBefore the build window opens its first stage, put THIS window on listen: /listen M01.A (a stage opens only while the orchestrator listens; for a later stage, its id).\n');
@@ -156,13 +161,21 @@ function doSplit(branch) {
 // M32.1.A (drive note 9): the launch block renders in the shell the person pastes into, read from
 // the `shell` row of project-config.md (asked once in discovery). M33.G (R-57): the variable rides
 // the launch line in every form - it works only when set in the launching shell, and the trailing
-// space cmd's chained set stores is trimmed by Claude Code and the watcher alike. No --model here:
-// this script does not know the model (the orchestrator's first-turn block carries it).
+// space cmd's unquoted chained set would store is avoided by the quoted set (M34.5.F.13, Q4). No --model
+// here: this script does not know the model (the orchestrator's first-turn block carries it). Each
+// shell quotes the path by its own rules (C4-04, Q9): cmd double quotes, PowerShell single quotes with
+// each ' doubled, bash single quotes with each ' written '\''; a path cmd cannot carry (a double quote,
+// or two % signs) gets no cmd lines, and the block names why.
 const REAP_VAR = 'CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP';
+function cmdCannotCarry(p) {
+  if (String(p).indexOf('"') !== -1) return 'a double quote (")';
+  if ((String(p).match(/%/g) || []).length >= 2) return 'two % signs (a %NAME% pair cmd may expand)';
+  return null;
+}
 const SHELL_FORMS = {
-  cmd: { label: 'cmd', cd: (p) => `cd /d ${p}`, launch: `set ${REAP_VAR}=1 && claude` },
-  powershell: { label: 'PowerShell', cd: (p) => `cd "${p}"`, launch: `$env:${REAP_VAR}="1"; claude` },
-  bash: { label: 'bash', cd: (p) => `cd "${p}"`, launch: `${REAP_VAR}=1 claude` },
+  cmd: { label: 'cmd', q: (p) => `"${p}"`, cd: (p) => `cd /d "${p}"`, launch: `set "${REAP_VAR}=1" && claude` },
+  powershell: { label: 'PowerShell', q: (p) => `'${String(p).replace(/'/g, "''")}'`, cd: (p) => `cd '${String(p).replace(/'/g, "''")}'`, launch: `$env:${REAP_VAR}="1"; claude` },
+  bash: { label: 'bash', q: (p) => `'${String(p).replace(/'/g, "'\\''")}'`, cd: (p) => `cd '${String(p).replace(/'/g, "'\\''")}'`, launch: `${REAP_VAR}=1 claude` },
 };
 function pasteShell(top) {
   const dflt = process.platform === 'win32' ? 'cmd' : 'bash';

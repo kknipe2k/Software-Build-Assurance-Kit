@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/evidence.cjs
 //   (kit source of truth: templates/scripts/lib/evidence.cjs)
 //
@@ -476,7 +476,8 @@ function refusalsSummary(root, stage, body) {
 // paths (the index against the standing approval row's base) are compared with the stage's allowed
 // set: the paths its section names in backticks, their twins (docs/twins.json, where it exists), the
 // red gate's test and document globs and .claude/red-gate-allow.txt, .claude/measurements/<stage>/
-// and the excluded prefixes. A path outside it refuses the publish unless the packet carries
+// and the excluded prefixes - except the held paths (M34.5.F.8, ITEM_O_HELD below and the Phase docs),
+// which only a name or a line covers. A path outside it refuses the publish unless the packet carries
 // "out-of-scope:<path> <why>" for it; gate.json records every such line as out_of_scope. The check
 // sees paths, never contents: a call added inside a named file stays the orchestrator's reading.
 // ---------------------------------------------------------------------------
@@ -492,6 +493,23 @@ const RED_GATE_ALLOW = Object.freeze([
   '.gitignore', '.gitattributes', '.editorconfig',
 ]);
 const TEST_ALLOW = Object.freeze(RED_GATE_ALLOW.slice(8, 15));
+// M34.5.F.8 (item 3, W8-03 and C8-03): item o's own set. The red gate's list answers "what may be
+// written before the release"; item o asks "what did this stage change that its section did not
+// name", so the paths that are behaviour or the plan are held out of its free classes: each needs a
+// backticked name in the section (or its twin) or an out-of-scope line. The red gate's list is unchanged.
+const ITEM_O_HELD = Object.freeze([
+  '.github/**', '.claude/**', 'spec/**',
+  'docs/backlog.md', 'docs/scope.md', 'docs/identity.md',
+  'docs/build-prompts/**', 'docs/bugfix/**',
+]);
+// The glob that holds a path, or 'the Phase docs' for a Phase doc under proposals/ (the one path set,
+// scripts/lib/stage-structure.cjs), or null.
+function heldBy(rel) {
+  const g = ITEM_O_HELD.find((x) => allowGlobToRe(x).test(rel));
+  if (g) return g;
+  try { if (require(path.join(__dirname, 'stage-structure.cjs')).isPhaseDoc(rel)) return 'the Phase docs'; } catch (_) { /* the module is absent: the globs above still hold */ }
+  return null;
+}
 // The hook's glob rule: `**/` is whole path segments, a bare `**` anything, `*` one segment's text.
 function allowGlobToRe(glob) {
   let re = '';
@@ -559,14 +577,15 @@ function itemO(root, stage, base, body, rev) {
     if (rel.startsWith(`.claude/measurements/${stage}/`)) return 'measurements';
     if (isNamed(rel, named)) return 'named';
     for (const p of pairs) { if (rel === p.derived && isNamed(p.canonical, named)) return `twin of ${p.canonical}`; if (rel === p.canonical && isNamed(p.derived, named)) return `twin of ${p.derived}`; }
+    if (heldBy(rel)) return null; // M34.5.F.8: held - a name or a line, never a free class
     if (test.some(([, re]) => re.test(rel))) return 'test glob';
     if (own.some(([, re]) => re.test(rel))) return 'red-gate-allow.txt';
     if (docs.some(([, re]) => re.test(rel))) return 'document glob';
     return null;
   };
-  return { rows: cp.paths.map((p) => ({ status: p.status, path: p.path, why: why(p.path) })), named, lines: outOfScopeLines(body), notes };
+  return { rows: cp.paths.map((p) => ({ status: p.status, path: p.path, why: why(p.path), held: why(p.path) ? null : heldBy(p.path) })), named, lines: outOfScopeLines(body), notes };
 }
-const OOS_LINE = (stage, paths) => SE(`${paths.length} changed path(s) outside the stage's allowed set: ${paths.slice(0, 10).join(', ')}${paths.length > 10 ? ` (+${paths.length - 10} more)` : ''}; add "out-of-scope:<path> <why>" for each to the packet (allowed: the paths the stage section names, their twins, the red gate's test and document globs, .claude/measurements/${stage}/, the excluded prefixes)`);
+const OOS_LINE = (stage, paths) => SE(`${paths.length} changed path(s) outside the stage's allowed set: ${paths.slice(0, 10).join(', ')}${paths.length > 10 ? ` (+${paths.length - 10} more)` : ''}; add "out-of-scope:<path> <why>" for each to the packet (allowed: the paths the stage section names, their twins, the red gate's test globs, the documents outside the held paths, .claude/measurements/${stage}/, the excluded prefixes; held, needing a name or a line: ${ITEM_O_HELD.join(', ')} and the Phase docs)`);
 
 // ---------------------------------------------------------------------------
 // The stage end (items 4, 5, 8, 9, 11): the checks, then gate.json, the archive and the manifest.
@@ -668,7 +687,39 @@ function writeManifest(root, stage, subj) {
 // accept (item 5, Q8): the orchestrator's transcription of the stamp, once.
 // -> { ok: true, line } | { ok: false, line }
 // ---------------------------------------------------------------------------
-function accept(root, stage, seq, stampText, by) {
+// M34.5.F.3 (item 1, R-245): the stamp is checked against the owner's prompt on record. The
+// orchestrator session's UserPromptSubmit hook records each prompt's sha256 and turn (prompt_recorded,
+// typed or delivered) in that session's receipts; accept takes the stamp only when a prompt typed in
+// this session after the stage-end packet carries its text (scripts/lib/receipts.cjs promptSha, the one
+// hash rule), and cites that prompt in gate.json. by.session is the accept call's session;
+// o.promptRoots the trees whose receipts are read (the calling tree first, then each worktree).
+function stampPrompt(stampText, row, by, o) {
+  let receipts = null;
+  try { receipts = require(path.join(__dirname, 'receipts.cjs')); } catch (_) { return { why: 'scripts/lib/receipts.cjs did not load, so the owner\'s prompt cannot be read - repair: node scripts/kit-update.cjs --adopt' }; }
+  const sess = by && typeof by.session === 'string' ? by.session : '';
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sess)) return { why: 'no session id (CLAUDE_CODE_SESSION_ID is empty or malformed): accept runs in the orchestrator session where the owner typed the stamp, which recorded it' };
+  const want = receipts.promptSha(stampText);
+  const after = Date.parse(row.ts);
+  const recs = receipts.promptRecords((o && o.promptRoots) || [], sess);
+  const typed = recs.filter((e) => e.origin === 'typed' && e.prompt_sha256 === want);
+  const fresh = typed.filter((e) => Date.parse(e.at) > after);
+  if (fresh.length) { const e = fresh[fresh.length - 1]; return { cited: { sha256: e.prompt_sha256, session: sess, prompt_id: e.prompt_id === undefined ? null : e.prompt_id, at: e.at, origin: 'typed' } }; }
+  // The refusals, each with its repair (gate-1 C4); the recorded prompts are named by their times, never their text.
+  const delivered = recs.filter((e) => e.origin === 'delivered' && (e.prompt_sha256 === want || e.body_sha256 === want)).pop();
+  if (delivered) return { why: `the stamp's text is a message delivered from another session (recorded ${delivered.at}), never a stamp - repair: the owner types the stamp in this session, then accept again` };
+  if (typed.length) return { why: `the prompt carrying the stamp's text was recorded at ${typed[typed.length - 1].at}, before the stage-end packet seq ${row.seq} (${row.ts}) - repair: the stamp answers the packet, so ask for it again and the owner types it after the packet, then accept again` };
+  const afterTyped = recs.filter((e) => e.origin === 'typed' && Date.parse(e.at) > after);
+  if (afterTyped.length) {
+    const t = String(stampText).trim();
+    const variants = [t.toLowerCase(), t.toUpperCase(), t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()].filter((v) => v !== t).map((v) => receipts.promptSha(v));
+    const byCase = afterTyped.filter((e) => variants.indexOf(e.prompt_sha256) !== -1).pop();
+    if (byCase) return { why: `the stamp file differs from the prompt typed at ${byCase.at} by case only - repair: write the owner's reply exactly as typed, case included, then accept again` };
+    const times = afterTyped.slice(-5).map((e) => e.at).join(', ');
+    return { why: `the stamp file's text is not any of the ${afterTyped.length} prompt(s) this session recorded after the stage-end packet seq ${row.seq} (at ${times}) - repair: write the owner's reply exactly as typed, the whole prompt, wording included, then accept again` };
+  }
+  return { why: `no prompt this session (${sess}) recorded after the stage-end packet seq ${row.seq} - repair: check that this tree's UserPromptSubmit hook is the kit's and its role is orchestrator (node scripts/kit-update.cjs --ready), then the owner types the stamp again, which records once the hook does, and accept again` };
+}
+function accept(root, stage, seq, stampText, by, o) {
   const A = (what) => ({ ok: false, line: `channel: accept refused - ${what}` });
   const dir = stageDir(root, stage);
   const gf = path.join(dir, 'gate.json');
@@ -679,13 +730,15 @@ function accept(root, stage, seq, stampText, by) {
   let row = null;
   try { for (const l of fs.readFileSync(path.join(root, '.claude', 'channel', 'builder-to-orch.jsonl'), 'utf8').split('\n')) { if (!l.trim()) continue; const m = JSON.parse(l); if (m && m.seq === seq) row = m; } } catch (_) { row = null; }
   if (!row || row.class !== 'stage-packet' || row.kind !== 'stage-end' || row.stage !== stage) return A(`seq ${seq} is not ${stage}'s stage-end packet in the builder's log`);
+  const sp = stampPrompt(stampText, row, by, o);
+  if (!sp.cited) return A(sp.why);
   const at = new Date().toISOString();
-  appendLife(root, stage, 'accepted', { accepted_seq: seq });
-  Object.assign(g, { state: 'accepted', accepted_seq: seq, accepted_at: at, stamp: { text: stampText, sha256: sha256(Buffer.from(stampText, 'utf8')) }, accepted_by: by || null });
+  appendLife(root, stage, 'accepted', { accepted_seq: seq, prompt_sha256: sp.cited.sha256 });
+  Object.assign(g, { state: 'accepted', accepted_seq: seq, accepted_at: at, stamp: { text: stampText, sha256: sha256(Buffer.from(stampText, 'utf8')) }, stamp_prompt: sp.cited, accepted_by: by || null });
   g.lifecycle = stageState(root, stage).rows.map((r) => r.row);
   writeJson(gf, g);
   writeManifest(root, stage, g.subject);
-  return { ok: true, line: `channel: accepted ${stage} on the stamp answering seq ${seq} - gate.json state accepted` };
+  return { ok: true, line: `channel: accepted ${stage} on the stamp answering seq ${seq} - gate.json state accepted, citing the prompt typed in session ${sp.cited.session} at ${sp.cited.at} (sha256 ${sp.cited.sha256.slice(0, 12)})` };
 }
 
 // ---------------------------------------------------------------------------
@@ -746,18 +799,69 @@ function probeHost(root) {
 function openStage(root) {
   try { const t = fs.readFileSync(path.join(root, '.claude', 'stage-active'), 'utf8').split(NUL).join('').trim(); return STAGE_RE.test(t) ? t : null; } catch (_) { return null; }
 }
+// M34.5.F.3 (item 4, G1 on content): while a stage on the evidence path is open, the commit carries that
+// stage's accepted bundle, read from the INDEX (the bytes the commit takes), never the working tree: its
+// gate.json accepted (the accept row in its lifecycle, the stamp, the prompt it cites), a manifest whose
+// files' staged bytes match it, and the index's subject equal to the manifest's and gate.json's - so a
+// placeholder bundle, an unaccepted one, and a byte staged after the accept are each refused.
 // -> { code, out?, err? }
+function indexBlob(root, rel) {
+  const r = git(root, ['show', `:${rel}`], { buffer: true });
+  return r.ok ? Buffer.from(r.out) : null;
+}
 function preCommit(root) {
   const stage = openStage(root);
   if (!stage) return { code: 0 };
   const st = stageState(root, stage);
   if (st.legacy) return { code: 0, err: LEGACY_LINE(stage) };
+  const R = (what) => ({ code: 1, err: `evidence: commit refused - ${what}` });
+  const bytes = {};
   for (const f of ['gate.json', 'manifest.json']) {
     const rel = `${EVIDENCE_REL}/${stage}/${f}`;
     const r = git(root, ['ls-files', '--error-unmatch', '--', rel]);
     if (!r.ok) return { code: 1, err: `evidence: commit refused - stage ${stage} is open on the evidence path and the index carries no ${rel}; publish the stage end, then git add ${EVIDENCE_REL}/${stage}` };
+    bytes[f] = indexBlob(root, rel);
   }
-  return { code: 0 };
+  let g = null; let m = null;
+  try { g = JSON.parse(String(bytes['gate.json'] || '')); } catch (_) { g = null; }
+  try { m = JSON.parse(String(bytes['manifest.json'] || '')); } catch (_) { m = null; }
+  const gRel = `${EVIDENCE_REL}/${stage}/gate.json`;
+  if (!g || typeof g !== 'object' || g.stage !== stage || g.schema !== 'sbak/gate/v1') return R(`stage ${stage} is open on the evidence path and the staged ${gRel} is not the stage's gate record; publish the stage end, then git add ${EVIDENCE_REL}/${stage}`);
+  // The accept is the orchestrator's (channel.cjs accept, role orchestrator): where an orchestrator
+  // worktree exists the stage commit carries it. In one tree (Lite, or before the split) there is no
+  // accept to carry, and the commit's own permission prompt is the person's word (the git fence asks
+  // for every commit): the content checks below still hold, and one line says the accept was not read.
+  // The listening gate's own reading (scripts/lib/channel.cjs orchestratorTrees, gate-1 Q11): a library that
+  // does not load, or git that cannot list the worktrees, reads as two trees - toward the check, never past it.
+  let twoTree = true;
+  try {
+    const ot = require(path.join(__dirname, 'channel.cjs')).orchestratorTrees(root);
+    twoTree = ot.all === null || ot.orch.length > 0;
+  } catch (_) { twoTree = true; }
+  let sp = null;
+  if (twoTree) {
+    if (g.state !== 'accepted') return R(`the staged ${gRel} is ${g.state}, not accepted: the orchestrator's accept on the owner's stamp comes before the stage commit`);
+    sp = g.stamp_prompt;
+    let promptSha = null; try { promptSha = require(path.join(__dirname, 'receipts.cjs')).promptSha; } catch (_) { promptSha = null; }
+    if (!g.stamp || typeof g.stamp.text !== 'string' || !sp || typeof sp !== 'object' || !/^[0-9a-f]{64}$/.test(String(sp.sha256)) || typeof sp.session !== 'string' || typeof sp.at !== 'string' || sp.origin !== 'typed')
+      return R(`the staged ${gRel} is accepted with no cited prompt: accept records the owner's typed stamp (stamp_prompt); run it again from the orchestrator session`);
+    if (!promptSha || promptSha(g.stamp.text) !== sp.sha256) return R(`the staged ${gRel}'s stamp is not the text of the prompt it cites (sha256 ${String(sp.sha256).slice(0, 12)})`);
+    const lifeRel = `${EVIDENCE_REL}/${stage}/lifecycle.jsonl`;
+    const life = String(indexBlob(root, lifeRel) || '').split('\n').filter((l) => l.trim()).map((l) => { try { return JSON.parse(l); } catch (_) { return null; } }).filter(Boolean);
+    if (!life.some((r) => r.row === 'accepted' && r.stage === stage && r.accepted_seq === g.accepted_seq)) return R(`the staged ${lifeRel} has no accepted row for seq ${g.accepted_seq}: git add ${EVIDENCE_REL}/${stage}`);
+  } else if (g.state !== 'prepared' && g.state !== 'accepted') return R(`the staged ${gRel} is ${g.state}: publish the stage end, then git add ${EVIDENCE_REL}/${stage}`);
+  if (!m || !Array.isArray(m.files) || !SUBJECT_RE.test(String(m.subject))) return R(`the staged ${EVIDENCE_REL}/${stage}/manifest.json is not a manifest: publish the stage end, then git add ${EVIDENCE_REL}/${stage}`);
+  const s = subject(root);
+  if (s.error) return R(`the index's subject cannot be computed (${s.error})`);
+  if (s.subject !== m.subject || g.subject !== m.subject) return R(`the index's subject ${s.subject} is not the accepted bundle's ${m.subject}: a byte was staged after the accept (git diff --cached names it); unstage it, or the stage end and the stamp come again`);
+  for (const f of m.files) {
+    const b = indexBlob(root, String(f.path));
+    if (!b) return R(`${f.path} is listed in the staged manifest and not in the index: git add ${EVIDENCE_REL}/${stage}`);
+    const h = Number.isInteger(f.bytes) ? (b.length >= f.bytes ? sha256(b.slice(0, f.bytes)) : null) : sha256(b);
+    if (h !== f.sha256) return R(`the staged ${f.path} does not match the manifest's sha256: git add ${EVIDENCE_REL}/${stage}, or the evidence changed after the accept`);
+  }
+  if (!sp) return { code: 0, out: `evidence: the stage commit carries ${stage}'s bundle - ${m.files.length} file(s) match the manifest, the subject ${m.subject} is the index's; no orchestrator worktree here, so no accept is read: the commit's permission prompt is the word` };
+  return { code: 0, out: `evidence: the stage commit carries ${stage}'s accepted bundle - the stamp's prompt (${sp.session}, ${sp.at}) cited, ${m.files.length} file(s) match the manifest, the subject ${m.subject} is the index's` };
 }
 function verify(root, stage, against) {
   const F = (what) => ({ code: 1, err: `evidence: verify failed - ${what}` });
@@ -859,6 +963,46 @@ function acceptanceList(lines) {
   return closeout ? { id, form: 'closeout list', how: `the list under ### ${title}, one criterion per item`, items: out }
     : { id, form: 'list', how: `the Acceptance criteria list under ### ${title}, one criterion per item`, items: out };
 }
+// M34.5.F.3 (item 3, W4-12): a packet that cites the owner's request carries one line per request,
+//   owner-request: sha256:<64 hex> session <session id> prompt <prompt_id>
+// naming the prompt the orchestrator session's UserPromptSubmit hook recorded (prompt_recorded). The
+// review prints each as recorded (a typed row with that sha256, session and prompt_id in that session's
+// receipts, the calling tree first, then each worktree) or unverified, with why. A claim made in prose
+// is not read at all.
+const OWNER_REQUEST_RE = /^owner-request:[^\S\n]+sha256:([0-9a-f]{64})[^\S\n]+session[^\S\n]+([A-Za-z0-9][A-Za-z0-9._-]{0,127})[^\S\n]+prompt[^\S\n]+(\S+)[^\S\n]*$/;
+function ownerRequests(root, stage) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(root, '.claude', 'channel', 'builder-to-orch.jsonl'), 'utf8'); } catch (_) { return []; }
+  const out = [];
+  for (const l of text.split('\n')) {
+    if (!l.trim()) continue;
+    let m = null; try { m = JSON.parse(l); } catch (_) { m = null; }
+    if (!m || m.stage !== stage || (m.class !== 'stage-packet' && m.class !== 'clarification')) continue;
+    for (const line of String(m.body || '').split(/\r?\n/)) {
+      if (!/^owner-request:/.test(line)) continue;
+      const c = OWNER_REQUEST_RE.exec(line);
+      out.push(c ? { seq: m.seq, sha256: c[1], session: c[2], prompt_id: c[3], line } : { seq: m.seq, malformed: true, line });
+    }
+  }
+  return out;
+}
+function ownerRequestLines(root, stage, ch) {
+  const cites = ownerRequests(root, stage);
+  if (!cites.length) return ['owner requests cited: none'];
+  let receipts = null; try { receipts = require(path.join(__dirname, 'receipts.cjs')); } catch (_) { receipts = null; }
+  const roots = [root].concat((ch && ch.worktrees(root)) || []);
+  const L = ['owner requests cited:'];
+  for (const c of cites) {
+    if (c.malformed) { L.push(`  seq ${c.seq}: unverified - the line is not "owner-request: sha256:<64 hex> session <id> prompt <prompt_id>": ${c.line.slice(0, 160)}`); continue; }
+    if (!receipts) { L.push(`  seq ${c.seq}: unverified - scripts/lib/receipts.cjs did not load`); continue; }
+    const recs = receipts.promptRecords(roots, c.session);
+    const hit = recs.filter((e) => e.prompt_sha256 === c.sha256 && String(e.prompt_id) === c.prompt_id).pop();
+    if (hit && hit.origin === 'typed') L.push(`  seq ${c.seq}: recorded - typed in session ${c.session} at ${hit.at} (sha256 ${c.sha256.slice(0, 12)}, prompt ${c.prompt_id})`);
+    else if (hit) L.push(`  seq ${c.seq}: unverified - the prompt it names was delivered from another session (recorded ${hit.at}), not typed`);
+    else L.push(`  seq ${c.seq}: unverified - no prompt record in session ${c.session}'s receipts carries sha256 ${c.sha256.slice(0, 12)} with prompt ${c.prompt_id}`);
+  }
+  return L;
+}
 function review(root, stage, against) {
   const dir = stageDir(root, stage);
   if (!fs.existsSync(dir)) return { code: 1, err: `evidence: no review - ${EVIDENCE_REL}/${stage}/ does not exist` };
@@ -938,19 +1082,28 @@ function review(root, stage, against) {
     if (io.error) L.push(`changed paths since ${String(base).slice(0, 7)}: not derived (${io.error})`);
     else {
       L.push(`changed paths since ${String(base).slice(0, 7)} (${io.rows.length}, against ${rev ? rev.slice(0, 7) : 'the index'}):`);
-      for (const r of io.rows) { const l = lines.find((x) => x.path === r.path); L.push(`  ${r.status} ${r.path} - ${r.why || (l ? `OUTSIDE, out-of-scope: ${l.line}` : 'OUTSIDE, no out-of-scope line')}`); }
+      for (const r of io.rows) { const l = lines.find((x) => x.path === r.path); const out = r.held ? `OUTSIDE (held: ${r.held})` : 'OUTSIDE'; L.push(`  ${r.status} ${r.path} - ${r.why || (l ? `${out}, out-of-scope: ${l.line}` : `${out}, no out-of-scope line`)}`); }
       L.push(`  named paths in the section: ${io.named.join(', ') || 'none'}`);
       for (const n of io.notes) L.push(`  ${n}`);
     }
   }
   if (lines && lines.length) { L.push('out-of-scope lines:'); for (const x of lines) L.push(`  ${x.path} ${x.line}`); } else L.push('out-of-scope lines: none');
-  const locks = ((cur && cur.row.scope && cur.row.scope.refs) || []).filter((r) => r && r.tag === 'scope_locks');
-  if (!locks.length) L.push('scope lock: none recorded (the stage prompt names no scope_locks ref)');
+  // M34.5.F.8 (item 1): each recorded ref read from the candidate (the index, or the commit that
+  // carries gate.json), marked against the recorded hash; the locks with their text. (item 2): a
+  // release that recorded no scope says why.
+  const refs = ((cur && cur.row.scope && cur.row.scope.refs) || []).filter((r) => r && typeof r.doc === 'string');
+  const locks = refs.filter((r) => r.tag === 'scope_locks');
+  const candAt = rev || 'index';
+  const readRef = (r) => (!rl ? { ok: false, why: 'read-ledger.cjs did not load' } : typeof rl.refSectionAt === 'function' ? rl.refSectionAt(root, r, candAt) : rl.sectionAt(root, r.doc, r.section, candAt));
+  const moved = (r, s) => (!s.ok ? true : r.section_sha256 ? sha256(Buffer.from(s.text, 'utf8')) !== r.section_sha256 : s.blob !== r.blob);
+  if (cur && !cur.row.scope) L.push(`scope lock: none recorded - ${cur.row.scope_none || 'the release recorded no scope (a release before M34.5.F.8, or no Phase doc at HEAD)'}`);
+  else if (!locks.length) L.push('scope lock: none recorded (the stage prompt names no scope_locks ref)');
   for (const r of locks) {
-    const s = rl ? rl.sectionAt(root, r.doc, r.section) : { ok: false, why: 'read-ledger.cjs did not load' };
-    L.push(`scope lock (${r.doc} "${r.section || 'the whole file'}"):${s.ok && r.section_sha256 && sha256(Buffer.from(s.text, 'utf8')) !== r.section_sha256 ? ' (changed since the approval)' : ''}`);
-    if (s.ok) for (const t of String(s.text).split('\n')) L.push(`  | ${t}`); else L.push(`  (not read: ${s.why})`);
+    const s = readRef(r);
+    L.push(`scope lock (${r.doc} "${r.section || 'the whole file'}"${r.widened_from ? `, recorded whole: the scope_locks ref names ${r.widened_from}, a subsection of it` : ''}):${moved(r, s) ? ' (changed since the approval)' : ''}`);
+    if (s.ok) for (const t of String(s.text).split('\n')) L.push(`  | ${t}`); else L.push(`  (not read ${candAt === 'index' ? 'in the index' : `at ${String(candAt).slice(0, 7)}`}: ${s.why})`);
   }
+  for (const r of refs.filter((x) => x.tag !== 'scope_locks')) L.push(`scope ref (${r.tag}: ${r.doc}${r.section ? ` "${r.section}"` : ''}): ${moved(r, readRef(r)) ? 'changed since the approval' : 'as approved'}`);
   // 10. the acceptance criteria, each with the pins the stage-end packet names against it
   const sec = rl ? rl.stageSectionAt(root, stage) : { ok: false, why: 'read-ledger.cjs did not load' };
   const ac = sec.ok ? acceptanceCriteria(sec.text) : null;
@@ -961,6 +1114,9 @@ function review(root, stage, against) {
     L.push(`acceptance (${sec.doc} §${stage}, ${ac.id}, ${ac.how}; the pins from the stage-end packet${stageEnd ? ` seq ${stageEnd.seq}` : ': none published'}):`);
     ac.items.forEach((c, k) => L.push(`  ${k + 1}. ${c} - ${mapped.get(k + 1) || 'no pin named'}`));
   }
+  // 10b. M34.5.F.3 (item 3, W4-12): each owner request a packet cites, by its structured line only
+  // (nothing is inferred from prose), matched to the prompt record or printed unverified.
+  L.push(...ownerRequestLines(root, stage, ch));
   // 11. the record ids
   L.push('record ids:');
   for (const f of ['gate.json', 'tests_run.red.json', 'tests_run.green.json', 'lane_run.json']) L.push(`  ${f} ${fileSha(f) || '(absent)'}`);
@@ -1036,5 +1192,7 @@ module.exports = {
   redBinding, judgedSummary, refusalsSummary, stageEndEvidence, writeManifest, accept,
   unclearedStages, probeLiveness, probeHost, openStage, preCommit, verify, stageCommits, transportCheck, prePush, closeoutLines,
   // M34.6.C: the win32 class (item 1), item o (item 5), the review (item 4)
-  winCancelledOrLoad, RED_GATE_ALLOW, namedPaths, changedPaths, outOfScopeLines, itemO, acceptanceCriteria, review,
+  winCancelledOrLoad, RED_GATE_ALLOW, ITEM_O_HELD, heldBy, namedPaths, changedPaths, outOfScopeLines, itemO, acceptanceCriteria, review,
+  // M34.5.F.3: the stamp's prompt (item 1), the cited requests (item 3), the index's bundle (item 4)
+  stampPrompt, OWNER_REQUEST_RE, ownerRequests, ownerRequestLines, indexBlob,
 };

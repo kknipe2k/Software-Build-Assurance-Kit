@@ -10,7 +10,7 @@
 
 This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4). **No prior entry may be edited, reordered, or deleted.**
 
-Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (Full-enforced; Standard-advisory): prior committed content must remain a byte-prefix of the current file, so prior entries stay byte-identical to their committed state. This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md` — the findings ledger simply joins that workflow's `LEDGERS` set; there is no separate workflow.
+Unchecked unless the project declares a risk trigger. Only then does the kit's shared append-only checker, `validators/check-append-only.cjs`, guard it: the pre-push leg and `.github/workflows/append-only-ledger.yml` (generated only then) refuse a change to a prior entry (deterministic enforcement), since prior committed content must remain a byte-prefix of the current file, so prior entries stay byte-identical to their committed state. This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md` — the findings ledger is one line of `docs/append-only-ledgers.txt`, the list both read; there is no separate workflow.
 
 ### Why append-only
 

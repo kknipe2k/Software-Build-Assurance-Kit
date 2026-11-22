@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/approve-red.cjs
 //
 // The HUMAN's action — gate 2 of the three-gate loop (plan -> RED -> stage-end).
@@ -37,7 +37,8 @@
 //      identity, session, the prompt's time, the released seq - and validated, not yet written;
 //   4. the approval record (.claude/channel/approval.json): the approval row appended - the
 //      approved test files by sha256 and git blob, and the scope (the Phase doc, its blob at HEAD,
-//      the sha256 of the stage section as the view carries it);
+//      the sha256 of the stage section as the view carries it, and the refs read-ledger's
+//      scopeRecord records; the publishes compare them at HEAD and in the index);
 //   5. the marker, atomic: the stage id, then `record <sha256 of that approval row>` - the red
 //      gate checks the record against it before an implementation edit;
 //   6. the receipt appended; then the approval-request consumed.
@@ -112,6 +113,18 @@ if (voiding) {
 const seqArg = voiding ? null : flag('--release-seq');
 if (!voiding && (seqArg === null || !/^(?:[1-9][0-9]{0,8}|none)$/.test(seqArg))) refuse('--release-seq must be the pending approval-request\'s seq, or none - refused.');
 
+// WHO IS AT THE KEYBOARD (M34.5.F.2 item 1, C4-01): decided by the process tree before anything is
+// read or written. A Claude Code process among the ancestors makes this a session's call whatever
+// CLAUDE_CODE_SESSION_ID holds (an empty one is refused: its click cannot be read); a test runner or
+// a package script in the chain is refused (deterministic enforcement over the OS's process table).
+// The limit: a process that leaves the tree reads as the person's own terminal.
+const receipts = need(() => require('./lib/receipts.cjs'), 'receipts.cjs', 'the keyboard');
+const kb = receipts.keyboard(process.env);
+if (kb.state === 'refused') {
+  process.stderr.write(receipts.keyboardRefusalLine('approve-red', kb, voiding ? 'void' : 'release', voiding ? 'voided' : 'approved') + '\n');
+  process.exit(2);
+}
+
 // The marker's own bytes, so a later refusal can put them back.
 const target = path.join(claudeDir, 'red-approved');
 let markerPrior = null;
@@ -165,7 +178,6 @@ if (rl) {
 // strict reader, V-26 b), where (the repository identity the stamp prints, never a path), when
 // (the recorded prompt's time), the session and the released seq. A null is "absent" (no git, no
 // session, no prompt, no request); the receipts allowlist refuses a row missing any of them.
-const receipts = need(() => require('./lib/receipts.cjs'), 'receipts.cjs', 'the receipt');
 const roleRead = chan.readRole(process.cwd());
 if (roleRead.state === 'unresolved') refuseAt('the receipt', '.claude/role does not name a role, so the gate word cannot say who', 'node scripts/set-mode.cjs <role>');
 const role = roleRead.role;
@@ -174,9 +186,10 @@ try { const id = chan.repoIdentity(process.cwd()); repo = id ? id.repo : null; }
 // THE CLICK (M34.6.G item 2). From a Claude Code session (CLAUDE_CODE_SESSION_ID present) the release
 // and the void need the prompt this call raised on record in the session's receipts; with none, or a
 // malformed session id, they are refused here, before anything is written (deterministic enforcement
-// over observed evidence). With no session id - the person's own terminal, outside the session - they
-// proceed as before, and the line says there was no prompt to record.
-const sess = receipts.clickSession(process.env);
+// over observed evidence). With no session - no Claude Code ancestor and no session id: the person's
+// own terminal, outside the session (M34.5.F.2: decided by the keyboard check above) - they proceed
+// as before, and the line says there was no prompt to record.
+const sess = kb.state === 'session' ? { state: 'session', session: kb.session } : kb.state === 'malformed' ? { state: 'malformed' } : { state: 'none' };
 const session = sess.state === 'session' ? sess.session : null;
 let click = null;
 if (sess.state !== 'none') {
@@ -197,27 +210,23 @@ const checked = receipts.validateEvent(evt, { append: true });
 if (!checked.ok) refuseAt('the receipt', checked.reason);
 
 // The scope the RED is approved against (M34.C item 5): the stage's section of its Phase doc at
-// HEAD, through the one reader stage-view uses. No HEAD or no Phase doc for the milestone records
-// scope null; a Phase doc without the stage's section (or with two) is a refusal.
-// M34.6.A (item n): and every ref the stage prompt names (<scope_locks>, <deliverable>,
-// <acceptance_criteria>: a ref with a section by that section's sha256, one without by the file's
-// blob) plus docs/scope.md by blob when present, in `refs`. A ref that does not resolve at HEAD is a
-// refusal, as a missing stage section is. Transitive refs are not followed.
+// HEAD, through the one reader stage-view uses. M34.6.A (item n): and every ref the stage prompt names
+// (<scope_locks>, <deliverable>, <acceptance_criteria>: a ref with a section by that section's
+// sha256, one without by the file's blob) plus docs/scope.md by blob when present, in `refs`.
+// M34.5.F.8: built by one library call, read-ledger's scopeRecord (items 2, 4, 5: the Phase doc in
+// docs/build-prompts/, docs/bugfix/ or proposals/, the prompt read structurally, the whole Scope
+// beside a scope_locks subsection, docs/identity.md's two locks). A Phase doc without the stage's
+// section (or with two), Phase docs none of which carries the stage, an id that names no milestone,
+// a second live prompt or a ref that does not resolve at HEAD is a refusal naming its repair; only a
+// project with no Phase doc at HEAD at all records scope null, the reason beside it (scope_none).
+// Transitive refs are not followed.
 let scope = null;
+let scopeNone = null;
 if (!voiding) {
-  const sec = rl.stageSectionAt(process.cwd(), stageId);
-  if (sec.ok) {
-    const h = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
-    const refs = [];
-    for (const r of rl.stagePromptRefs(sec.text, sec.docText, stageId)) {
-      const s = rl.sectionAt(process.cwd(), r.ref, r.section);
-      if (!s.ok) refuseAt('the approval record', `the scope cannot be recorded: the ${r.tag} ref ${r.section ? `"${r.section}" in ` : ''}${r.ref} ${s.why}`, 'name a heading the doc carries (or the file alone), commit it, then run the release again');
-      refs.push(r.section ? { tag: r.tag, doc: r.ref, section: r.section, blob: s.blob, section_sha256: h(s.text) } : { tag: r.tag, doc: r.ref, blob: s.blob });
-    }
-    const sd = rl.sectionAt(process.cwd(), 'docs/scope.md', null);
-    if (sd.ok) refs.push({ tag: 'docs/scope.md', doc: 'docs/scope.md', blob: sd.blob });
-    scope = { doc: sec.doc, blob: sec.blob, section_sha256: h(sec.text), refs };
-  } else if (!sec.none) refuseAt('the approval record', `the scope cannot be recorded: ${sec.why}`, 'give the stage its section in the Phase doc, commit it, then run the release again');
+  const sr = rl.scopeRecord(process.cwd(), stageId);
+  if (!sr.ok) refuseAt('the approval record', `the scope cannot be recorded: ${sr.why}`, sr.repair);
+  scope = sr.scope;
+  scopeNone = sr.none || null;
 }
 
 // THE RED SET (M34.1.B, Y-4): an approval names at least one test file - the test files that differ
@@ -262,7 +271,7 @@ let written;
 try {
   written = voiding
     ? chan.appendVoid(process.cwd(), stageId, { reason, role, repo, session, prompt_at: evt.prompt_at })
-    : chan.appendApproval(process.cwd(), stageId, { seq: evt.approval_seq, role, repo, session, prompt_at: evt.prompt_at, scope,
+    : chan.appendApproval(process.cwd(), stageId, { seq: evt.approval_seq, role, repo, session, prompt_at: evt.prompt_at, scope, scope_none: scopeNone,
       tests_run_red: redBind && redBind.ok ? redBind.sha : undefined, subject: redBind && redBind.ok ? redBind.subject : undefined });
 } catch (e) {
   putBack();

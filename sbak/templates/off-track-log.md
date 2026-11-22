@@ -8,7 +8,7 @@
 
 This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4). **No prior entry may be edited, reordered, or deleted.**
 
-Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` in a project with a declared risk trigger (the workflow is generated only then): prior committed content must remain a byte-prefix of the current file, so prior entries stay byte-identical to their committed state. This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md` — the off-track log simply joins that workflow's `LEDGERS` set; there is no separate workflow.
+Unchecked unless the project declares a risk trigger. Only then does the kit's shared append-only checker, `validators/check-append-only.cjs`, guard it: the pre-push leg and `.github/workflows/append-only-ledger.yml` (generated only then) refuse a change to a prior entry, since prior committed content must remain a byte-prefix of the current file (deterministic enforcement). This is the **same** check that guards `docs/gap-analysis.md` and `docs/tech-debt.md`: the off-track log is one line of `docs/append-only-ledgers.txt`, the list both read; there is no separate workflow. In a project with no risk trigger nothing checks it, and its append-only rule is kept by agent judgment alone.
 
 ### Why append-only
 
@@ -20,7 +20,7 @@ At **Lite** tier there is no separate log — justified inversions get a one-lin
 
 ## When an entry is added
 
-Whenever a stage or milestone builds a lower-ranked story ahead of a higher-ranked, unblocked, in-scope one — *and* that divergence is justified by a build-sequence necessity. The entry is written (and the user ratifies it) **before** the inversion counts as on track. The four necessity types:
+Whenever a stage or milestone builds a lower-ranked story ahead of a higher-ranked, unblocked, in-scope one — *and* that divergence is justified by a build-sequence necessity. The entry is written (and the user ratifies it) **before** the inversion counts as on track. The `approved by:` line is text the person confirms: no script reads this log, and the kit does not check who wrote that line (agent judgment and the person's confirmation). The four necessity types:
 
 - **HARD DEPENDENCY** — the higher item technically cannot be built until the lower one exists (the `Depends on` column in `backlog.md` proves it).
 - **FOUNDATIONAL SCAFFOLDING** — infra that *multiple* higher items sit on (auth, data layer, CI); build once, unblock many.

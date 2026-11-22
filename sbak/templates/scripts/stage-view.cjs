@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/stage-view.cjs
 //   (kit source of truth: templates/scripts/stage-view.cjs)
 //
@@ -23,10 +23,12 @@
 //
 // The stage section is the one H2 outside a code fence whose text, after `## ` and an optional `§`,
 // is the stage id or `Stage <the id after the milestone>`, followed by neither a word character nor
-// a dot (`## §M33.F - ...`, `## Stage A — ...`), in the one Phase doc (docs/build-prompts/ or
-// proposals/, named M<nn>-*.md) that carries it; it runs to the next H2. A Phase doc with no stage
-// headings at all (one task list) is the stage's section whole. The one reader of that section is
-// scripts/lib/read-ledger.cjs stageSectionAt (M34.C): the approval record hashes the same text.
+// a dot (`## §M33.F - ...`, `## Stage A — ...`), in the one Phase doc (docs/build-prompts/M<nn>*.md or
+// proposals/M<nn>*.md, the one path set) that carries it; it runs to the next H2. A Phase doc with no stage
+// headings at all (one task list) is the stage's section whole. In a bug_fix project's
+// docs/bugfix/<bug-id>.md it is the H2 holding the live prompt for the id (M34.5.F.8). The one reader
+// of that section is scripts/lib/read-ledger.cjs stageSectionAt (M34.C): the approval record hashes
+// the same text.
 //
 // Refused, exit 2, one `stage-view: refused - <why>` line, no view written: a missing or ambiguous
 // section, a scope section the prompt names that the doc lacks, a named id no ledger carries (all of
@@ -105,12 +107,12 @@ const doc = { p: sec.doc, d: { blob: sec.blob, text: sec.docText } };
 const section = sec.text;
 use(doc.p, doc.d);
 
-// ---- 2. the stage prompt: what it names ----
-function promptIn(text) {
-  const m = new RegExp(`<(\\w+)_stage_prompt\\s+id="${esc(stage)}"[^>]*>([\\s\\S]*?)</\\1_stage_prompt>`).exec(text);
-  return m ? m[2] : null;
-}
-const prompt = promptIn(section) || promptIn(doc.d.text) || '';
+// ---- 2. the stage prompt: what it names (M34.5.F.8 item 6: read-ledger stagePromptOf, the
+//      validator's structural read - a live prompt in an xml fence, comments inert - the one the
+//      release records; a second live prompt, or one only outside a fence or in a comment, refuses) ----
+const pr = rl.stagePromptOf(section, doc.d.text, stage);
+if (!pr.ok) refuse(pr.why);
+const prompt = pr.body || '';
 const scopeRef = /<scope_locks\s+ref="([^"]*)"\s+section="([^"]*)"\s*\/>/.exec(prompt);
 const priors = role === 'verifier' ? [] : Array.from(prompt.matchAll(/<retrospective\s+section="decisions">\s*([^<\s]+)\s*<\/retrospective>/g)).map((m) => m[1]);
 

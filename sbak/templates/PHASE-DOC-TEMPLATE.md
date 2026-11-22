@@ -34,7 +34,7 @@ This milestone advances v{{CURRENT_VERSION}} from {{state at M[NN-1] closeout}} 
 
 ### Key constraints (scope locks for the milestone)
 
-These constraints apply to every stage in this milestone. Stage CLI prompts reference this section via `<scope_locks ref="docs/build-prompts/M[NN]-{{slug}}.md" section="Key constraints"/>`.
+These constraints apply to every stage in this milestone. Stage CLI prompts reference this section via `<scope_locks ref="docs/build-prompts/M[NN]-{{slug}}.md" section="Key constraints"/>`; the RED release records this whole `## Scope` section beside it (In scope, Out of scope and these constraints), so a change to any of the three after the release is a scope change.
 
 - {{constraint 1}} — e.g., "single-process; no IPC additions"
 - {{constraint 2}} — e.g., "no new third-party dependencies without ADR"
@@ -46,7 +46,7 @@ These constraints apply to every stage in this milestone. Stage CLI prompts refe
 
 | What | Where | Read for |
 |---|---|---|
-| Project spec | `spec/project-spec.md` §{{relevant sections}} | What the milestone implements |
+| Project spec (the live spec) | `spec/live-spec.md` §{{relevant sections}} | What the milestone implements |
 | Scope | `docs/scope.md` §M[NN] | Acceptance criteria |
 | Gates | `docs/gates.md` §M[NN] | Must-pass list for this milestone |
 | Identity | `docs/identity.md` | What the project is, stack |
@@ -66,6 +66,7 @@ This Phase doc has one section per stage (A–E). Each stage section follows the
 - **X.2 Intended layout** — the file inventory (new + modified) as **advisory rails, not a contract**. It's the expected shape so the build (and a weaker model especially) has a concrete starting layout; the build may deviate when it has a better structure. Following it needs no annotation; deviating needs a one-line note in the stage plan, not an ADR. The Verifier does not treat a deviation from this list as drift.
 - **X.3 Detailed Changes** — the substantive content (referenced by `<deliverable ref="..." section="X.3 Detailed Changes"/>`)
 - **X.4 Tests** — test plan and acceptance criteria (referenced by `<acceptance_criteria ref="..." section="X.4 Tests"/>`)
+- A stage that implements a requirement change (a file under `spec/changes/`) names that file's affected tests in its test plan, and they fail in its RED before the change is built; whether they assert the right result is the reviewer's to judge (agent judgment)
 - **X.5 CLI Prompt** — the XML stage prompt to paste into a fresh Claude Code session
 - **X.6 Commit Message** — pre-authored commit message template (referenced by `<commit_message ref="..." section="X.6 Commit Message"/>`)
 
@@ -93,7 +94,7 @@ Per `sbak/BUILD-PLAYBOOK.md` §3.2, every stage follows the same loop:
 
 1. **Pre-flight** — read the CLI prompt's `<read_first>` files; absorb prior stage retrospective if applicable.
 2. **Plan before code** — surface the implementation plan; user confirms.
-3. **RED** — write failing tests per the stage's `X.4 Tests`.
+3. **RED** — write failing tests per the stage's `X.4 Tests`, and record the RED with `node scripts/verify-local.cjs --stage <id> --subject red` before the red-stop packet.
 4. **GREEN** — minimum code to pass.
 5. **REFACTOR** — clean up under green tests.
 6. **Verify gates** — run the milestone's hard gates from `docs/gates.md`. Self-correction budget per the CLI prompt.
@@ -160,7 +161,7 @@ Paste this into a fresh Claude Code session for Stage A:
     <file>sbak/BUILD-PLAYBOOK.md</file>
     <file>docs/identity.md</file>
     <file>docs/gates.md</file>
-    <file>spec/project-spec.md §{{relevant sections}}</file>
+    <file>spec/live-spec.md §{{relevant sections}}</file>
     <file>docs/scope.md §M[NN]</file>
     <file>docs/build-prompts/M[NN]-{{slug}}.md (Background, Document Structure, Implementation Workflow, Stage A sections A.1–A.4)</file>
     <file>docs/style.md</file>
@@ -339,7 +340,7 @@ Gates passing: {{list from docs/gates.md, all that ran}}
     <file>sbak/BUILD-PLAYBOOK.md</file>
     <file>docs/identity.md</file>
     <file>docs/gates.md</file>
-    <file>spec/project-spec.md §{{relevant sections}}</file>
+    <file>spec/live-spec.md §{{relevant sections}}</file>
     <file>docs/build-prompts/M[NN]-{{slug}}.md (Stage B sections B.1–B.4)</file>
     <file>docs/style.md</file>
     <file>docs/gotchas.md</file>
@@ -459,7 +460,7 @@ Output: `retrospectives/M[NN].V-findings.md` using `sbak/templates/VERIFIER-FIND
     <file>sbak/BUILD-PLAYBOOK.md §3.4 (verifier protocol)</file>
     <file>sbak/STAGE-PROMPT-PROTOCOL.md §8.5 (verifier-only tags)</file>
     <file>docs/build-prompts/M[NN]-{{slug}}.md (this phase doc, sections A–D + V)</file>
-    <file>spec/project-spec.md §{{relevant sections}}</file>
+    <file>spec/live-spec.md §{{relevant sections}}</file>
     <file>docs/gates.md (M[NN] row)</file>
     <file>docs/gotchas.md</file>
     <file>docs/app-map.md (when app_map: on — the observed-running drive/test script for the behavior pass)</file>
@@ -732,13 +733,13 @@ Closeout aggregates the milestone's process record, evaluates the product agains
     <file>sbak/BUILD-PLAYBOOK.md (especially §3.4, §4.6)</file>
     <file>docs/identity.md</file>
     <file>docs/gates.md</file>
-    <file>spec/project-spec.md §{{relevant sections}}</file>
+    <file>spec/live-spec.md §{{relevant sections}}</file>
     <file>docs/scope.md §M[NN]</file>
   </read_first>
 
   <cumulative_reads>
     <codebase>entire shipped codebase to date (cumulative across all prior milestones + M[NN].A–M[NN].D commits)</codebase>
-    <spec>spec/project-spec.md (end-to-end, focus on M[NN]-touched sections)</spec>
+    <spec>spec/live-spec.md (end-to-end, focus on M[NN]-touched sections)</spec>
     <gap_analysis>docs/gap-analysis.md (all prior entries; M[NN].E appends the next)</gap_analysis>
     <retrospectives>retrospectives/M[NN].A-retrospective.md, M[NN].B-, M[NN].C-, M[NN].D-retrospective.md (all work stages)</retrospectives>
   </cumulative_reads>

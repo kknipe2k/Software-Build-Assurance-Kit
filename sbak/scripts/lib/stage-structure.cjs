@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/stage-structure.cjs
 //
 // The ONE structural reader for the framework's stage-prompt grammar (M27.C, KF-57;
@@ -290,4 +290,74 @@ function classifyStagePrompt(text, opts) {
   }
 }
 
-module.exports = { STAGE_ROOTS, classifyStagePrompt, stripInert, normalize, idOf, isConformantId };
+// ── THE PHASE-DOC PATH SET (M34.5.F.8 item 6, C8-02) ────────────────────────────────────
+//   One set, read by every leg that finds a Phase doc: the stage reader (scripts/lib/read-ledger.cjs
+//   stageSectionAt: the release, the view, the amendment and stage-end publishes, item o, the
+//   review), the validator's --all, the pre-commit's staged filter (this pattern for grep -E, held
+//   in lockstep with the hook's text by the kit's floor) and the ci leg's paths:
+//     docs/build-prompts/M<nn>*.md and proposals/M<nn>*.md - a milestone's Phase docs (two digits
+//       or more after the M; the milestone is the digits);
+//     docs/bugfix/<name>.md - the bug_fix mode's Phase doc, named by its bug id.
+//   One level under each home. The one pattern is valid for JavaScript and for grep -E alike.
+const PHASE_DOC_HOMES = Object.freeze(['docs/build-prompts', 'docs/bugfix', 'proposals']);
+const PHASE_DOC_GREP = '^(docs/build-prompts/M[0-9]{2}[^/]*|docs/bugfix/[^/]+|proposals/M[0-9]{2}[^/]*)\\.md$';
+const PHASE_DOC_RE = new RegExp(PHASE_DOC_GREP);
+function isPhaseDoc(p) { return PHASE_DOC_RE.test(String(p || '').replace(/\\/g, '/')); }
+// The milestone number a docs/build-prompts or proposals Phase doc names, or null (a bug-fix doc,
+// named by its bug id, carries its milestone only in its prompts' ids).
+function phaseDocMilestone(p) {
+  const rel = String(p || '').replace(/\\/g, '/');
+  if (!isPhaseDoc(rel)) return null;
+  const m = /^(?:docs\/build-prompts|proposals)\/M(\d+)/.exec(rel);
+  return m ? Number(m[1]) : null;
+}
+
+// ```xml fences, CRLF tolerated (moved here from validators/validate-stage-prompts.cjs at M34.5.F.8 so
+// the validator and the stage reader extract the same blocks): [{ content, startLine }].
+function xmlBlocks(content) {
+  // Tolerate CRLF: a Windows clone of a repo without `.gitattributes` gives
+  // ```xml\r\n ... \r\n``` . Anchoring on \n alone silently matches 0 blocks
+  // and reports false success. \r?\n matches both line-ending styles.
+  const text = String(content === undefined || content === null ? '' : content);
+  const re = /```xml\r?\n([\s\S]*?)\r?\n```/g;
+  const blocks = [];
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    const lineNumber = text.slice(0, match.index).split(/\r?\n/).length + 1;
+    blocks.push({ content: match[1], startLine: lineNumber });
+  }
+  return blocks;
+}
+
+// The live stage prompts carrying `id` in `text` (M34.5.F.8 item 6): the validator's structural read
+// - an ```xml fence, its XML comments and CDATA made inert, the top-level stage roots - so a draft in a
+// comment or outside a fence is never the prompt. -> [{ root, attrs, body, line }], body the inner
+// text with comments blanked (a commented tag inside the live prompt is not a live tag).
+function livePrompts(text, id) {
+  const out = [];
+  try {
+    for (const b of xmlBlocks(text)) {
+      const src = stripInert(b.content);
+      const { elements } = pairElements(tokenize(src));
+      for (const e of topLevel(elements)) {
+        if (idOf(e.attrs) !== id) continue;
+        const open = src.indexOf('>', e.start) + 1;
+        const close = src.lastIndexOf('</' + e.name, e.end);
+        out.push({ root: e.name, attrs: e.attrs, body: open > 0 && close >= open ? src.slice(open, close) : '', line: b.startLine });
+      }
+    }
+  } catch (_) { /* total: a reader fault reads as no live prompt, and the caller's raw check names it */ }
+  return out;
+}
+// Whether `text` names an opening stage-root tag carrying `id` anywhere (in a fence or not, in a
+// comment or not): the caller's signal that a prompt exists that the structural read did not take.
+function mentionsPrompt(text, id) {
+  const esc = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp('<(?:' + STAGE_ROOTS.join('|') + ')\\s[^>]*\\bid\\s*=\\s*["\']' + esc + '["\']').test(normalize(text));
+}
+
+module.exports = {
+  STAGE_ROOTS, classifyStagePrompt, stripInert, normalize, idOf, isConformantId,
+  // M34.5.F.8: the one Phase-doc path set, the one fence extractor, the live prompt for an id
+  PHASE_DOC_HOMES, PHASE_DOC_GREP, PHASE_DOC_RE, isPhaseDoc, phaseDocMilestone, xmlBlocks, livePrompts, mentionsPrompt,
+};

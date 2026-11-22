@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -7,11 +7,14 @@
 // validators/hooks with ZERO local tests (the kit's smoke suite stays in the kit) — a
 // user who tweaks a validator locally was flying test-free.
 //
-// WHAT IT PROVES: each of the project's three hooks and each PRESENT validator entry
-// point still fires correctly — one happy fixture (must pass) and one FAILING fixture
-// (must block) per check, on synthetic fixtures in an OS-tmpdir sandbox. Effectiveness,
-// not presence: a present-but-dead hook/validator lets its failing fixture through and
-// this suite goes RED (a lesson shipped downstream).
+// WHAT IT PROVES: each of the project's four session hooks, its own git pre-commit and each
+// PRESENT validator entry point still fires correctly — one happy fixture (must pass) and one
+// FAILING fixture (must block) per check, on synthetic fixtures in an OS-tmpdir sandbox.
+// Effectiveness, not presence: a present-but-dead hook/validator lets its failing fixture
+// through and this suite goes RED (a lesson shipped downstream). The pre-commit
+// runs under git in a scratch repository holding the project's .githooks/pre-commit and
+// validators/: an assertion-free test must be refused with G9's own line. kit-update --ready
+// runs this suite as its smoke row.
 //
 // WHAT IT DOES NOT PROVE: output quality, your project's own tests, or the kit-side
 // contracts (golden/bake stay in the kit). Validators absent from this render
@@ -129,10 +132,23 @@ if (fs.existsSync(H_RG) && fs.existsSync(S_SA) && fs.existsSync(S_AR)) {
   spawnSync('git', ['init', '-q'], { cwd: rg, env: sandbox.scrubGitEnv(), encoding: 'utf8' });
   fs.mkdirSync(path.join(rg, 'tests'), { recursive: true });
   fs.writeFileSync(path.join(rg, 'tests', 'red.test.js'), "test('red', () => {});\n");
-  runNode(S_AR, ['--stage', 'M01.A', '--release-seq', 'none'], { cwd: rg }); // human approval (the bare release form)
-  ok('hook red-gate (pretooluse): happy — after approve-red the edit is allowed', redGate().code === 0);
-  runNode(S_SA, ['--clear'], { cwd: rg });               // stage closed -> dormant
-  ok('hook red-gate (pretooluse): happy — cleared stage goes dormant (allow)', redGate().code === 0);
+  // The release and the clear are the person's acts, decided by the process tree. From the
+  // person's own terminal this mini-smoke drives them; under a Claude Code session or a test runner it
+  // shows the release refused (the keyboard check is live) and skips the two legs that need it, visibly.
+  let kb = null;
+  try { kb = require(path.join(PROJ, 'scripts', 'lib', 'receipts.cjs')).keyboard(process.env); } catch (_) { kb = null; }
+  if (!kb || kb.state === 'none') {
+    runNode(S_AR, ['--stage', 'M01.A', '--release-seq', 'none'], { cwd: rg }); // human approval (the bare release form)
+    ok('hook red-gate (pretooluse): happy — after approve-red the edit is allowed', redGate().code === 0);
+    runNode(S_SA, ['--clear'], { cwd: rg });               // stage closed -> dormant
+    ok('hook red-gate (pretooluse): happy — cleared stage goes dormant (allow)', redGate().code === 0);
+  } else {
+    const where = kb.state === 'refused' && kb.cause === 'runner' ? kb.runner : kb.state === 'refused' && kb.cause === 'tree' ? 'a process tree it cannot read' : 'a Claude Code session';
+    const rel = runNode(S_AR, ['--stage', 'M01.A', '--release-seq', 'none'], { cwd: rg });
+    ok(`hook red-gate (pretooluse): the release run by this mini-smoke under ${where} is refused, and the edit stays blocked`, rel.code === 2 && redGate().code === 2);
+    skip('hook red-gate (pretooluse): happy — after approve-red the edit is allowed', `not run: under ${where} the release is refused (it is the person's act); it runs from your own terminal, or in CI started without a package runner`);
+    skip('hook red-gate (pretooluse): happy — cleared stage goes dormant (allow)', `not run: under ${where} the clear is refused too; it runs from your own terminal, or in CI started without a package runner`);
+  }
 } else skip('hook red-gate (pretooluse)', 'hook or control scripts not present in this project');
 
 // (4) receipts-lifecycle: the build-receipt adapter. It is OBSERVATIONAL and fail-open —
@@ -159,10 +175,51 @@ if (fs.existsSync(H_RL)) {
     r.code === 0, `exit ${r.code}`);
 } else skip('hook receipts-lifecycle', 'not present in this project');
 
-// ── validator entry points (present ones only; absent = visible skip) ─────────────────
-
 const V_DIR = path.join(PROJ, 'validators');
 const vPath = (n) => path.join(V_DIR, n);
+
+// (5) the project's own git pre-commit: git, in a scratch repository holding the
+// project's .githooks/pre-commit bytes and its validators/, its own configuration only (a scratch
+// global file, no system file, the identity and commit.gpgsign set here). FAILING CASE: an
+// assertion-free test staged must be refused with G9's own line (a hook that refuses for another
+// reason, or none, does not count). HAPPY CASE: an asserted test staged draws no G9 line; the
+// project's fast check runs after it and is the project's own, so its result is not judged here. The
+// sandbox has no sbak/, so the hook's self-check prints its did-not-run line here, by design: this
+// proves the hook fires; kit-update --ready's hooks row proves its bytes are the kit's.
+const H_PC = path.join(PROJ, '.githooks', 'pre-commit');
+const G9_LINE = /test-honesty finding\(s\) block this commit/;
+const gitHere = spawnSync('git', ['--version'], { encoding: 'utf8', env: sandbox.scrubGitEnv() });
+if (!fs.existsSync(H_PC)) skip('hook pre-commit (git)', 'no .githooks/pre-commit in this project');
+else if (gitHere.error || gitHere.status !== 0) skip('hook pre-commit (git)', 'git is not on PATH, so the pre-commit cannot be driven here; run the mini-smoke from a shell where git runs');
+else if (!fs.existsSync(vPath('validate-test-honesty.cjs'))) skip('hook pre-commit (git)', 'validate-test-honesty.cjs is not rendered in this project, so the fixture has no assertion gate to drive');
+else {
+  const pc = path.join(TMP, 'pre-commit');
+  fs.mkdirSync(path.join(pc, '.githooks'), { recursive: true });
+  fs.copyFileSync(H_PC, path.join(pc, '.githooks', 'pre-commit'));
+  try { fs.chmodSync(path.join(pc, '.githooks', 'pre-commit'), 0o755); } catch (_) { /* win32: git reads the #! line */ }
+  fs.cpSync(V_DIR, path.join(pc, 'validators'), { recursive: true });
+  const genv = Object.assign({}, sandbox.scrubGitEnv(), { GIT_CONFIG_GLOBAL: write('pre-commit.gitconfig', ''), GIT_CONFIG_NOSYSTEM: '1', GIT_CEILING_DIRECTORIES: TMP });
+  const g = (args) => spawnSync('git', ['-c', 'user.name=mini-smoke', '-c', 'user.email=mini-smoke@localhost', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=.githooks'].concat(args), { cwd: pc, env: genv, encoding: 'utf8', timeout: 120000 });
+  g(['init', '-q']);
+  fs.mkdirSync(path.join(pc, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(pc, 'tests', 'empty.test.js'), "test('nothing', () => {});\n");
+  g(['add', 'tests/empty.test.js']);
+  let r = g(['commit', '-q', '-m', 'mini-smoke: an assertion-free test']);
+  let out = `${r.stdout || ''}${r.stderr || ''}`;
+  ok('hook pre-commit (git): failing case - an assertion-free test must be refused with G9\'s own line',
+    r.status !== 0 && G9_LINE.test(out), `exit ${r.status}${r.error ? ` (${r.error.code || r.error.message})` : ''}, G9 line ${G9_LINE.test(out) ? 'printed' : 'absent'}`);
+  g(['rm', '-q', '--cached', 'tests/empty.test.js']);
+  fs.rmSync(path.join(pc, 'tests', 'empty.test.js'), { force: true });
+  fs.writeFileSync(path.join(pc, 'tests', 'adds.test.js'), "test('adds', () => { expect(1 + 1).toBe(2); });\n");
+  g(['add', 'tests/adds.test.js']);
+  r = g(['commit', '-q', '-m', 'mini-smoke: an asserted test']);
+  out = `${r.stdout || ''}${r.stderr || ''}`;
+  ok('hook pre-commit (git): happy - an asserted test draws no G9 refusal (the project\'s fast check that follows is not judged here)',
+    !G9_LINE.test(out) && !/has no assertion call/.test(out), `exit ${r.status}`);
+}
+
+// ── validator entry points (present ones only; absent = visible skip) ─────────────────
+
 function vRun(name, args) { return runNode(vPath(name), args); }
 // One happy + one FAILING fixture per present validator. `failMust` names the teeth.
 function vPair(name, happy, failing, failLabel) {

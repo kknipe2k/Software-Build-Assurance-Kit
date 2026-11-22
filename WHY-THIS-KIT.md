@@ -11,7 +11,7 @@
 ### 1. Bake-tested enforcement - the gates are tested the way code is
 
 Most process frameworks are documents; agents demonstrably ignore documents. Here the floors
-are mechanical - 23 validator scripts in the shipped kit, 4 hooks, committed git hooks -
+are mechanical - 24 validator scripts in the shipped kit, 4 hooks, committed git hooks -
 regression-tested:
 
 - **A smoke suite** (in the development repository) - a floor the suite enforces on itself.
@@ -27,7 +27,7 @@ Full is the default tier; re-tier any time via a logged override. New process ma
 budgeted: a new gate requires a named real failure it would have caught (N5).
 
 - **Lite** - 54 scaffold files, brief retros, CHANGELOG-only ledger, advisory validators.
-- **Full** (default) - 121 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
+- **Full** (default) - 123 files, two-axis retros, blocking validators, advisory append-only ledgers with CI-enforced immutability arming on any declared risk trigger.
 
 
 ### 3. Calibrated fresh-context verification
@@ -47,7 +47,7 @@ with an explicit fail forcing the friction-heavy outcome.
 - **Four roles, fresh contexts.** An orchestrator reviews and routes (it never implements);
   builder, verifier, and refactorer sessions run per stage. From the two-terminal split on,
   their packets travel an append-only channel automatically, in both directions; approvals stay
-  yours, and the RED release reaches a session only when you type `/send --approval`. The walls between roles are
+  yours, and the RED release is your click on its prompt in the build window (human authorization; `/send --approval` carries the orchestrator's verdict to it). Any permission prompt on record from the last two minutes counts as that click. The walls between roles are
   hooks, not conventions.
 - **The stage loop is red-first.** A stage states its plan, writes failing tests, and stops:
   a human approves the RED set before implementation edits unlock, and the stage-end packet
@@ -91,8 +91,8 @@ The claims above lean on published evidence about frameworks and scaffolding lik
 
 ---
 
-*Counts on this page - 23 validator scripts in the shipped kit, 4 hooks, 12 shipped project scripts,
-8 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 54/121 scaffold files, and
+*Counts on this page - 24 validator scripts in the shipped kit, 4 hooks, 12 shipped project scripts,
+8 slash commands, 16 hard + 5 soft gates, 5 schemas, protocol v1.9, 54/123 scaffold files, and
 the covered-stack set - are policed by `sbak/validators/validate-entry-docs.cjs` and the smoke
 suite against derived facts; the full smoke suite runs in the development repository (it does
 not ship), and `sbak/scripts/bake-inheritance.cjs` is the effectiveness proof that does. Start

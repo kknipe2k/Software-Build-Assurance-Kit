@@ -25,7 +25,7 @@
     { "mode": "bug_fix", "spec_any": ["milestone", "multi-week", "roadmap"], "note": "a multi-week fix reads like a project - type a mode word if bug_fix is wrong" }
   ],
   "severity": {
-    "_why": "The tier default for the 8 advisory validator sites in the generated pre-commit (test-honesty, reconciliation, risk-escalation, destructive-op, risk-matrix, calibration, transition, release-readiness). Rendered as the VALIDATOR_SEVERITY_FLAG fill: warn -> '--warn', block -> '' (no flag = the validators' blocking default). validate-operating-mode is NOT on this dial — it is HARD at every tier (M26.C fork-3 ruling: enum check, cannot false-block). Per-validator override: the warn|block rows in project-config.md, honored by editing the hook line or re-rendering via kit-update --apply.",
+    "_why": "The tier default for the 8 advisory validator sites in the generated pre-commit (test-honesty, reconciliation, risk-escalation, destructive-op, risk-matrix, calibration, transition, release-readiness). Rendered as the VALIDATOR_SEVERITY_FLAG fill: warn -> '--warn', block -> '' (no flag = the validators' blocking default). validate-operating-mode is NOT on this dial — it is HARD at every tier (M26.C fork-3 ruling: enum check, cannot false-block). Per-validator override: G9 reads its test_honesty row from the staged project-config.md at each commit; the other validators do not read their rows, and a change takes effect when the person edits the hook line in .githooks/pre-commit under its ARC-007 divergence marker, which turns the commit floor's check of that file off (kit-update does not re-render it at Full).",
     "Lite": "warn",
     "Full": "block"
   },
@@ -80,8 +80,7 @@
     "web_verify": "always",
     "research_mode": "best_practice_first",
     "pre_write_surface": "spec_and_plan_only",
-    "escalation": "time_box_2x",
-    "hook_enforcement": "enforced"
+    "escalation": "time_box_2x"
   },
   "derivations": {
     "approval_cadence": {

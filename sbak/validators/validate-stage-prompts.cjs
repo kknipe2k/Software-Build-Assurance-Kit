@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-stage-prompts.js
 //
 // Validates stage prompts embedded in Phase docs against the schemas defined
@@ -7,7 +7,7 @@
 //
 // Usage:
 //   node validators/validate-stage-prompts.js <file> [<file> ...]
-//   node validators/validate-stage-prompts.js --all          # validates all Phase docs in docs/build-prompts/
+//   node validators/validate-stage-prompts.js --all          # validates all Phase docs (docs/build-prompts/, docs/bugfix/, proposals/)
 //   node validators/validate-stage-prompts.js --templates    # validates XML examples in templates/PHASE-DOC-TEMPLATE.md
 //
 // Exits 0 if all valid, non-zero with line-pointed errors if any fail.
@@ -36,7 +36,9 @@ const { stripInertXml } = require('./lib/fenced-block.cjs');
 // ad-hoc classifier in the hook is exactly the drift KF-57 was filed for. It lives in
 // scripts/lib/ rather than validators/lib/ because `kit-update --adopt` installs
 // scripts/ but not validators/, and the hook must work in an adopted repo.
-const { classifyStagePrompt, STAGE_ROOTS } = require(path.join(__dirname, '..', 'scripts', 'lib', 'stage-structure.cjs'));
+// M34.5.F.8 (item 6): the module also owns the one Phase-doc path set (--all) and the xml-fence
+// extractor, so this validator and the stage reader (read-ledger's stagePromptOf) read the same blocks.
+const { classifyStagePrompt, STAGE_ROOTS, xmlBlocks, PHASE_DOC_HOMES, isPhaseDoc } = require(path.join(__dirname, '..', 'scripts', 'lib', 'stage-structure.cjs'));
 
 const SCHEMAS = {
   work_stage_prompt: {
@@ -146,19 +148,9 @@ const SCHEMAS = {
 const ID_PATTERN_STRICT = /^M\d{2}(?:\.\d+)?\.[A-Z](?:\.\d+)?$/;
 const ID_PATTERN_TEMPLATE = /^M(?:\[NN\]|\d{2})\.[A-Z]$/;
 
-function extractXmlBlocks(content) {
-  // Tolerate CRLF: a Windows clone of a repo without `.gitattributes` gives
-  // ```xml\r\n ... \r\n``` . Anchoring on \n alone silently matches 0 blocks
-  // and reports false success. \r?\n matches both line-ending styles.
-  const re = /```xml\r?\n([\s\S]*?)\r?\n```/g;
-  const blocks = [];
-  let match;
-  while ((match = re.exec(content)) !== null) {
-    const lineNumber = content.slice(0, match.index).split(/\r?\n/).length + 1;
-    blocks.push({ content: match[1], startLine: lineNumber });
-  }
-  return blocks;
-}
+// The ```xml fences, CRLF tolerated: scripts/lib/stage-structure.cjs xmlBlocks (M34.5.F.8 moved the
+// extractor there, byte for byte, so the stage reader extracts the same blocks).
+const extractXmlBlocks = xmlBlocks;
 
 // The raw first line-anchored element. NOT a stage-structure reader — since M27.C that is
 // scripts/lib/stage-structure.cjs, shared with the hook. This survives for ONE job: naming
@@ -373,11 +365,16 @@ function validateFile(filePath, options) {
 
 function findFiles(rootDir, kind) {
   if (kind === 'phase') {
-    const dir = path.join(rootDir, 'docs', 'build-prompts');
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir)
-      .filter(f => /^M\d{2}.*\.md$/.test(f))
-      .map(f => path.join(dir, f));
+    // M34.5.F.8 (item 6): the one Phase-doc path set - docs/build-prompts/M<nn>*.md,
+    // docs/bugfix/<bug-id>.md, proposals/M<nn>*.md - the set the stage reader, the pre-commit filter
+    // and the ci paths read.
+    const out = [];
+    for (const home of PHASE_DOC_HOMES) {
+      const dir = path.join(rootDir, ...home.split('/'));
+      if (!fs.existsSync(dir)) continue;
+      for (const f of fs.readdirSync(dir).sort()) if (isPhaseDoc(`${home}/${f}`)) out.push(path.join(dir, f));
+    }
+    return out;
   }
   if (kind === 'templates') {
     const templateFile = path.join(rootDir, 'templates', 'PHASE-DOC-TEMPLATE.md');
@@ -393,7 +390,7 @@ let allowPlaceholders = false;
 if (args.includes('--all')) {
   files = findFiles(process.cwd(), 'phase');
   if (files.length === 0) {
-    console.log('validate-stage-prompts: no Phase docs found at docs/build-prompts/M*.md (this is fine if the project has no milestones yet)');
+    console.log('validate-stage-prompts: no Phase docs found at docs/build-prompts/M*.md, docs/bugfix/*.md or proposals/M*.md (this is fine if the project has no milestones yet)');
     process.exit(0);
   }
 } else if (args.includes('--templates')) {

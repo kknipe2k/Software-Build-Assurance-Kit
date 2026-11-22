@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/channel.cjs
 //   (kit source of truth: templates/scripts/lib/channel.cjs)
 //
@@ -91,6 +91,17 @@ function worktrees(cwd) {
   const out = git(cwd, ['worktree', 'list', '--porcelain']);
   if (out === null) return null;
   return out.split(/\r?\n/).filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9).trim());
+}
+// M34.5.F.3 (gate-1 Q11 (i)): the ONE reading of "this repository has an orchestrator worktree", read by the
+// listening gate (stage-active.cjs) and by the stage commit's pre-commit (lib/evidence.cjs preCommit): every
+// other worktree git lists whose .claude/role resolves to orchestrator. -> { all: [path] | null (git could
+// not list), orch: [path] }. A caller treats all === null as it must: the open names git, the pre-commit
+// fails toward its check.
+function orchestratorTrees(cwd) {
+  const all = worktrees(cwd);
+  if (all === null) return { all: null, orch: [] };
+  const here = normPath(cwd);
+  return { all, orch: all.filter((w) => normPath(w) !== here).filter((w) => { const r = readRole(w); return r.state === 'resolved' && r.role === 'orchestrator'; }) };
 }
 // { repo: '<project>@<8hex>', project, main, common } or null outside git.
 function repoIdentity(cwd) {
@@ -335,10 +346,59 @@ function append(cwd, res, cls, kind, bodyBuf, opts) {
 // ask rule admitted a send with no keystroke and no click). From M34.6.E item 2 (R-144) the CLI
 // requires it for an approval-request only and consumes it on every send. The fence's ask rule on
 // the release command stays in settings as defense-in-depth; it is never the human action.
-function sendGate(cwd) {
-  const tok = path.join(cwd, '.claude', 'channel', 'send-token');
-  if (fs.existsSync(tok)) { try { fs.rmSync(tok, { force: true }); } catch (_) { /* fine */ } return { ok: true, via: 'token' }; }
-  return { ok: false, line: 'channel: send refused - an approval request (the release) needs the owner\'s keystroke behind it: the owner types /send --approval in this orchestrator terminal (the hook stamps the keystroke, and that keystroke is the only record)' };
+// M34.5.F.2 (item 2, W4-01): the token is bound. The hook mints it only for a typed /send --approval
+// while a release is pending (pendingRelease below), recording the session, the turn's prompt id, the
+// stage and the red-stop's seq (v 2). With `bind` (the release send: { session, res }) the token is
+// taken only from that session, typed in its current turn (no later turn_started than its time plus
+// the skew), at most TOKEN_TTL_MS old, and for the release still pending; every other send consumes a
+// token present, as before, so a keystroke typed for one message never stands for a later release.
+const SEND_TOKEN_FILE = 'send-token';
+const TOKEN_TTL_MS = 10 * 60 * 1000;
+const TOKEN_SKEW_MS = 5 * 1000;
+const NO_KEYSTROKE_LINE = 'channel: send refused - an approval request (the release) needs the owner\'s keystroke behind it: the owner types /send --approval in this orchestrator terminal (the hook stamps the keystroke, and that keystroke is the only record)';
+const tokenRefusal = (why) => ({ ok: false, line: `channel: send refused - ${why}; nothing was sent - repair: the owner types /send --approval again in this orchestrator session` });
+function sendGate(cwd, bind) {
+  const tok = path.join(cwd, '.claude', 'channel', SEND_TOKEN_FILE);
+  let raw = null;
+  try { raw = fs.readFileSync(tok, 'utf8'); } catch (_) { raw = null; }
+  if (raw !== null) { try { fs.rmSync(tok, { force: true }); } catch (_) { /* fine */ } }
+  if (!bind) return raw !== null ? { ok: true, via: 'token' } : { ok: false, line: NO_KEYSTROKE_LINE };
+  if (raw === null) return { ok: false, line: NO_KEYSTROKE_LINE };
+  let t = null;
+  try { t = JSON.parse(raw); } catch (_) { t = null; }
+  if (!t || t.v !== 2 || typeof t.at !== 'string' || typeof t.session !== 'string' || typeof t.stage !== 'string' || !Number.isInteger(t.red_stop_seq)) {
+    return tokenRefusal('the send token carries no binding the kit\'s hook writes (v 2: the session, the turn, the pending red-stop)');
+  }
+  if (t.session !== bind.session) return tokenRefusal(`the /send --approval was typed in another session (${t.session.slice(0, 8)}), not this one`);
+  const now = Number.isFinite(bind.now) ? bind.now : Date.now();
+  const at = Date.parse(t.at);
+  if (!Number.isFinite(at) || at - now > TOKEN_SKEW_MS) return tokenRefusal('the send token is stamped ahead of the clock');
+  if (now - at > TOKEN_TTL_MS) return tokenRefusal('the /send --approval is more than 10 minutes old');
+  let turn = null;
+  try { turn = require(path.join(__dirname, 'receipts.cjs')).lastEventAt(cwd, bind.session, 'turn_started'); } catch (_) { turn = null; }
+  if (!turn) return tokenRefusal('this session has no turn_started on record, so the token cannot be bound to a turn');
+  if (Date.parse(turn) > at + TOKEN_SKEW_MS) return tokenRefusal('a later prompt followed the /send --approval; type it again');
+  const p = pendingRelease(bind.res);
+  if (!p || p.stage !== t.stage || p.red_stop_seq !== t.red_stop_seq) return tokenRefusal(`the release it was typed for (stage ${t.stage}, red-stop seq ${t.red_stop_seq}) is no longer the one pending`);
+  return { ok: true, via: 'token', token: t };
+}
+// The release a /send --approval can be for (M34.5.F.2, gate-1 Q6): the builder's latest red-stop
+// packet for the builder tree's open stage, with no approval-request on the orchestrator's log after
+// it. -> { stage, red_stop_seq } | null.
+function pendingRelease(res) {
+  if (!res || !res.ok) return null;
+  const stage = stageOf(res.tree);
+  if (stage === '-') return null;
+  const b = readLog(path.join(res.root, FILES.work), 'work', res);
+  if (b.fault) return null;
+  let red = null;
+  for (const m of b.msgs) if (m.class === 'stage-packet' && m.kind === 'red-stop' && m.stage === stage) red = m;
+  if (!red) return null;
+  const o = readLog(path.join(res.root, FILES.orchestrator), 'orchestrator', res);
+  if (o.fault) return null;
+  const after = Date.parse(red.ts);
+  if (o.msgs.some((m) => m.class === 'approval-request' && Date.parse(m.ts) >= after)) return null;
+  return { stage, red_stop_seq: red.seq };
 }
 
 function describe(m) {
@@ -396,12 +456,17 @@ function pidAlive(pid) {
 // watcher that stopped polling, or names a pid the OS handed to something else. The one judge: the
 // stage-active gate and `channel status`. -> { state: none | dead | stale | listening, m, mtime }
 const LISTEN_FRESH_MS = 60 * 1000;
+// M34.5.F.1: the watcher's longest poll; channel.cjs watch clamps --poll-ms to it, and watcherState
+// reads no marker's poll_ms above it.
+const MAX_POLL_MS = 15 * 1000;
 function watcherState(marker) {
   if (!fs.existsSync(marker)) return { state: 'none', m: null, mtime: 0 };
   let m = null; let mtime = 0;
   try { m = JSON.parse(fs.readFileSync(marker, 'utf8')); mtime = fs.statSync(marker).mtimeMs; } catch (_) { return { state: 'dead', m: null, mtime: 0 }; }
   if (!m || !Number.isInteger(m.pid) || m.pid <= 0 || !pidAlive(m.pid)) return { state: 'dead', m, mtime };
-  const poll = Number.isInteger(m.poll_ms) && m.poll_ms > 0 ? m.poll_ms : 750;
+  // M34.5.F.1 (W4-03, C.4's K2): the marker's poll_ms is capped at the watcher's own maximum, so
+  // freshness is never longer than max(LISTEN_FRESH_MS, 4 x MAX_POLL_MS) - a marker cannot set its own.
+  const poll = Math.min(Number.isInteger(m.poll_ms) && m.poll_ms > 0 ? m.poll_ms : 750, MAX_POLL_MS);
   const fresh = /^[0-9a-f]{16}$/.test(String(m.token || '')) && Date.now() - mtime <= Math.max(LISTEN_FRESH_MS, 4 * poll);
   return { state: fresh ? 'listening' : 'stale', m, mtime };
 }
@@ -441,7 +506,8 @@ function bellLine(res, seq) {
 //           implementation edit, and the stage-end publish refuses an added file and a recorded
 //           file that is missing or renamed (M34.1.B); an approval that would record no file is
 //           refused (approve-red, appendApproval);
-//   case 4  the approved scope section changed at HEAD: the amendment and stage-end publishes refuse;
+//   case 4  the approved scope changed, at HEAD or in the index (M34.5.F.8): the amendment and
+//           stage-end publishes refuse;
 //   case 5  an amendment that removes or loosens an assertion: the ack refuses it (the one
 //           obligation); the ack prints the diff summary so the read happens in the acking turn.
 // A hash proves bytes changed; the case is decided by the path class, the scope compare and the ack
@@ -545,7 +611,8 @@ function currentApproval(rec, opts) {
   const latest = new Map((Array.isArray(row.files) ? row.files : []).map((f) => [f.path, { sha256: f.sha256, blob: f.blob || null }]));
   let voided = null;
   for (const r of rec.rows.slice(idx + 1)) {
-    if (r && r.kind === 'ack' && (!bound || bound(r))) for (const f of Array.isArray(r.files) ? r.files : []) latest.set(f.path, { sha256: f.sha256, blob: f.blob || null });
+    // M34.5.F.3: the binding sees the bytes folded so far (the recount compares against them).
+    if (r && r.kind === 'ack' && (!bound || bound(r, latest))) for (const f of Array.isArray(r.files) ? r.files : []) latest.set(f.path, { sha256: f.sha256, blob: f.blob || null });
     if (r && r.kind === 'void') voided = r;
   }
   return { row, latest, voided };
@@ -584,6 +651,8 @@ function appendApproval(tree, stage, fields) {
     kind: 'approval', at: new Date().toISOString(), seq: Number.isInteger(f.seq) ? f.seq : null,
     role: f.role, repo: f.repo || null, session: f.session || null, prompt_at: f.prompt_at || null,
     base: git(tree, ['rev-parse', 'HEAD']) || null, scope: f.scope || null, files,
+    // M34.5.F.8 (item 2): why no scope was recorded (no Phase doc at HEAD at all), for the review
+    scope_none: f.scope || !f.scope_none ? undefined : String(f.scope_none),
     // M34.6.B (item 3): the RED record the release bound, and its subject (absent on a legacy stage)
     tests_run_red: f.tests_run_red || undefined, subject: f.subject || undefined,
   }));
@@ -616,7 +685,7 @@ function archiveApproval(tree, openStage) {
   }
 }
 
-// Case 4: the approved scope section against HEAD. The blob equal is the fast answer; a new blob
+// Case 4: the approved scope section against HEAD and the index. The blob equal is the fast answer; a new blob
 // re-slices the section (read-ledger stageSectionAt, the one reader) and compares its sha256, so an
 // unrelated section's edit is not a scope change. -> null (unchanged, or nothing recorded) | the line
 // M34.6.A (item n): then every ref the record carries (the prompt's scope_locks, deliverable and
@@ -634,20 +703,26 @@ function scopeChange(tree, stage, scope, kind) {
     return rl;
   };
   const NOLIB = `channel: ${kind} refused - the approved scope cannot be compared (scripts/lib/read-ledger.cjs did not load) - repair: node scripts/kit-update.cjs --adopt`;
-  if (git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${scope.doc}`]) !== scope.blob) {
-    if (!lib()) return NOLIB;
-    const sec = rl.stageSectionAt(tree, stage);
-    if (!sec.ok || sha(sec.text) !== scope.section_sha256) return moved(`the ${stage} section of ${scope.doc}`);
-  }
-  for (const r of Array.isArray(scope.refs) ? scope.refs : []) {
-    if (!r || typeof r.doc !== 'string') continue;
-    const blob = git(tree, ['rev-parse', '--verify', '--quiet', `HEAD:${r.doc}`]);
-    if (blob === r.blob) continue;
-    const what = r.section ? `the ${r.section} section of ${r.doc}` : r.doc;
-    if (!r.section || blob === null) return moved(what);
-    if (!lib()) return NOLIB;
-    const s = rl.sectionAt(tree, r.doc, r.section);
-    if (!s.ok || sha(s.text) !== r.section_sha256) return moved(what);
+  // M34.5.F.8 (item 1, W8-01): at HEAD, then in the index - the bytes the stage commit will carry
+  // (the pre-commit holds HEAD still while the stage is open, so a lock edit staged with the work is
+  // seen only there). The same line either way; the first subject that moved refuses.
+  for (const at of ['HEAD', 'index']) {
+    const rev = at === 'index' ? '' : 'HEAD';
+    if (git(tree, ['rev-parse', '--verify', '--quiet', `${rev}:${scope.doc}`]) !== scope.blob) {
+      if (!lib()) return NOLIB;
+      const sec = rl.stageSectionAt(tree, stage, at);
+      if (!sec.ok || sha(sec.text) !== scope.section_sha256) return moved(`the ${stage} section of ${scope.doc}`);
+    }
+    for (const r of Array.isArray(scope.refs) ? scope.refs : []) {
+      if (!r || typeof r.doc !== 'string') continue;
+      const blob = git(tree, ['rev-parse', '--verify', '--quiet', `${rev}:${r.doc}`]);
+      if (blob === r.blob) continue;
+      const what = r.section ? `the ${r.section} section of ${r.doc}` : r.doc;
+      if (!r.section || blob === null) return moved(what);
+      if (!lib()) return NOLIB;
+      const s = typeof rl.refSectionAt === 'function' ? rl.refSectionAt(tree, r, at) : rl.sectionAt(tree, r.doc, r.section, at);
+      if (!s.ok || sha(s.text) !== r.section_sha256) return moved(what);
+    }
   }
   return null;
 }
@@ -669,11 +744,39 @@ function testFilesSince(tree, base) {
 // orchestrator's log in this tree - read through readLog, the integrity check - holds a row with the
 // seq and the hash the ack row names, kind ack, answering the amendment's seq. A role and a hash
 // identify a message on this machine, not a person.
-function ackBoundFor(res) {
-  const log = readLog(path.join(res.root, FILES.orchestrator), 'orchestrator', res);
-  const msgs = log.fault ? [] : log.msgs;
-  return (r) => Number.isInteger(r.message_seq) && typeof r.message_sha256 === 'string'
-    && msgs.some((m) => m.seq === r.message_seq && m.hash === r.message_sha256 && m.kind === 'ack' && m.reply_to === r.seq);
+// M34.5.F.3 (item 2, C4-02): and the ack row's content recounted before it folds - ackRecount on each of
+// its files against the bytes folded before it - on every v2 record; the log binding on the evidence
+// path only (o.log), as before. A forged row that loosens an approved test folds nothing.
+function ackBoundFor(res, o) {
+  const useLog = !o || o.log !== false;
+  const log = useLog ? readLog(path.join(res.root, FILES.orchestrator), 'orchestrator', res) : null;
+  const msgs = !log || log.fault ? [] : log.msgs;
+  return (r, latest) => (!useLog || (Number.isInteger(r.message_seq) && typeof r.message_sha256 === 'string'
+    && msgs.some((m) => m.seq === r.message_seq && m.hash === r.message_sha256 && m.kind === 'ack' && m.reply_to === r.seq)))
+    && ackRecount(res.tree, latest, r).ok;
+}
+// M34.5.F.3 (item 2): the case-5 recount, run by whoever folds an ack row - the red gate before an
+// implementation edit, the stage end - not trusted to the ack verb having run. Each file the row names
+// is read from git's object store by the blob it records, which must hash to the row's sha256 (the
+// recount judges the bytes the fold folds), and counted against the bytes folded before it (the
+// approval's or an earlier ack's) by the ack verb's own classifyAmendment. -> { ok: true } | { ok: false, path, why }
+function ackRecount(tree, latest, r) {
+  const files = r && Array.isArray(r.files) ? r.files : [];
+  for (const f of files) {
+    if (!f || typeof f.path !== 'string') return { ok: false, path: '?', why: 'an ack row file without a path' };
+    if (f.sha256) {
+      const b = blobBytes(tree, f.blob);
+      if (!b) return { ok: false, path: f.path, why: `the acked bytes (blob ${f.blob || 'none recorded'}) are not in the object store` };
+      if (crypto.createHash('sha256').update(b).digest('hex') !== f.sha256) return { ok: false, path: f.path, why: 'the acked blob is not the bytes the row names (sha256 differs)' };
+    }
+    const before = latest && typeof latest.get === 'function' ? latest.get(f.path) : null;
+    if (!before) return { ok: false, path: f.path, why: 'not a file the approval recorded' };
+    const c = classifyAmendment(tree, before, f);
+    if (c.broken) return { ok: false, path: f.path, why: c.broken, broken: true };
+    if (c.missing) return { ok: false, path: f.path, why: c.missing };
+    if (c.reason) return { ok: false, path: f.path, why: `it removes or loosens an assertion (${c.reason})` };
+  }
+  return { ok: true };
 }
 // The stage-end publish's checks (cases 3 and 4) against the open stage's v2 record; a legacy record,
 // no record or another stage's record leaves the stage end as it was. -> { ok } | { ok: false, line }
@@ -688,7 +791,8 @@ function stageEndCheck(res, body) {
   try { evid = require(path.join(__dirname, 'evidence.cjs')); } catch (e) { evErr = String((e && e.message) || e).split('\n')[0]; }
   if (!evid) return { ok: false, line: `channel: stage-end refused - scripts/lib/evidence.cjs did not load (${evErr}) - repair: node scripts/kit-update.cjs --adopt` };
   const onPath = open !== '-' && evid.stageState(res.tree, open).onPath;
-  const a = approvalChecks(res, open, onPath ? { ackBound: ackBoundFor(res) } : null);
+  // M34.5.F.3 (item 2): the recount on every v2 record; the log binding on the evidence path.
+  const a = approvalChecks(res, open, { ackBound: ackBoundFor(res, { log: onPath }) });
   if (!a.ok) return a;
   if (open === '-') return { ok: true };
   // M34.6.C (item 5): the standing row's base, the point item o derives the changed paths from
@@ -843,7 +947,7 @@ function amendment(res) {
   if (!rec) return { ok: false, line: 'channel: amendment refused - no approval record for the open stage (/approve-red writes .claude/channel/approval.json); a test change before the release belongs in the red-stop' };
   const open = stageOf(res.tree);
   if (rec.stage !== open) return { ok: false, line: `channel: amendment refused - the open stage is ${open} and the approval was for ${rec.stage}; a new stage id is scope: the owner's /approve-red` };
-  const cur = currentApproval(rec);
+  const cur = currentApproval(rec, rec.legacy ? undefined : { ackBound: ackBoundFor(res, { log: false }) }); // M34.5.F.3: the recounted fold
   if (!cur) return { ok: false, line: 'channel: amendment refused - no approval record for the open stage (/approve-red writes .claude/channel/approval.json); a test change before the release belongs in the red-stop' };
   if (!rec.legacy) { const sc = scopeChange(res.tree, open, cur.row.scope, 'amendment'); if (sc) return { ok: false, line: sc }; }
   const latest = cur.latest;
@@ -874,7 +978,8 @@ function ackAmendment(cwd, res, seq) {
   if (prev) return { ok: false, line: `channel: amendment seq ${seq} is already acknowledged (seq ${prev.seq})` };
   const files = Array.isArray(m.amended) ? m.amended : [];
   const rec = readApproval(res.root);
-  const cur = rec && !rec.legacy && rec.stage === m.stage ? currentApproval(rec) : null;
+  // M34.5.F.3: the bytes to count against are the recounted fold's, so a row no recount folds is no base.
+  const cur = rec && !rec.legacy && rec.stage === m.stage ? currentApproval(rec, { ackBound: ackBoundFor(res, { log: false }) }) : null;
   const summary = [];
   if (cur) {
     for (const f of files) {
@@ -909,15 +1014,16 @@ function consumeApproval(cwd) {
 
 module.exports = {
   SCHEMA, CLASSES, BUILDER_CLASSES, ORCH_CLASSES, WRITER_ROLES, FILES, SIDE, PEER, PEER_NAME, KIND_RE, SEND_ASK_RULE, writersOf,
-  readRole, repoIdentity, worktrees, resolve, readLog, readCursor, writeCursor, readTurn, writeTurn,
+  readRole, repoIdentity, worktrees, orchestratorTrees, resolve, readLog, readCursor, writeCursor, readTurn, writeTurn,
   IDENTITY_FILE, IDENTITY_RE, readIdentity, rootInference, originOf, // M34.6.A
-  unreadFor, append, sendGate, utf8Fault, utf8Refusal, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
+  unreadFor, append, sendGate, pendingRelease, TOKEN_TTL_MS, TOKEN_SKEW_MS, SEND_TOKEN_FILE, utf8Fault, utf8Refusal, sha, inboxFile, outboxFile, pickupLine, summaryLine, describe,
   stampLine, consumeApproval, emit, writeAtomic, pidAlive, trunkOf, aheadOf,
-  LISTEN_FRESH_MS, watcherState, bellLine, peerFolder,
+  LISTEN_FRESH_MS, MAX_POLL_MS, watcherState, bellLine, peerFolder,
   APPROVAL_FILE, OWN_FILES, TEST_GLOBS, changedTestFiles, redSet, readApproval, amendment, ackAmendment,
   // the approval record cannot be weakened (M34.C)
   canonicalJson, approvalRowHash, currentApproval, appendApproval, appendVoid, recordBytes, restoreRecord, archiveApproval,
   snapshotBlobs, blobBytes, scopeChange, stageEndCheck, testFilesSince, lineDiff, classifyAmendment,
   // the evidence path (M34.6.B)
   ackBoundFor, approvalChecks, REFUSALS_FILE, refusalRow, takePublishLock,
+  ackRecount, // M34.5.F.3: the fold's recount
 };

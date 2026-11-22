@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-spec-examples.cjs
 //
 // THE SPEC-EXAMPLE HARVEST GATE — every literal example in the spec must appear in at
@@ -273,7 +273,12 @@ function listSpecFiles(specAbs) {
     try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
     for (const e of ents) {
       const p = path.join(dir, e.name);
-      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(p); continue; }
+      // M34.7.B: spec/changes/ holds the change files, each quoting the contract as it stood before
+      // its change; they are history, not the current spec, so their examples are not harvested.
+      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name) && !(dir === specAbs && e.name === 'changes')) walk(p); continue; }
+      // M34.7.C: the challenge record and the discovery notes are about the spec, not the spec; a
+      // finding or an answer quoting an example must not demand a fixture.
+      if (dir === specAbs && (e.name === 'spec-challenge.md' || e.name === 'discovery-notes.md')) continue;
       if (/\.md$/i.test(e.name)) out.push(p);
     }
   };
@@ -294,6 +299,10 @@ function main() {
     }
   } else {
     specFiles = listSpecFiles(specAbs);
+    // M34.7.A: where the live spec exists it is the current spec; the original beside it is the
+    // frozen record of what was first agreed (byte-equal at the freeze), so it is not harvested twice.
+    const live = path.join(specAbs, 'live-spec.md');
+    if (specFiles.indexOf(live) !== -1) specFiles = specFiles.filter((p) => p !== path.join(specAbs, 'project-spec.md'));
   }
 
   if (!specFiles.length) {

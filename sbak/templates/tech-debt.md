@@ -4,7 +4,7 @@
 >
 > **This ledger is also Stage R's trigger input.** Stage R (the refactor health check) reads the open-entry count here at each milestone boundary: when it reaches the `refactor_mode` threshold (Standard `trigger_n5` = ≥5; Full `trigger_n3` = ≥3) — OR the milestone interval elapses, whichever first — Stage R runs and **appends its own 🟢 findings back here** (append-only). See `sbak/FRAMEWORK-CONFIG.md` §4.11 and `sbak/BUILD-PLAYBOOK.md` §3.4.5.
 >
-> **Append-only.** Don't edit prior entries. To resolve a debt item, append a new entry referencing the prior one's ID and the resolution commit. Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (Full-enforced; Standard-advisory): prior committed content must remain a byte-prefix of the current file. Same check that guards `gap-analysis.md` and `consultations.md`.
+> **Append-only.** Don't edit prior entries. To resolve a debt item, append a new entry referencing the prior one's ID and the resolution commit. Unchecked unless the project declares a risk trigger. Only then does the kit's shared append-only checker, `validators/check-append-only.cjs`, guard it: the pre-push leg and `.github/workflows/append-only-ledger.yml` (generated only then) refuse a change to a prior entry (deterministic enforcement), since prior committed content must remain a byte-prefix of the current file. Same check that guards `gap-analysis.md` and `consultations.md`.
 
 ---
 

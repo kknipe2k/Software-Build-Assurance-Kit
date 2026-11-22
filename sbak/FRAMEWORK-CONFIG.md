@@ -34,7 +34,7 @@ Each tier is a **default toggle bundle**. You can override any individual toggle
 ```
                    Lite          Full (default)
 Discovery Qs       2             5
-Scaffold files     ~56           ~124
+Scaffold files     ~56           ~125
 Approvals/stage    1 (per-PR)    1 (per-stage)
 Retro axes         1             2
 Ledger             CHANGELOG     append-only* (+ CI when risk-armed)
@@ -127,7 +127,7 @@ Controls how often the agent surfaces work for human review. **Since M26.D this 
 | **Fenced autonomy** (← `per_stage`) — *recommended default* | `acceptEdits` | allow = edit source, `{{TEST}}`/`{{LINT}}`/`{{BUILD}}`, `git add`; ask = `git commit`/`push`, dep install, manifest edits | the sweet spot |
 | **Sleep-through** (← Minimum / `per_pr`) | `acceptEdits` + recommend the **user-level** `auto` opt-in | same allow/ask as Fenced (repo can't set `auto`); lean on auto's classifier for the long tail | trusted direction, long unattended runs |
 
-**The `deny` floor is level-invariant — identical at every level (the wall doesn't move; only the allow/ask split flexes).** It denies **secret reads** (`.env`, `.env.*`, `secrets/**`, `*.pem`, `*.key`), **secret writes** (`Edit(./.env)`, `Edit(./.env.*)`), and **irreversible Bash** (`git push --force`, `git push -f` [short force-push form], `git reset --hard`, `git clean`, `rm -rf`) at Maximum oversight, Fenced autonomy, and Sleep-through alike — this enumeration matches both the shipped `templates/dot-claude/settings.json` deny block **and** the kit's own live `.claude/settings.json` deny block exactly (no undocumented superset). `scripts/smoke.cjs` asserts the live `.claude/settings.json` deny floor is byte-identical to the shipped template floor (the **live == template** guard), so the live fence can no longer silently drift from the documented floor. **Egress/exfil control is deliberately a *separate layer* — user-level `auto` (its classifier blocks `curl … | bash` semantically) + the OS sandbox + keeping secrets off disk — not a static `deny` on `curl`/`wget`**: a static egress deny is trivially bypassed by a `node`/`python` subprocess (the same gap that limits `deny: Read()`) while still blocking the toolchains that legitimately need `curl`, so it buys friction without buying safety. `defaultMode:"auto"` is **never** repo-set (ignored by design); `.claudeignore` is **never** generated (broken). See `templates/dot-claude/settings.json` (`_permission_profiles`) and the honest secrets/web-remote caveats in the generated `CLAUDE.md`.
+**The `deny` floor is level-invariant — identical at every level (the wall doesn't move; only the allow/ask split flexes).** It denies **secret reads and writes** for every `.env` file at any depth (`.env.example` included), `.netrc` and `.git-credentials`, **secret reads** of `secrets/**` and key and credential files (`*.pem`, `*.key`, `*.p12`, `*.p8`, `*.pfx`, `*.keystore`, `*.jks`, `.npmrc`, `.pypirc`, `id_rsa`, `credentials`), and **irreversible Bash** (`git push --force`, `git push -f` [short force-push form], `git reset --hard`, `git clean`, `rm -rf`) at Maximum oversight, Fenced autonomy, and Sleep-through alike: this enumeration is the shipped `templates/dot-claude/settings.json` deny block's secret and Bash rules (no undocumented superset), and the template also denies Claude's edit tools on the red gate's control set and, in an installed project, on the commit floor (deterministic enforcement). The kit's own build holds its live `.claude/settings.json` deny block to the template's, less the commit-floor rules, which the kit's own settings do not carry since the kit is the floor's source (the **live == template** guard). **Egress/exfil control is deliberately a *separate layer* — user-level `auto` (its classifier blocks `curl … | bash` semantically) + the OS sandbox + keeping secrets off disk — not a static `deny` on `curl`/`wget`**: a static egress deny is trivially bypassed by a `node`/`python` subprocess (the same gap that limits `deny: Read()`) while still blocking the toolchains that legitimately need `curl`, so it buys friction without buying safety. `defaultMode:"auto"` is **never** repo-set (ignored by design); `.claudeignore` is **never** generated (broken). See `templates/dot-claude/settings.json` (`_permission_profiles`) and the honest secrets/web-remote caveats in the generated `CLAUDE.md`.
 
 ### 4.2 Retrospective depth — `retro_depth`
 
@@ -148,7 +148,7 @@ Controls the append-only product↔spec ledger.
 |---|---|---|
 | `none` (default: Lite) | No `gap-analysis.md`. Use `CHANGELOG.md` for "what shipped." | Simple projects; you don't need a forensic record. |
 | `append_only_advisory` (default: Full; CI-enforced when risk-armed) | `gap-analysis.md` exists with the append-only rule documented; nothing enforces it. | You want the discipline but not the CI cost. |
-| `append_only_enforced` (default: Full) | CI fails any PR that edits a prior ledger line. | Audit-critical: regulated, multi-team, or long-lived. |
+| `append_only_enforced` (default: Full) | The pre-push hook refuses a push, for every ref on git's feed, that edits a prior ledger line or drops a ledger from the list (deterministic enforcement), on the pushing machine (`git push --no-verify` skips it), and the CI workflow fails a pull request that does the same, which blocks the merge only where the repository owner makes it a required check; a pushed ref that the remote already holds is checked against the remote's own copy of it, so an amended or force-pushed row is refused too; an approved rewrite is a line in `docs/append-only-exceptions.txt` (human authorization). | Audit-critical: regulated, multi-team, or long-lived. |
 
 ### 4.4 Web-verify cadence — `web_verify`
 
@@ -201,17 +201,9 @@ Controls when the agent stops and asks rather than self-correcting.
 | `iteration_3` | Surface after 3 self-correction iterations (current default) | Full |
 | `iteration_2_for_integration` | Surface after 2 iterations for cross-stack integration bugs (current default) | All tiers — this is non-tunable; it's a hard signal |
 
-### 4.8 Hook enforcement — `hook_enforcement`
+### 4.8 (retired)
 
-Controls whether SessionStart hooks auto-load the read-first list (vs. honor system).
-
-| Value | Behavior | Default for |
-|---|---|---|
-| `enforced` | SessionStart hook reads the read-first files and injects them into context | All tiers (recommended) |
-| `advisory` | Read-first list is documented but not auto-loaded; agent reads on its own | Custom — only if the user wants to opt out |
-| `disabled` | No hooks; pre-Claude-Code-hooks behavior | Discouraged |
-
-Default is `enforced` for all tiers because honor-system compliance is a known reliability concern. The hook loads the files; the agent doesn't have to remember to.
+This number held a key that no program read; it is retired in this release and the number is kept so the sections after it keep theirs. A `project-config.md` that still carries its row reads as before, since nothing reads it. Whether the session hooks run is Claude Code's settings, not a toggle here (see `docs/limitations.md` on the settings that switch a project's hooks off).
 
 ### 4.9 Explanation mode — `explanation_mode`
 
@@ -346,7 +338,7 @@ off_track_check: brief | advisory | enforced
 |---|---|---|---|---|
 | `brief` | Per-stage off-track line in the brief retro + a one-line closeout sanity check | One-line note in `CHANGELOG.md` (no separate log) | Advisory only | Lite |
 | `advisory` | Per-stage line (mandatory) + full closeout check | `docs/off-track-log.md`, append-only **advisory** (honor-system) | Surfaced; a standing unjustified inversion is a closeout warning | Full (the default) |
-| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, on the append-only list (as at every value), checked in CI only in a project with a declared risk trigger | **G8**: judged by the agent and logged by a person; the enforced setting (a script that blocks the milestone PR on a standing unjustified inversion) is proposed for M36 | Explicit choice (or ride the risk-armed ledger set) |
+| `enforced` | Per-stage line + full closeout check (+ optional fresh-context audit) | `docs/off-track-log.md`, unchecked unless the project declares a risk trigger (then on the append-only list, checked by the pre-push leg and in CI) | **G8**: judged by the agent and logged by a person; the enforced setting (a script that blocks the milestone PR on a standing unjustified inversion) is proposed for M36 | Explicit choice (or ride the risk-armed ledger set) |
 
 Defaults: **Lite = `brief`, Full = `advisory`**; `enforced` stays an explicit-choice escalation (a toggle ships with a default per tier so existing projects don't break on upgrade — §9). The **`/on-track` command is available at every value** — the toggle governs only the *mandatory* paths and the gate, never the on-demand review. Both clauses of G8 hold regardless of value: no unjustified inversion, and `docs/backlog.md` is HITL co-authored (no AI-only re-rank, status flip, scope change, or `Depends on` edit reaches the committed doc — that clause is what keeps "off track" falsifiable).
 
@@ -369,18 +361,18 @@ The map is **not gated to `web`** — the entry shape and the test-id-binding in
 
 ### 4.17 Test-honesty — `test_honesty`
 
-Controls the **G9 test-honesty gate** — the structural form of "tests prove *effectiveness*, not presence." It enforces two things on the **staged** diff, **risk-tiered** (keyed off the stage's *declared* risk surface, never a blanket mutation score) and **incremental** (the staged set, not the whole suite): **(a)** a **v1.7+** work-stage Phase doc carries a `<test_honesty>` slot — a named mutation-killing test for each enforcement/security/destructive surface it touches, or the explicit `n/a — no risk surface` sentinel (a silent omission blocks); **(b)** no staged test is **assertion-free / exception-only** (a test that proves nothing). Gate **G9** in `PROCESS-VALIDATION.md`; enforced by `validators/validate-test-honesty.cjs`.
+Controls the **G9 test-honesty gate** — the structural form of "tests prove *effectiveness*, not presence." It enforces two things on the **staged** diff, **risk-tiered** (keyed off the stage's *declared* risk surface, never a blanket mutation score) and **incremental** (the staged set, not the whole suite): **(a)** the stage names its mutation: on the **Custom** path a **v1.7+** work-stage Phase doc carries a `<test_honesty>` slot - a named mutation-killing test for each enforcement/security/destructive surface it touches, or the explicit `n/a - <reason>` sentinel (a silent omission blocks, and so does a placeholder such as "TBD"); on the **Full** path (the default) the slot is optional and the stage retrospective's handoff `mutation:` line carries the naming, refused by `validators/validate-retrospective.cjs` when it is missing or a placeholder; **(b)** no staged test is **assertion-free / exception-only** (a test that proves nothing). Gate **G9** in `PROCESS-VALIDATION.md`; enforced by `validators/validate-test-honesty.cjs`.
 
 ```
 test_honesty: warn | block
 ```
 
-| Value | Slot omission (a) | Assertion-free test (b) | Default for |
+| Value | Slot omission, Custom path (a) | Assertion-free test (b) | Default for |
 |---|---|---|---|
 | `warn` | Advisory (NOTE, non-blocking) | Advisory (NOTE) — the heuristic's residual false-positive rate is absorbed here | Lite |
 | `block` | **Blocks the commit** | **Blocks the commit** | Full |
 
-Defaults: **Lite = `warn`, Full = `block`** — schema-owned and **performed by the render** (M26.D, the ruled fork-1 flip): `calibration-core.json` `severity` fills the pre-commit's `VALIDATOR_SEVERITY_FLAG` token per tier (Lite `--warn`, Full empty = the validator's blocking default). Per-validator override: the warn|block row in `project-config.md`, honored by editing the hook line or re-rendering via `kit-update --apply`. **Grandfathered regardless of value:** the slot requirement applies only to docs declaring `**Protocol version:** v1.7`+ — pre-v1.7 docs and any banner-less doc are never retro-failed. G9 is the **effectiveness** layer on top of the coverage gates (coverage proves *executed*; the mutation proves *caught*) — they compose, neither replaces the other.
+Defaults: **Lite = `warn`, Full = `block`** — schema-owned and **performed by the render** (M26.D, the ruled fork-1 flip): `calibration-core.json` `severity` fills the pre-commit's `VALIDATOR_SEVERITY_FLAG` token per tier (Lite `--warn`, Full empty = the validator's blocking default). The `test_honesty` row in `project-config.md` is read by the validator at each commit, from the staged copy: `warn` there makes G9's findings advisory and `block` makes them block, whatever the hook's flag, and any other value leaves the flag in force (deterministic enforcement). The row is read as written: the kit does not check who set it, and `kit-update --ready` names a value that differs from the bootstrap commit's (observed evidence). The Full path's `mutation:` line is the retrospective validator's check and `warn` does not downgrade it. **Grandfathered regardless of value:** the slot requirement applies only to docs declaring `**Protocol version:** v1.7`+ — pre-v1.7 docs and any banner-less doc are never retro-failed. G9 is the **effectiveness** layer on top of the coverage gates (coverage proves *executed*; the mutation proves *caught*) — they compose, neither replaces the other.
 
 ### 4.18 Assembled-execution cluster-gate — the G10 trigger list (derived, not toggled)
 
@@ -417,7 +409,7 @@ Controls the **G11 risk-escalation gate** — the structural form of *"tier is t
 
 **The fail-closed standard.** Every enforcement path errors → **block**, never a silent pass: a validator that cannot compute its answer exits non-zero, never 0. G11 itself is fail-closed with a no-false-positive asymmetry: a *declared* trigger whose `docs/gates.md` is unreadable exits non-zero, but a *no-trigger* project never reads it (a Lite project with no `gates.md` is not falsely failed). Presence-gated does **not** mean fail-open (the honest limitation is documented in the validator header; Stage V is the adversary that closes the under-declaration escape).
 
-**Severity / the toggle** (mirrors §4.17): `risk_escalation: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed source-unreadable branch (exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `risk_escalation: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override: this validator does not read its `project-config.md` row; a changed value takes effect when the person edits the hook line in `.githooks/pre-commit` under its ARC-007 divergence marker, which turns the commit floor's check of that file off (human authorization); kit-update does not re-render it at Full. The fail-closed source-unreadable branch (exit 2) is never downgraded by `--warn`.
 
 ### The risk-properties matrix — what each declared surface must prove (G13)
 
@@ -447,7 +439,7 @@ Each property is either `covered-by: <how> — test: <name>` (names a covering t
 
 A **rollback-only** op (transactional delete) and a **path-confinement** op (archive extract) are distinguished precisely by which of **recovery** vs **confinement** is load-bearing — G12 tests *both* for a destructive surface; the matrix names which the *plan* must center.
 
-**Severity / the toggle** (mirrors §4.17): `risk_matrix: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed staged-enumeration branch (exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `risk_matrix: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override: this validator does not read its `project-config.md` row; a changed value takes effect when the person edits the hook line in `.githooks/pre-commit` under its ARC-007 divergence marker, which turns the commit floor's check of that file off (human authorization); kit-update does not re-render it at Full. The fail-closed staged-enumeration branch (exit 2) is never downgraded by `--warn`.
 
 ### 4.20 Transitions — the release-state ladder, atomic state, honest rework (G15)
 
@@ -470,7 +462,7 @@ The **release end is SLSA-mapped** (states 5–6 cite their [SLSA build level](h
 
 **Honest rework (DORA's 5th metric, project-internal).** Rework is counted across the **four fixed types** — implementation corrections / verifier iterations / IRL reversals / post-merge discoveries — never a lump sum, never "0" while fix commits exist. The total **reconciles** against the fix-commit evidence by **extending** the reconciliation primitive (`recomputeCount`), not by forking a parallel count. The fix-commit count is a **lower bound**, so honest over-reporting passes; only under-reporting is the lie.
 
-**Severity / the toggle** (mirrors §4.17): `transition: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed branch (an unreadable transition file / a git error → exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `transition: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override: this validator does not read its `project-config.md` row; a changed value takes effect when the person edits the hook line in `.githooks/pre-commit` under its ARC-007 divergence marker, which turns the commit floor's check of that file off (human authorization); kit-update does not re-render it at Full. The fail-closed branch (an unreadable transition file / a git error → exit 2) is never downgraded by `--warn`.
 
 ### 4.21 Release-readiness — the capability-triggered review + SLSA provenance (G16)
 
@@ -486,7 +478,7 @@ Controls the **G16 release-readiness gate** — the structural form of *"`public
 
 **The DUAL honest locus (neither half overclaims).** The validator proves the review **record is PRESENT** (not that the review was *good* — the audit-pass adversary's judgment, recorded at review time) **and** the SLSA level is **CITED** (not that **provenance was achieved** — proven at build time by `release.yml`'s attest step). Floor (validator) + adversary (the audit review + the build-time attest) = a real gate; neither alone is.
 
-**Severity / the toggle** (mirrors §4.17): `release_readiness: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override via the `project-config.md` row + re-render. The fail-closed branch (an unreadable ledger, or a public-distribution entry whose trigger config is unreadable → exit 2) is never downgraded by `--warn`.
+**Severity / the toggle** (mirrors §4.17): `release_readiness: warn | block` — schema-owned, performed by the render (M26.D): `calibration-core.json` severity fills the VALIDATOR_SEVERITY_FLAG token — Lite `--warn` (advisory), Full empty (BLOCK). Per-validator override: this validator does not read its `project-config.md` row; a changed value takes effect when the person edits the hook line in `.githooks/pre-commit` under its ARC-007 divergence marker, which turns the commit floor's check of that file off (human authorization); kit-update does not re-render it at Full. The fail-closed branch (an unreadable ledger, or a public-distribution entry whose trigger config is unreadable → exit 2) is never downgraded by `--warn`.
 
 ---
 
@@ -513,7 +505,6 @@ Bootstrap installs `project-config.md` at the project root with the tier and tog
 | read_first_cap | medium | |
 | research_mode | best_practice_first | |
 | escalation | time_box_2x | |
-| hook_enforcement | enforced | |
 | explanation_mode | standard | The standing default. |
 | verification_locus | hybrid | Local full suite at pre-push; one ubuntu PR smoke check; macOS + full matrix on tags only. |
 | off_track_check | advisory | Priority-drift guard (G8): per-stage line + full closeout check against `docs/backlog.md`; `off-track-log.md` advisory. `/on-track` available regardless. |
@@ -597,7 +588,6 @@ A re-tier is itself an event worth a brief retrospective entry — name the trig
 
 Some toggles only make sense in certain combinations. The bootstrap will warn (not block) on these:
 
-- `ledger: append_only_enforced` + `hook_enforcement: disabled` is a smell — you're enforcing the ledger via CI but not enforcing read-first via hooks. Either you trust the agent or you don't.
 - `approval_cadence: per_pr` + `retro_depth: three_axis` is a mismatch — you're saving review time at PR but spending it again on per-stage retrospectives. Pair `per_pr` with `brief`.
 - `research_mode: token_frugal` + Lite tier is a smell — Lite users benefit most from web-verified best practices (the standing default). Go token-frugal only if you genuinely know what needs verifying.
 - `read_first_cap: small` + `retro_depth: three_axis` is a smell — you're skipping orientation reads but writing detailed retrospectives. The ratio is backward.
@@ -630,7 +620,7 @@ Bootstrap surfaces these on tier confirmation; you can override the warning if y
 ### Full (the default)
 
 - Five-question discovery (~30 minutes): identity, stack, scope, success criteria, distribution.
-- Bootstrap generates ~124 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +3 files when a declared risk trigger arms the ledger CI, the manifest row set's 3 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt`.)
+- Bootstrap generates ~125 files: identity, scope, gates, style, gotchas, sessions, tech-debt, gap-analysis (advisory append-only), ADR template, the orchestrator manual, retrospective/verifier/summary/Phase-doc templates, `.claude/` hooks + read-first lists + settings, the validator, the CI workflow, the local verification harness + committed git hooks, the pr-smoke + release workflows, `.gitattributes`, plus the Phase 1 spec and the M01 Phase doc. (Derived from the golden manifest's Full reference calibration — see the counting note in `templates/CALIBRATION-INTERVIEW.md`; +4 files when a declared risk trigger arms the ledger CI, the manifest row set's 4 risk-armed rows: `validators/check-append-only.cjs` + `.github/workflows/append-only-ledger.yml` + `docs/append-only-ledgers.txt` + `docs/append-only-exceptions.txt`.)
 - Per stage: agent fills two-axis retrospective, surfaces at stage end, you review code + retrospective. The 8 framework validators BLOCK at Full (each dialable back to warn per-validator).
 - Append-only ledgers advisory by default; CI-enforced when risk-armed.
 - Web-verify defaults: same as Lite.

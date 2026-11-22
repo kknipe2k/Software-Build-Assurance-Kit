@@ -1,16 +1,20 @@
 # docs/append-only-ledgers.txt - the ONE list of this project's append-only ledgers.
 #
 # Read by BOTH enforcement points of validators/check-append-only.cjs: the pre-push hook
-# (.githooks/pre-push, `--per-commit --ledgers docs/append-only-ledgers.txt`, every push)
-# and the CI workflow (.github/workflows/append-only-ledger.yml, every pull request).
+# (.githooks/pre-push, `--pre-push --ledgers docs/append-only-ledgers.txt`, every ref on
+# git's feed, from the remote's own sha for a ref it updates) and the CI workflow
+# (.github/workflows/append-only-ledger.yml, every pull request). Both read this list at the
+# base and at the head and check the union.
 # One path per line, repo-relative, forward slashes; `#` lines and blank lines are ignored.
 # A path absent from this project (a ledger it never opened) passes harmlessly: absent is
-# "new", never a violation. To add or remove a ledger, edit THIS file - nowhere else.
+# "new", never a violation. To add a ledger, append its path here. To remove one, delete its
+# line and add an exception line naming that commit (`<sha> docs/append-only-ledgers.txt
+# <reason>` in docs/append-only-exceptions.txt); a ledger dropped without one is refused.
 #
 # The merge valve: the walk compares each commit with its first parent, so a merge of main
 # whose resolution puts main's rows above the branch's reads as a mid-file insert. Then
-# resolve the branch's rows first, or add an exception (--exceptions <file>, one
-# `<sha> <path> <reason>` line).
+# resolve the branch's rows first, or add an exception (one `<sha> <path> <reason>` line in
+# docs/append-only-exceptions.txt, itself append-only, read at the pushed or PR head).
 #
 # NOT listed on purpose: project-config.md. Its override log is append-only, but the file
 # as a whole is editable (the Tier line and toggle table change on re-tier), so a whole-file

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/lib/irl-plan.cjs
 //
 // THE SHARED IRL/HITL-PLAN DETECTOR (M29.A) — the one reader of the spec's three-part
@@ -100,7 +100,10 @@ function readProjectContext(root) {
   const tier = m ? m[1] : null;
   if (!tier) return { armed: false, na: 'project-config.md carries no **Tier:** line — the gate arms only on an explicit Full tier' };
   if (!/^full$/i.test(tier)) return { armed: false, na: `tier is ${tier} — the gate arms at Full tier only` };
-  const specPath = path.join(root, 'spec', 'project-spec.md');
+  // M34.7.B: where the live spec exists it is the current spec (the original beside it is frozen at the
+  // bootstrap commit), so a change that drops a part of the plan is read on the spec that changed.
+  const livePath = path.join(root, 'spec', 'live-spec.md');
+  const specPath = fs.existsSync(livePath) ? livePath : path.join(root, 'spec', 'project-spec.md');
   let specText;
   try {
     specText = fs.readFileSync(specPath, 'utf8');

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-retrospective.cjs
 //
 // Pre-commit gate for the user stamp in stage retrospectives.
@@ -73,7 +73,7 @@ const { execSync } = require('child_process');
 // whitespace-only `note:` slipped the "non-empty note" gate (the dead `length === 0` branch: the
 // old `.+?` captured one space). The stamp block is read line-anchored and the note is read as a
 // block-bound field with the shared blank check, so whitespace/placeholder is BLANK.
-const { extractBlocks, fieldInBlock, isBlankValue } = require('./lib/fenced-block.cjs');
+const { extractBlocks, fieldInBlock, isBlankValue, placeholderForm, stripHtmlComments } = require('./lib/fenced-block.cjs');
 // M29.A: the shared IRL/HITL-plan detector — the consumption gate's arming check reads the
 // SAME three-part detection the presence floor enforces (extend, don't fork).
 const { detectParts, readProjectContext } = require('./lib/irl-plan.cjs');
@@ -120,10 +120,12 @@ function isStageRetroPath(f) {
 // failure must surface and exit non-zero, never collapse to an empty list ->
 // silent PASS. "git ran, nothing staged" (empty stdout) is fine; "git failed"
 // (throw) blocks.
+// M34.5.F.11 (W3-10): the status too, so a retro ADDED in this commit (git's A) can be told from one
+// already in history (M). -> [{ file, added }]
 function stagedRetroFiles() {
   let out;
   try {
-    out = execSync('git diff --cached --name-only --diff-filter=ACM', {
+    out = execSync('git diff --cached --name-status --diff-filter=ACM', {
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 256 * 1024 * 1024,
     }).toString();
@@ -135,7 +137,51 @@ function stagedRetroFiles() {
     );
     process.exit(2);
   }
-  return out.split(/\r?\n/).filter(isStageRetroPath);
+  return out.split(/\r?\n/).map((l) => /^([ACM])\d*\t(.+)$/.exec(l)).filter((m) => m && isStageRetroPath(m[2]))
+    .map((m) => ({ file: m[2], added: m[1] === 'A' }));
+}
+
+// M34.5.F.11 (W3-10, R-258): WHERE THE MUTATION LIVES. On the Full path (the glance, the default; M30.I
+// fade 3) a work stage names its mutation on the handoff note's `mutation:` line, so a work-stage
+// retrospective ADDED in a commit must carry the note. On the Custom path the Phase doc's
+// <test_honesty> slot is its home (validate-test-honesty.cjs), so the note is not required here.
+// Keyed on the same `Calibration:` line G9 reads: the staged project-config.md, else the working
+// tree; absent = the Full default. Verifier, refactor and audit retros carry no handoff note by their
+// templates' design (NO_NOTE_LETTERS below, by operating mode). A retro already in history
+// is never re-failed (a touch is M, not A), and a file named on the command line has no add status.
+let configText = null;
+function projectConfigText() {
+  if (configText !== null) return configText;
+  try {
+    configText = execSync('git cat-file blob :0:project-config.md', { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
+  } catch (_) { configText = null; }
+  if (configText === null) { try { configText = fs.readFileSync(path.join(process.cwd(), 'project-config.md'), 'utf8'); } catch (_) { configText = ''; } }
+  return configText;
+}
+function calibrationIsCustom() {
+  return /\*\*Calibration:\*\*\s*custom-interview/.test(projectConfigText());
+}
+// The operating mode, read the way validate-operating-mode reads it (comments stripped, the table row,
+// then the line-start field); absent or unfilled = greenfield.
+function operatingMode() {
+  const live = stripHtmlComments(projectConfigText());
+  const row = live.match(/^\|\s*operating_mode\s*\|\s*([^|]+?)\s*\|/mi);
+  const v = row ? row[1].replace(/`/g, '').trim() : fieldInBlock(live, 'operating_mode');
+  return v && !/\{\{/.test(v) ? String(v).toLowerCase() : 'greenfield';
+}
+function stageLetter(f) {
+  const id = path.basename(f).replace(/-retrospective\.md$/i, '').split('-')[0];
+  const letters = id.split('.').filter((s) => /^[A-Za-z]+$/.test(s));
+  return letters.length ? letters[letters.length - 1].toUpperCase() : '';
+}
+// The stages whose retrospective template carries no handoff note, by the ids the shipped Phase-doc
+// templates give them: V (verifier) and R (refactor) in every mode; in bug_fix, C (its one verifier
+// pass, templates/BUGFIX-PHASE-DOC.md); in audit, P and C (the audit pass and its challenge,
+// templates/AUDIT-*-PROMPT-TEMPLATE.md). Every other letter is a work or closeout stage.
+const NO_NOTE_LETTERS = { greenfield: ['V', 'R'], research_publish: ['V', 'R'], bug_fix: ['V', 'R', 'C'], audit: ['V', 'R', 'P', 'C'] };
+function noteRequired(f) {
+  const exempt = NO_NOTE_LETTERS[operatingMode()] || NO_NOTE_LETTERS.greenfield;
+  return exempt.indexOf(stageLetter(f)) === -1;
 }
 
 // ── M29.A: the closeout consumption gate ─────────────────────────────────────────────────
@@ -180,7 +226,11 @@ const HUMAN_DRIVE_FIELDS = ['drove', 'verified', 'recorded'];
 //   next-agent:  what the next agent must know (the gotchas home, audit row 41)
 //   drive:       the agent's drive of the real assembled surface (B.3 rider), or
 //                `n/a - <reason>` - the sentinel is a field, not an exemption
-//   mutation:    the one-line test-mutation naming (fade 3 moved it here from the slot)
+//   mutation:    the one-line test-mutation naming (fade 3 moved it here from the slot); a
+//                placeholder (TBD, "will pick one later", the forms of fenced-block's
+//                placeholderForm) or a bare n/a is refused, `n/a - <reason>` passes (M34.5.F.11).
+//                On the Full path a work-stage retro ADDED in a commit (--staged, git's A) must
+//                carry the note at all; a retro already in history validates as before.
 //   counts-from: where the note's numbers come from - a command/receipt, never a typed
 //                number (counts derive, never typed)
 //   off-track:   the per-stage priority line (audit row 40 rides here as one field)
@@ -211,9 +261,15 @@ const HANDOFF_STOCK = new Set([
   'yes', 'no', 'n/a', 'na', 'tbd', 'good', 'pass', 'passed',
 ]);
 
-function validateHandoff(file, text, errors, contractGrandfathered) {
+function validateHandoff(file, text, errors, contractGrandfathered, opts) {
   const blocks = extractBlocks(text, 'handoff');
-  if (blocks.length === 0) return; // pre-contract retro: the legacy shape, untouched
+  if (blocks.length === 0) {
+    // M34.5.F.11 (W3-10): a NEW Full-path work-stage retro with no note names no mutation at all.
+    if (opts && opts.requireNote) {
+      errors.push(`${file}: a new work-stage retrospective has no \`\`\`handoff note - on the Full path the note's \`mutation:\` line is where the stage names the mutation Stage V re-runs (M30.I fade 3); copy the note from templates/RETROSPECTIVE-TEMPLATE.md.`);
+    }
+    return; // pre-contract retro (already in history), a verifier/refactor retro, or the Custom path: untouched
+  }
   const body = blocks[0];
   for (const key of HANDOFF_FIELDS) {
     const v = fieldInBlock(body, key);
@@ -235,6 +291,18 @@ function validateHandoff(file, text, errors, contractGrandfathered) {
     }
     if (key === 'drive' && /^n\/a\b/i.test(val) && !/^n\/a\s*[-—]\s*\S{3,}/i.test(val)) {
       errors.push(`${file}: handoff \`drive:\` says n/a with no reason - the sentinel is \`n/a - <reason>\`, a field, not an exemption.`);
+    }
+    // M34.5.F.11 (W3-10, R-258; mutant target): the mutation line NAMES a mutation, or says n/a with
+    // a reason. Fade 3 moved the naming here from the slot; a placeholder ("TBD - later", "will pick
+    // one later") was accepted, so Stage V had nothing to re-run. Removing this check turns the
+    // "mutation: will pick one later" smoke case RED.
+    if (key === 'mutation') {
+      const form = placeholderForm(val);
+      if (form) {
+        errors.push(`${file}: handoff \`mutation:\` names no mutation (${form}: "${val.slice(0, 60)}") - name the mutation run and the check it turned red, or \`n/a - <reason>\`.`);
+      } else if (/^n\/a\b/i.test(val) && !/^n\/a\s*[-–—]\s*\S.{2,}/i.test(val)) {
+        errors.push(`${file}: handoff \`mutation:\` says n/a with no reason - the sentinel is \`n/a - <reason>\`.`);
+      }
     }
   }
   validateEfficiency(file, body, errors, contractGrandfathered);
@@ -357,7 +425,7 @@ function validateLegacy(file, body, text, errors, advisories) {
 }
 
 // Returns { ok, errors:[], advisories:[] } for one file.
-function validateFile(file, grandfathered, contractGrandfathered) {
+function validateFile(file, grandfathered, contractGrandfathered, opts) {
   const errors = [];
   const advisories = [];
 
@@ -374,7 +442,7 @@ function validateFile(file, grandfathered, contractGrandfathered) {
 
   // 0b. M30.I (fade 1): the handoff-note content contract - marker-gated on the ```handoff
   //     fence, so history and legacy retros are untouched (the M12 guard).
-  validateHandoff(file, text, errors, contractGrandfathered);
+  validateHandoff(file, text, errors, contractGrandfathered, opts);
 
   // 1. Locate the ```user-stamp fenced block (LINE-ANCHORED — M16.A; a mid-prose mention is
   //    not the stamp).
@@ -443,9 +511,13 @@ function validateFile(file, grandfathered, contractGrandfathered) {
 function main() {
   const args = process.argv.slice(2);
   let files;
+  let added = new Set();
   if (args.length === 1 && args[0] === '--staged') {
-    files = stagedRetroFiles();
-    if (files.length === 0) process.exit(0); // nothing staged to check
+    const staged = stagedRetroFiles();
+    if (staged.length === 0) process.exit(0); // nothing staged to check
+    files = staged.map((s) => s.file);
+    const custom = staged.some((s) => s.added) && calibrationIsCustom();
+    if (!custom) added = new Set(staged.filter((s) => s.added && noteRequired(s.file)).map((s) => s.file));
   } else if (args.length >= 1 && !args[0].startsWith('--')) {
     files = args;
   } else {
@@ -458,7 +530,7 @@ function main() {
   let failed = 0;
   const allAdvisories = [];
   for (const f of files) {
-    const { ok, errors, advisories } = validateFile(f, grandfathered, contractGrandfathered);
+    const { ok, errors, advisories } = validateFile(f, grandfathered, contractGrandfathered, { requireNote: added.has(f) });
     for (const e of errors) console.error(`FAIL  ${e}`);
     allAdvisories.push(...advisories);
     if (!ok) failed++;

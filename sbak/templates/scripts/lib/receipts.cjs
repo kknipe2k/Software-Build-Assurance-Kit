@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/receipts.cjs
 //
 // The receipt/event contract (M20.6.A) — ONE module consumed by the lifecycle
@@ -36,6 +36,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const sandbox = require('./sandbox.cjs');
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,7 @@ const EVENTS = Object.freeze([
   'channel_published',        // scripts/channel.cjs — a message appended to the terminal channel (M30.H)
   'channel_picked_up',        // scripts/channel.cjs (or approve-red.cjs: the human consuming an approval-request) — a message surfaced (M30.H)
   'gate_judged',              // PreToolUse hook (the red gate) — one judged call: the state, the verdict, the class, a target ref, the identity (M34.6.B)
+  'prompt_recorded',          // UserPromptSubmit hook (the mode-check) — an orchestrator session's prompt: its text's sha256, its turn and whether it was typed or delivered (M34.5.F.3)
   'instrumentation_degraded', // any allowlisted emitter reporting its own failure
 ]);
 
@@ -134,6 +136,7 @@ const EVENT_EMITTERS = Object.freeze({
   channel_published: ['channel'],
   channel_picked_up: ['channel', 'approve-red'],
   gate_judged: ['PreToolUse'],
+  prompt_recorded: ['UserPromptSubmit'],
   instrumentation_degraded: EMITTERS,
 });
 
@@ -184,10 +187,15 @@ const ALLOWED_FIELDS = Object.freeze([
   // M34.6.B (gate-1 ruling Q7): gate_judged's fields - closed enums, a 16-hex ref (never a path), a
   // positive counter; the tool persists as tool_category only, the identity as tool_use_id or hook_seq.
   'state', 'verdict', 'class', 'target_ref', 'hook_seq', 'coverage',
+  // M34.5.F.3 (item 1, R-245): prompt_recorded's fields - the turn's id, the sha256 of the prompt's
+  // text (trimmed) and, for a delivered message, of its inner body; typed or delivered. Hashes, never text.
+  'prompt_id', 'prompt_sha256', 'body_sha256', 'origin',
 ]);
+const PROMPT_ORIGINS = Object.freeze(['typed', 'delivered']);
+const PROMPT_SHA_RE = /^[0-9a-f]{64}$/;
 const JUDGED_STATES = Object.freeze(['active', 'approved', 'unknown']);
-const JUDGED_VERDICTS = Object.freeze(['allow', 'refuse']);
-const JUDGED_CLASSES = Object.freeze(['allow', 'implementation', 'outside', 'control', 'release-form', 'unknown', 'human-path', 'unreadable', 'void', 'other']);
+const JUDGED_VERDICTS = Object.freeze(['allow', 'refuse', 'ask']); // M34.5.F.2: 'ask', the git fence's answer
+const JUDGED_CLASSES = Object.freeze(['allow', 'implementation', 'outside', 'control', 'release-form', 'unknown', 'human-path', 'unreadable', 'void', 'other', 'git-fence']);
 const JUDGED_COVERAGE = Object.freeze(['host_id', 'hook_seq']);
 // M34.C: the gate word recorded whole. At append, a red_approved or red_voided row must carry each
 // of these keys; a null records "absent" (no git, no session, no prompt, no pending request), a
@@ -325,6 +333,17 @@ function validateEvent(raw, opts) {
   }
   if (isJudged && !('verdict' in event && 'class' in event && 'coverage' in event)) {
     return { ok: false, reason: 'event refused: gate_judged without its verdict, class and coverage', notes };
+  }
+  // M34.5.F.3: prompt_recorded's fields, on prompt_recorded only, each checked; the row without its
+  // prompt_sha256 and origin is refused. A null prompt_id records "absent" (the host sends none before
+  // the first prompt).
+  const isPrompt = event.event === 'prompt_recorded';
+  for (const [k, ok] of [['prompt_sha256', (v) => typeof v === 'string' && PROMPT_SHA_RE.test(v)], ['body_sha256', (v) => typeof v === 'string' && PROMPT_SHA_RE.test(v)],
+    ['origin', (v) => PROMPT_ORIGINS.indexOf(v) !== -1], ['prompt_id', (v) => v === null || (typeof v === 'string' && ID_RE.test(v))]]) {
+    if (k in event && (!isPrompt || !ok(event[k]))) { delete event[k]; notes.push(`field dropped (format check failed, or ${k} on an event other than prompt_recorded): ${k}`); }
+  }
+  if (isPrompt && !('prompt_sha256' in event && 'origin' in event)) {
+    return { ok: false, reason: 'event refused: prompt_recorded without its prompt_sha256 and origin', notes };
   }
   if (event.event === 'file_read' && !('read_ref' in event)) {
     return { ok: false, reason: 'event refused: file_read without a read_ref is not a read', notes };
@@ -470,6 +489,253 @@ function clickRefusalLine(who, sess, what, nothing) {
 }
 // What the release prints in place of the prompt's time when there is no session.
 const NO_SESSION_TEXT = 'no session (the person\'s own terminal): no permission prompt to record';
+
+// ---------------------------------------------------------------------------
+// WHO IS AT THE KEYBOARD (M34.5.F.2 item 1, C4-01). The release, the void, the clear and the
+// release send read the calling process's parent chain, never an environment variable alone: a
+// session's own child can empty CLAUDE_CODE_SESSION_ID, and an agent-written test run by an
+// allow-listed test command did exactly that to pass as the person's own terminal. The ancestor
+// check is the main check: a Claude Code process (or its Linux sandbox runner, bwrap) among the
+// ancestors makes the call a session's, whatever the variable holds, and an empty variable there
+// is refused because its click cannot be read. The runner list is the second: a test runner or a
+// package script between the call and the nearest Claude Code ancestor (the whole chain when there
+// is none) is refused, because the release is the person's act and never a test's (deterministic
+// enforcement over the process table the OS keeps). The limits stay: a process that leaves the
+// tree (a detached grandchild, a terminal multiplexer's new window, a scheduler) reads as the
+// person's own terminal; a runner by another name is not named; a program the agent writes can
+// write the files these scripts write without running them (a script on the same account).
+// ---------------------------------------------------------------------------
+const CHAIN_MAX = 64;
+const TREE_TIMEOUT_MS = 15 * 1000;
+// The fixed path, joined from its parts (a literal drive path is a release-scrub reject).
+const WIN_POWERSHELL = path.win32.join('C:' + path.win32.sep, 'Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const PS_PATHS = ['/bin/ps', '/usr/bin/ps'];
+// The base name a process goes by: no folder, no executable or script extension, lower case.
+function procBase(s) {
+  return String(s || '').replace(/\\/g, '/').split('/').pop().replace(/\.(?:exe|cmd|bat|ps1|js|cjs|mjs)$/i, '').toLowerCase();
+}
+// A one-element argv with spaces is a process title (npm's "npm run test"): its words.
+function titleWords(argv) { return argv.length === 1 && /\s/.test(argv[0]) ? argv[0].trim().split(/\s+/) : argv; }
+// Windows splits its own command line: quotes group, a backslash before a quote escapes it.
+function splitWinCommand(cmd) {
+  const out = []; let cur = ''; let q = false; let any = false;
+  const s = String(cmd || '');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '\\' && s[i + 1] === '"') { cur += '"'; i++; any = true; continue; }
+    if (c === '"') { q = !q; any = true; continue; }
+    if (!q && /\s/.test(c)) { if (any) { out.push(cur); cur = ''; any = false; } continue; }
+    cur += c; any = true;
+  }
+  if (any) out.push(cur);
+  return out;
+}
+
+// The chain from a table: { pid -> { pid, ppid, name, argv, exe, created } }, from `start`'s parent
+// up. With `created` (win32, where a dead parent's id stays in its child's row and can be reused),
+// a parent created after its child is a reused id and ends the chain, as a missing parent does.
+// -> the processes, nearest first (start itself excluded).
+function walkTable(table, start) {
+  const out = []; const seen = new Set([start]);
+  let cur = table.get(start);
+  if (!cur) return null;
+  while (out.length < CHAIN_MAX) {
+    const pid = cur.ppid;
+    if (!Number.isInteger(pid) || pid <= 0 || seen.has(pid)) break;
+    const p = table.get(pid);
+    if (!p) break;
+    if (typeof cur.created === 'bigint' && typeof p.created === 'bigint' && p.created > cur.created) break;
+    seen.add(pid); out.push(p); cur = p;
+  }
+  return out;
+}
+// linux: /proc/<pid>/stat (the ppid after the last ')', since a name can hold spaces),
+// /proc/<pid>/cmdline and /proc/<pid>/exe.
+function procRow(pid) {
+  let stat;
+  try { stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8'); } catch (_) { return null; }
+  const close = stat.lastIndexOf(')');
+  if (close === -1) return null;
+  const ppid = Number(stat.slice(close + 2).split(' ')[1]);
+  let argv = [];
+  try { argv = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split(String.fromCharCode(0)).filter(Boolean); } catch (_) { argv = []; }
+  let exe = null;
+  try { exe = fs.readlinkSync(`/proc/${pid}/exe`); } catch (_) { exe = null; }
+  return { pid, ppid: Number.isInteger(ppid) ? ppid : 0, name: stat.slice(stat.indexOf('(') + 1, close), argv: titleWords(argv), exe };
+}
+function chainProc(start) {
+  const table = new Map();
+  let pid = start;
+  for (let i = 0; i <= CHAIN_MAX && pid > 0 && !table.has(pid); i++) {
+    const r = procRow(pid);
+    if (!r) break;
+    table.set(pid, r);
+    pid = r.ppid;
+  }
+  return table.size ? walkTable(table, start) : null;
+}
+// darwin, other POSIX, and linux without a readable /proc: one ps at its absolute path.
+function chainPs(start) {
+  const { spawnSync } = require('child_process');
+  const bin = PS_PATHS.find((p) => { try { return fs.statSync(p).isFile(); } catch (_) { return false; } });
+  if (!bin) return { error: 'no ps at /bin/ps or /usr/bin/ps' };
+  const r = spawnSync(bin, ['-A', '-ww', '-o', 'pid=', '-o', 'ppid=', '-o', 'args='], { encoding: 'utf8', timeout: TREE_TIMEOUT_MS, maxBuffer: 64 << 20 });
+  if (r.error || r.status !== 0) return { error: `${bin} ${r.error ? (r.error.code || r.error.message) : `exit ${r.status}`}` };
+  const table = new Map();
+  for (const line of String(r.stdout).split('\n')) {
+    const m = /^\s*(\d+)\s+(\d+)\s?(.*)$/.exec(line);
+    if (!m) continue;
+    const argv = m[3].trim() ? m[3].trim().split(/\s+/) : [];
+    table.set(Number(m[1]), { pid: Number(m[1]), ppid: Number(m[2]), name: procBase(argv[0] || ''), argv, exe: null });
+  }
+  const chain = walkTable(table, start);
+  return chain ? { chain } : { error: `${bin} listed no row for pid ${start}` };
+}
+// win32: one call to Windows PowerShell 5.1 at its fixed path (%SystemRoot% only when that path is
+// absent), the whole process table with each process's creation time, walked here.
+function parseCim(text) {
+  let rows = null;
+  try { rows = JSON.parse(String(text || '').trim() || 'null'); } catch (_) { rows = null; }
+  if (rows && !Array.isArray(rows)) rows = [rows];
+  if (!Array.isArray(rows)) return null;
+  const table = new Map();
+  for (const x of rows) {
+    if (!x || !Number.isInteger(x.i)) continue;
+    let created = null;
+    try { created = /^\d+$/.test(String(x.t)) ? BigInt(String(x.t)) : null; } catch (_) { created = null; }
+    const argv = splitWinCommand(x.c);
+    table.set(x.i, { pid: x.i, ppid: Number.isInteger(x.p) ? x.p : 0, name: String(x.n || ''), argv: argv.length ? argv : [String(x.n || '')], exe: x.e ? String(x.e) : null, created });
+  }
+  return table;
+}
+const CIM_SCRIPT = "Get-CimInstance Win32_Process | ForEach-Object { [pscustomobject]@{ i = [int]$_.ProcessId; p = [int]$_.ParentProcessId; n = [string]$_.Name; e = [string]$_.ExecutablePath; c = [string]$_.CommandLine; t = $(if ($_.CreationDate) { [string]$_.CreationDate.ToFileTimeUtc() } else { '' }) } } | ConvertTo-Json -Compress";
+function chainWin(start) {
+  const { spawnSync } = require('child_process');
+  let exe = WIN_POWERSHELL;
+  if (!fs.existsSync(exe)) {
+    const sr = process.env.SystemRoot;
+    if (typeof sr === 'string' && path.win32.isAbsolute(sr)) exe = path.win32.join(sr, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  }
+  const r = spawnSync(exe, ['-NoProfile', '-NonInteractive', '-NoLogo', '-Command', CIM_SCRIPT], { encoding: 'utf8', timeout: TREE_TIMEOUT_MS, maxBuffer: 64 << 20, windowsHide: true });
+  if (r.error || r.status !== 0) return { error: `Windows PowerShell (${exe}) ${r.error ? (r.error.code || r.error.message) : `exit ${r.status}`}` };
+  const table = parseCim(r.stdout);
+  if (!table) return { error: 'Windows PowerShell printed no process table' };
+  const chain = walkTable(table, start);
+  return chain ? { chain } : { error: `the process table has no row for pid ${start}` };
+}
+// -> { chain } | { error }: the calling process's ancestors, nearest first.
+function processChain() {
+  if (process.platform === 'win32') return chainWin(process.pid);
+  if (process.platform === 'linux') {
+    const c = chainProc(process.pid);
+    if (c) return { chain: c };
+  }
+  return chainPs(process.pid);
+}
+// The reader each platform uses, named in the tree refusal's repair.
+const TREE_READER = process.platform === 'win32' ? 'Windows PowerShell 5.1 (Get-CimInstance Win32_Process)' : process.platform === 'linux' ? '/proc or /bin/ps' : '/bin/ps';
+
+// A Claude Code process: argv[0], its name or its executable named claude; an argument on the npm
+// install's path (@anthropic-ai/claude-code); or an executable under the native installer's
+// claude/versions/ folder.
+function isClaudeCode(p) {
+  if (!p) return false;
+  if (procBase(p.argv[0]) === 'claude' || procBase(p.name) === 'claude' || (p.exe && procBase(p.exe) === 'claude')) return true;
+  if (p.argv.some((a) => /[\\/]@anthropic-ai[\\/]claude-code(?:[\\/]|$)/i.test(a))) return true;
+  return !!(p.exe && /[\\/]claude[\\/]versions[\\/]/i.test(p.exe));
+}
+// Claude Code's Linux sandbox runner (gate-1 ruling C3): counted as a Claude Code ancestor.
+function isSandboxRunner(p) { return !!p && ['bwrap', 'bubblewrap'].indexOf(procBase(p.argv[0] || p.name)) !== -1; }
+// The runner list (gate-1 Q3): a test runner or a package script, by its name, or the script an
+// interpreter runs; node with --test; python -m pytest, unittest, nose2, tox or nox.
+const RUNNERS = Object.freeze(['npm', 'npx', 'pnpm', 'pnpx', 'yarn', 'yarnpkg', 'corepack', 'bun', 'bunx', 'deno', 'npm-cli', 'npx-cli',
+  'jest', 'vitest', 'mocha', '_mocha', 'ava', 'tap', 'tape', 'c8', 'nyc', 'jasmine', 'karma', 'playwright', 'cypress', 'uvu',
+  'pytest', 'py.test', 'tox', 'nox', 'rspec', 'rake', 'bundle', 'phpunit', 'pest', 'composer', 'cargo', 'go', 'dotnet', 'mvn', 'mvnw',
+  'gradle', 'gradlew', 'make', 'gmake', 'just', 'bats', 'ctest']);
+const INTERPRETERS = /^(?:node|nodejs|python|python3(?:\.\d+)?|py|ruby|php)$/;
+const NODE_VALUE_OPTS = /^(?:-r|--require|--import|--loader|--experimental-loader|-C|--conditions|--title|--env-file|--inspect-port|--input-type|--stack-size)$/;
+function runnerName(p) {
+  if (!p) return null;
+  const argv = p.argv.length ? p.argv : [p.name];
+  const a0 = procBase(argv[0]);
+  if (RUNNERS.indexOf(a0) !== -1) return a0;
+  if (!INTERPRETERS.test(a0)) return null;
+  const node = /^node/.test(a0);
+  let i = 1;
+  for (; i < argv.length; i++) {
+    const v = argv[i];
+    if (node && (v === '--test' || v.indexOf('--test=') === 0)) return 'node --test';
+    if (!node && v === '-m') { const mod = argv[i + 1] || ''; return /^(?:pytest|unittest|nose2|tox|nox)$/.test(mod) ? `${a0} -m ${mod}` : null; }
+    if (node && (v === '-e' || v === '--eval' || v === '-p' || v === '--print')) return null;
+    if (!node && v === '-c') return null;
+    if (v === '--' || v.charAt(0) !== '-') break;
+    if (node && NODE_VALUE_OPTS.test(v)) i++;
+  }
+  if (i < argv.length && argv[i] === '--') i++;
+  const s = i < argv.length ? procBase(argv[i]) : '';
+  return RUNNERS.indexOf(s) !== -1 ? s : null;
+}
+
+// -> { state: 'refused', cause: 'tree' | 'runner' | 'empty', ... } | { state: 'malformed' }
+//    | { state: 'session', session } | { state: 'none' } (the person's own terminal), with the chain.
+// The click itself stays the caller's (recordedClick): this decides whose call it is.
+function keyboard(env, chainOverride) {
+  const sess = clickSession(env);
+  const got = chainOverride ? { chain: chainOverride } : processChain();
+  if (!got.chain) return { state: 'refused', cause: 'tree', why: got.error || 'no chain' };
+  const chain = got.chain;
+  const ci = chain.findIndex((p) => isClaudeCode(p) || isSandboxRunner(p));
+  for (const p of ci === -1 ? chain : chain.slice(0, ci)) {
+    const r = runnerName(p);
+    if (r) return { state: 'refused', cause: 'runner', runner: r, pid: p.pid, chain };
+  }
+  if (sess.state === 'malformed') return { state: 'malformed', chain };
+  if (sess.state === 'session') return { state: 'session', session: sess.session, claude: ci === -1 ? null : chain[ci], chain };
+  if (ci !== -1) return { state: 'refused', cause: 'empty', claude: chain[ci], sandbox: isSandboxRunner(chain[ci]), pid: chain[ci].pid, chain };
+  return { state: 'none', chain };
+}
+// The one refusal line per cause, for the three scripts.
+function keyboardRefusalLine(who, kb, act, nothing) {
+  // The release send carries the owner's typed /send --approval (gate-1 ruling C4): its lines name that.
+  if (who === 'channel' && kb.cause === 'runner') return `${who}: refused - ${kb.runner} (pid ${kb.pid}) is in this call's parent chain, a test runner or a package script: the ${act} runs only in the orchestrator session where the owner typed /send --approval, never from a test or a script; nothing was ${nothing}`;
+  if (who === 'channel' && kb.cause === 'empty') return `${who}: refused - ${kb.sandbox ? `a sandbox runner (bwrap, pid ${kb.pid}: Claude Code's sandbox or another app's, such as Flatpak)` : `a Claude Code session (pid ${kb.pid})`} is among this call's ancestors and CLAUDE_CODE_SESSION_ID is empty, so the send token cannot be bound to the session; nothing was ${nothing} - repair: ${kb.sandbox ? 'run it from a terminal outside the sandbox, or ' : ''}the owner types /send --approval in the orchestrator session, and the session runs the bare send`;
+  if (who === 'channel' && kb.cause === 'tree') return `${who}: refused - the process tree could not be read (${kb.why}), so who is at the keyboard cannot be told; nothing was ${nothing} - repair: ${TREE_READER} must run here; then the owner types /send --approval again`;
+  if (kb.cause === 'runner') return `${who}: refused - ${kb.runner} (pid ${kb.pid}) is in this call's parent chain, a test runner or a package script: the ${act} is the person's act, typed as the bare command in a Claude Code session, where its permission prompt asks you, or in your own terminal; nothing was ${nothing}`;
+  if (kb.cause === 'empty' && kb.sandbox) return `${who}: refused - a sandbox runner (bwrap, pid ${kb.pid}: Claude Code's sandbox or another app's, such as Flatpak) is among this call's ancestors and CLAUDE_CODE_SESSION_ID is empty, so its click cannot be read; nothing was ${nothing} - repair: run it from a terminal outside the sandbox, or run the bare command in the Claude Code session so its permission prompt asks you`;
+  if (kb.cause === 'empty') return `${who}: refused - a Claude Code session (pid ${kb.pid}) is among this call's ancestors and CLAUDE_CODE_SESSION_ID is empty, so its click cannot be read; nothing was ${nothing} - repair: run the bare command in the session so its permission prompt asks you, or run it from your own terminal, outside the session`;
+  return `${who}: refused - the process tree could not be read (${kb.why}), so who is at the keyboard cannot be told; nothing was ${nothing} - repair: run it from your own terminal; if this is your own terminal, ${TREE_READER} must run here`;
+}
+// M34.5.F.3 (item 1, R-245): the one hash rule for a prompt's text - sha256 over the text with its
+// leading and trailing whitespace removed - read by the UserPromptSubmit hook that records it, by accept
+// that checks a stamp against it and by the review that matches a cited request.
+function promptSha(text) { return crypto.createHash('sha256').update(String(text === undefined || text === null ? '' : text).trim(), 'utf8').digest('hex'); }
+// The prompt_recorded rows of one session, from its own ledger under each root in order (the calling
+// tree, then each worktree git lists: recordedClick's walk), oldest first. -> [{ ...event, file }]
+function promptRecords(roots, session) {
+  if (typeof session !== 'string' || !ID_RE.test(session)) return [];
+  const out = []; const seen = new Set();
+  for (const root of roots || []) {
+    if (typeof root !== 'string' || !root) continue;
+    const file = path.join(root, '.claude', 'receipts', ledgerFileFor(session));
+    const key = path.resolve(file);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let st = null; try { st = fs.statSync(file); } catch (_) { st = null; }
+    if (!st || !st.isFile()) continue;
+    for (const e of readLedger(file).events) if (e.event === 'prompt_recorded') out.push(Object.assign({}, e, { file }));
+  }
+  return out.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+// The newest `event` row's time in a session's own ledger under `root` (.claude/receipts), or null.
+function lastEventAt(root, session, event) {
+  if (typeof session !== 'string' || !ID_RE.test(session)) return null;
+  const file = path.join(root, '.claude', 'receipts', ledgerFileFor(session));
+  let events;
+  try { if (!fs.statSync(file).isFile()) return null; events = ledgerTail(file); } catch (_) { return null; }
+  for (let i = events.length - 1; i >= 0; i--) if (events[i].event === event) return events[i].at;
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // The append sink — per-session files, O_APPEND single-line writes, fail-closed
@@ -944,6 +1210,24 @@ module.exports = {
   recordedClick,
   clickRefusalLine,
   NO_SESSION_TEXT,
+  // M34.5.F.2: who is at the keyboard
+  keyboard,
+  keyboardRefusalLine,
+  processChain,
+  chainProc,
+  chainPs,
+  walkTable,
+  parseCim,
+  splitWinCommand,
+  isClaudeCode,
+  isSandboxRunner,
+  runnerName,
+  RUNNERS,
+  lastEventAt,
+  // M34.5.F.3: the person's word on record
+  promptSha,
+  promptRecords,
+  PROMPT_ORIGINS,
   CLICK_WINDOW_MS,
   CLICK_NEWEST_MS,
   appendEvent,

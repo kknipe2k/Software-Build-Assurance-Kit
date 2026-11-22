@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/evidence.cjs
 //   (kit source of truth: templates/scripts/evidence.cjs; the core is scripts/lib/evidence.cjs)
 //
@@ -18,7 +18,10 @@
 //        records, the changed paths beside the section's named paths, the out-of-scope lines and the
 //        scope lock, the acceptance criteria with the stage-end packet's acceptance <n>: pins, the
 //        record ids; it writes nothing
-//   node scripts/evidence.cjs --pre-commit                       the pre-commit hook's check
+//   node scripts/evidence.cjs --pre-commit                       the pre-commit hook's check: while a
+//        stage on the evidence path is open, the index carries its bundle (gate.json accepted citing the
+//        owner's typed stamp where an orchestrator worktree exists, the manifest's files as staged, the
+//        index's subject the bundle's) (M34.5.F.3)
 //   node scripts/evidence.cjs --transport-check --range <a>..<b> ci's check over a pushed range
 //   node scripts/evidence.cjs --pre-push                         the pre-push hook's check (stdin)
 //

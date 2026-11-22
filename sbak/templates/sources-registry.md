@@ -12,7 +12,7 @@ Unlike every other ledger, the sources registry is **mandatory regardless of tie
 
 This file is one of the project's append-only ledgers (per `CLAUDE.md` §4 rule 4). **No prior row may be edited, reordered, or deleted.** A source, once logged, is permanent — a correction is a *new* row that references the prior id.
 
-Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (Full-enforced; Standard-advisory; honor-system at the Lite default): prior committed content must remain a byte-prefix of the current file, so prior rows stay byte-identical to their committed state. This is the **same** check that guards `docs/gap-analysis.md`, `docs/tech-debt.md`, and `docs/off-track-log.md` — the registry simply joins that workflow's `LEDGERS` set; **there is no separate workflow.**
+Unchecked unless the project declares a risk trigger. Only then does the kit's shared append-only checker, `validators/check-append-only.cjs`, guard it: the pre-push leg and `.github/workflows/append-only-ledger.yml` (generated only then) refuse a change to a prior entry (deterministic enforcement), since prior committed content must remain a byte-prefix of the current file, so prior rows stay byte-identical to their committed state. This is the **same** check that guards `docs/gap-analysis.md`, `docs/tech-debt.md`, and `docs/off-track-log.md` — the registry is one line of `docs/append-only-ledgers.txt`, the list both read; there is no separate workflow.
 
 ### Why append-only
 

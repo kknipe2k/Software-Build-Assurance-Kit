@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/lib/fenced-block.cjs
 //
 // The shared LINE-ANCHORED, BLOCK-BOUND fence/field extractor —
@@ -105,6 +105,26 @@ function isBlankValue(v) {
   return EMPTY_CELL.has(t.toLowerCase());
 }
 
+// M34.5.F.11 (W3-10, R-258): a NAMING that names nothing. One rule for the two places a stage names
+// its test mutation - the retrospective handoff note's `mutation:` line (the Full path) and the Phase
+// doc's <test_honesty> slot (the Custom path). Returns the form it matched, or null for a real naming.
+// The forms: blank, a {{placeholder}}, punctuation only, a placeholder word (TBD, TODO, pending,
+// "to be named" and their like), and a promise ("will pick one later"). "n/a - <reason>" is not a
+// placeholder here; each caller says what it requires of an n/a. Deterministic enforcement over the
+// text only: whether a named mutation is the right one, and is killed, is Stage V's re-run.
+const PLACEHOLDER_WORD = /^(?:tbd|tba|tbc|todo|to[ -]do|fixme|xxx+|wip|pending|later|unknown|unnamed|not yet|none yet|not named|to be (?:decided|determined|named|picked|chosen|added|confirmed|written))(?![\w])/i;
+const PROMISE = /^(?:will|shall|going to|i will|i'll|we will|we'll|to follow)(?![\w])/i;
+function placeholderForm(v) {
+  if (v === undefined || v === null) return 'blank';
+  const t = String(v).replace(/`/g, '').trim();
+  if (t === '') return 'blank';
+  if (/\{\{.*\}\}/.test(t)) return 'a {{placeholder}}';
+  if (/^[\s?.\-_*–—]*$/.test(t)) return 'punctuation only';
+  if (PLACEHOLDER_WORD.test(t)) return 'a placeholder word';
+  if (PROMISE.test(t)) return 'a promise, not a naming';
+  return null;
+}
+
 // Turn a field key into a line-start pattern fragment. Underscore and space are treated as
 // interchangeable (operating_mode / operating mode), matching how these markdown fields are
 // actually written across the kit's docs.
@@ -173,4 +193,4 @@ function stripInertXml(xml) {
     .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, (m) => m.replace(/[^\n]/g, ' '));
 }
 
-module.exports = { normalize, escapeRe, extractBlocks, extractBlocksWithPos, fieldInBlock, isBlankValue, stripHtmlComments, stripInertXml };
+module.exports = { normalize, escapeRe, extractBlocks, extractBlocksWithPos, fieldInBlock, isBlankValue, placeholderForm, stripHtmlComments, stripInertXml };

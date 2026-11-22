@@ -45,7 +45,7 @@
     <item>`.gitignore` / `.dockerignore` actually covering the secret files they claim to.</item>
     <item>Secret-manager usage vs. hardcoding; a rotation story for any long-lived credential.</item>
     <item>Test fixtures with real-shaped credentials that could be live.</item>
-    <item>Config templates (`.env.example`) carrying real values instead of placeholders.</item>
+    <item>Config templates (`.env.example`) carrying real values instead of placeholders. The kit's deny floor keeps the auditor's file tools off every `.env` file, `.env.example` included (M34.5.F.1): ask the person to show its keys with the values masked, or record the item as not checked, never read it another way.</item>
     <item>Secrets in URLs / query strings (they end up in logs and history).</item>
     <item>Encryption keys / salts hardcoded alongside the data they protect (cross-ref P7).</item>
     <item>Third-party tokens scoped more broadly than the integration needs.</item>

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/receipts-collect.cjs
 //
 // The collectors (M20.6.C) — committed artifacts become receipts. This is the
@@ -33,8 +33,21 @@
 // unknown (never zeroed). Every record is frozen:true with that boundary in its
 // limitation. Live event coverage is B's capture, merged at render time (D).
 //
-// Collectors read COMMITTED history; the dirty working tree is a stated
-// limitation, not silently included.
+// Collectors read COMMITTED history (M34.5.F.10): collectArc reads every file
+// with `git show <HEAD>:<path>`, never from the working tree, and binds each
+// record to the last commit that touched its source. A dirty tree is stated in
+// one coverage line; its uncommitted changes are not in the report.
+//
+// ONE RULE FOR CLAIMS (M34.5.F.10): a verdict, a RED-first control, a stamp or a
+// finding's resolution is read only from a structured `key: value` line whose
+// value is in a closed vocabulary (structuredClaim). A field-shaped line outside
+// the vocabulary is UNREAD: the record carries it and the report quotes it as
+// UNKNOWN. No collector infers a claim from a keyword anywhere in prose.
+//
+// ONE STRIPPER (M34.5.F.10): every collector that reads a file parses it through
+// stripTemplate first - HTML comments removed by the shared primitive (the one
+// validate-release-readiness uses), and every {{placeholder}} line blanked - so a
+// shipped template's example or placeholder is never read as a record.
 
 'use strict';
 
@@ -113,6 +126,118 @@ function intOrNull(v) {
 }
 
 // ---------------------------------------------------------------------------
+// The one stripper and the one rule for claims (M34.5.F.10).
+// ---------------------------------------------------------------------------
+
+// Template text is never a record: comments through the shared primitive, then
+// every line carrying a {{placeholder}} blanked (the line count is kept).
+function stripTemplate(text) {
+  return fenced.stripHtmlComments(text).split('\n').map((l) => (/\{\{[^}\n]*\}\}/.test(l) ? '' : l)).join('\n');
+}
+
+// The closed vocabularies. A milestone verdict is one of the outcome-matrix words
+// (BUILD-PLAYBOOK 4.4), the verifier's recorded "sound with fixes", or one of the
+// closeout's words (the Phase-doc template's closeout commit message); a stamp is
+// pass or fail; a finding's status is resolved, fixed or open.
+const VERDICT_WORDS = Object.freeze(['sound', 'sound with fixes', 'sound but rough', 'friction-heavy', 'not ready',
+  'strong', 'rough but shipped', 'recovery needed']);
+const STAMP_WORDS = Object.freeze(['pass', 'fail']);
+const STATUS_WORDS = Object.freeze({ resolved: 'fixed', fixed: 'fixed', open: 'open' });
+
+// The leading phrase of a field's value: bold and code markers dropped, cut at the
+// first sentence break, spaces collapsed, case kept as recorded (the vocabulary is
+// matched lowercased).
+function leadingPhrase(v) {
+  let s = String(v).replace(/^[\s*`]+/, '');
+  const cut = s.search(/\*\*|[.;,(`]|\s[-–—]\s/);
+  if (cut !== -1) s = s.slice(0, cut);
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+// A field line: the key at a line start (bold markers around it tolerated), a colon,
+// the value. Returns every { line, value } in order; prose never matches.
+function fieldLines(text, key) {
+  const re = new RegExp('^[ \\t]*\\**[ \\t]*' + fenced.escapeRe(key) + '[ \\t]*\\**[ \\t]*:[ \\t]*\\**(.*)$', 'gim');
+  const out = [];
+  let m;
+  while ((m = re.exec(text)) !== null) out.push({ line: m[0].trim(), value: m[1] });
+  return out;
+}
+
+// THE RULE: the first field line for `key` whose value `accept` maps to a claim is
+// the claim ({ value, line }); a field line it refuses is UNREAD ({ unread: line });
+// no field line is no claim (null). Every claim-reading collector calls this.
+function structuredClaim(text, key, accept) {
+  const lines = fieldLines(text, key);
+  let unread = null;
+  for (const f of lines) {
+    const v = accept(f.value);
+    if (v !== null && v !== undefined) return { value: v, line: f.line };
+    if (unread === null) unread = f.line;
+  }
+  return unread === null ? null : { unread: unread };
+}
+const acceptVerdict = (v) => { const p = leadingPhrase(v); return VERDICT_WORDS.indexOf(p.toLowerCase()) !== -1 ? p : null; };
+const acceptStamp = (v) => { const p = leadingPhrase(v).toLowerCase(); return STAMP_WORDS.indexOf(p) !== -1 ? p : null; };
+const acceptStatus = (v) => { const p = leadingPhrase(v).toLowerCase(); return Object.prototype.hasOwnProperty.call(STATUS_WORDS, p) ? STATUS_WORDS[p] : null; };
+// A commit named by a structured field: 7 to 40 hex characters as a word. Shape only:
+// the collector does not resolve it against the repository (the stated limit).
+const HEX_RE = /(?:^|[\s`(])([0-9a-f]{7,40})(?=$|[\s`).,;])/i;
+const acceptFix = (v) => { const m = String(v).match(HEX_RE); return m ? m[1].toLowerCase() : null; };
+// A RED-first field names a test file (a path with an extension) and a commit.
+const acceptRedFirst = (v) => {
+  const s = String(v).replace(/`/g, ' ');
+  return (/(?:^|\s)[\w./\\-]*\w\.\w+(?=$|[\s,;])/.test(s) && HEX_RE.test(s)) ? s.trim() : null;
+};
+
+// ---------------------------------------------------------------------------
+// Committed bytes (M34.5.F.10): every file collectArc reads comes from a commit.
+// ---------------------------------------------------------------------------
+
+function gitIn(cwd) {
+  const run = (args) => spawnSync('git', args, { cwd: cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  const ok = (r) => !r.error && r.status === 0;
+  return {
+    head() { const r = run(['rev-parse', '--verify', '-q', 'HEAD']); return ok(r) ? ((r.stdout || '').trim() || null) : null; },
+    // The bytes of <path> at <commit>; null when the path is absent there.
+    read(commit, rel) { const r = run(['show', commit + ':' + rel]); return ok(r) ? r.stdout : null; },
+    // The files directly under <dir>/ at <commit>, by name.
+    list(commit, dir) {
+      const r = run(['ls-tree', '-z', '--name-only', commit, '--', dir + '/']);
+      if (!ok(r)) return [];
+      return (r.stdout || '').split('\0').filter(Boolean).map((p) => p.slice(dir.length + 1)).filter((n) => n && n.indexOf('/') === -1);
+    },
+    // The last commit that touched each path, from ONE log pass over <paths> (the
+    // first commit that lists a path is the one `git log -1 -- <path>` names).
+    lastTouch(commit, paths) {
+      const out = new Map();
+      const r = run(['log', '--format=%x01%H', '--name-only', '-z', commit, '--'].concat(paths));
+      if (!ok(r)) return out;
+      let cur = null;
+      for (const tok of (r.stdout || '').split('\0')) {
+        let t = tok.replace(/^\n+/, '');
+        if (t.charAt(0) === '\x01') {
+          const nl = t.indexOf('\n');
+          cur = nl === -1 ? t.slice(1) : t.slice(1, nl);
+          t = nl === -1 ? '' : t.slice(nl + 1).replace(/^\n+/, '');
+        }
+        if (t && cur && !out.has(t)) out.set(t, cur);
+      }
+      return out;
+    },
+    shallow() { const r = run(['rev-parse', '--is-shallow-repository']); return ok(r) && (r.stdout || '').trim() === 'true'; },
+    dirty() { const r = run(['status', '--porcelain']); return ok(r) && (r.stdout || '').trim() !== ''; },
+  };
+}
+
+// One file's bytes at HEAD (the reader build-receipts uses for project-config.md).
+function readCommitted(cwd, rel) {
+  const g = gitIn(cwd);
+  const head = g.head();
+  return head ? g.read(head, rel) : null;
+}
+
+// ---------------------------------------------------------------------------
 // Classification — pure, deterministic, doctrine-aligned. No I/O.
 // ---------------------------------------------------------------------------
 
@@ -168,6 +293,7 @@ function collectCommits(opts) {
     throw new Error('receipts-collect: cannot run `git log ' + range + '`: ' + detail);
   }
   const out = [];
+  let seq = 0;
   for (const line of (r.stdout || '').split('\n')) {
     if (line.trim() === '') continue;
     const parts = line.split(US);
@@ -178,7 +304,7 @@ function collectCommits(opts) {
     const isStageCommit = STAGE_COMMIT_RE.test(subject);
     const isPostMerge = POST_MERGE_RE.test(subject);
     emitReceipt(out, {
-      kind: 'commit',
+      kind: 'commit', seq: seq++, // seq: git log's own order, 0 the newest (the provenance range reads it)
       hash: hash, subject: subject, date: date,
       isStageCommit: isStageCommit, isPostMerge: isPostMerge,
       source: 'git', evidence: hash, frozen: true,
@@ -196,11 +322,23 @@ function collectCommits(opts) {
 // CHANGELOG collector — milestone entries, verdict prose, FNR.
 // ---------------------------------------------------------------------------
 
+// The milestone verdict, from a structured `verdict:` line in the closed vocabulary
+// only. Returns the word, or null. A body with no such line claims nothing.
 function parseVerdict(body) {
-  let m = body.match(/verdict:\s*(sound(?:\s+with\s+fixes)?)/i);
-  if (m) return m[1].replace(/\s+/g, ' ');
-  m = body.match(/\b(sound with fixes|sound)\b/i);
-  return m ? m[1] : null;
+  const c = structuredClaim(stripTemplate(body), 'verdict', acceptVerdict);
+  return c && c.value ? c.value : null;
+}
+// The line a verdict reader would quote when no structured verdict is read: a
+// field-shaped `verdict:` line outside the vocabulary, else the first body line that
+// names a verdict word. null when the body names none (nothing is claimed).
+const VERDICT_MENTION_RE = /\bverdict\b|\bsound\b|\bnot ready\b|\bfriction-heavy\b/i;
+function unreadVerdictLine(body) {
+  const text = stripTemplate(body);
+  const c = structuredClaim(text, 'verdict', acceptVerdict);
+  if (c && c.value) return null;
+  if (c && c.unread) return c.unread;
+  const hit = text.split('\n').map((l) => l.trim()).find((l) => l && VERDICT_MENTION_RE.test(l));
+  return hit || null;
 }
 function parseFnr(body) {
   const m = body.match(/FNR\s*=\s*(\d+)\s*\/\s*(\d+)/i);
@@ -209,7 +347,7 @@ function parseFnr(body) {
 
 function collectChangelog(opts) {
   opts = opts || {};
-  const text = fenced.normalize(opts.text || '');
+  const text = stripTemplate(opts.text || '');
   const source = opts.source || 'CHANGELOG.md';
   const commit = opts.commit;
   const headerRe = /^###\s+(M\d+(?:\.\d+)*)\s+—\s+(.*?)\s+\((\d{4}-\d{2}-\d{2})\)\s*$/;
@@ -225,7 +363,8 @@ function collectChangelog(opts) {
     const body = e.body.join('\n');
     const verdict = parseVerdict(body);
     const fnr = parseFnr(body);
-    emitReceipt(out, {
+    const unread = verdict ? null : unreadVerdictLine(body);
+    const rec = {
       kind: 'milestone',
       milestone: e.milestone, title: e.title, date: e.date, verdict: verdict, fnr: fnr,
       source: source, evidence: e.milestone + ' — ' + e.title, frozen: true,
@@ -233,9 +372,11 @@ function collectChangelog(opts) {
         subjectName: source + '#' + e.milestone,
         claims: [{ kind: 'shipped', text: e.milestone + (verdict ? ' — ' + verdict : '') }],
         source: source, commit: commit,
-        limitation: 'verdict/FNR read from CHANGELOG prose, not recomputed; ' + FROZEN_TAIL,
+        limitation: 'verdict read only from a structured verdict: line in the closed vocabulary; FNR read from the CHANGELOG text, not recomputed; ' + FROZEN_TAIL,
       }),
-    });
+    };
+    if (unread) rec.unread = [{ field: 'verdict', line: unread }];
+    emitReceipt(out, rec);
   }
   return out;
 }
@@ -245,15 +386,22 @@ function collectChangelog(opts) {
 // the budget line, the RED-first pre-flight → stage-rework + control records.
 // ---------------------------------------------------------------------------
 
+// The owner's stamp, from the user-stamp fence on template-stripped text: a verdict
+// in the closed vocabulary (pass, fail) or a grandfathered score. A verdict outside it
+// is UNREAD (s.unread carries the line); the unfilled template's placeholder line is
+// stripped, so it is no stamp at all.
 function parseStamp(text) {
-  const blocks = fenced.extractBlocks(text, 'user-stamp');
+  const blocks = fenced.extractBlocks(stripTemplate(text), 'user-stamp');
   if (!blocks.length) return null;
   const b = blocks[0];
   const verdict = fenced.fieldInBlock(b, 'verdict');
   const score = fenced.fieldInBlock(b, 'score');
-  if (verdict == null && score == null) return null;
+  if ((verdict == null || verdict === '') && score == null) return null;
   const s = {};
-  if (verdict != null) s.verdict = verdict.toLowerCase();
+  if (verdict != null && verdict !== '') {
+    const v = acceptStamp(verdict);
+    if (v) s.verdict = v; else s.unread = 'verdict: ' + verdict;
+  }
   if (score != null) s.score = score;
   return s;
 }
@@ -318,30 +466,51 @@ function parseBudget(text) {
   return m ? parseInt(m[1], 10) : null;
 }
 
-function collectRetros(opts) {
-  opts = opts || {};
-  const commit = opts.commit;
+// The files a collector reads: committed entries ({ name, text, commit }, what
+// collectArc passes), or - for a direct caller - a dir or file paths on disk.
+function sourceEntries(opts, nameRe) {
+  if (Array.isArray(opts.entries)) return opts.entries.filter((e) => e && nameRe.test(e.name));
   let files = opts.files;
   if (!files) {
-    try { files = fs.readdirSync(opts.dir).filter((n) => /-retrospective\.md$/.test(n)).map((n) => path.join(opts.dir, n)); }
+    try { files = fs.readdirSync(opts.dir).filter((n) => nameRe.test(n)).map((n) => path.join(opts.dir, n)); }
     catch (_) { files = []; }
   }
   const out = [];
   for (const f of files) {
-    let text;
-    try { text = fs.readFileSync(f, 'utf8'); } catch (_) { continue; }
-    const base = path.basename(f);
+    try { out.push({ name: path.basename(f), text: fs.readFileSync(f, 'utf8'), commit: opts.commit }); } catch (_) { /* unreadable: skipped */ }
+  }
+  return out;
+}
+
+// A retro that names RED-first only in prose (no red-first: field line): counts nothing.
+function mentionsRedFirstInProseOnly(text) {
+  const t = stripTemplate(text);
+  return /RED-first/i.test(t) && fieldLines(t, 'red-first').length === 0;
+}
+
+function collectRetros(opts) {
+  opts = opts || {};
+  const out = [];
+  for (const ent of sourceEntries(opts, /-retrospective\.md$/)) {
+    const raw = ent.text;
+    const text = stripTemplate(raw);
+    const commit = ent.commit;
+    const base = ent.name;
     const sm = base.match(/^(M[\w.]+?)-retrospective\.md$/);
     const stage = sm ? sm[1] : base;
-    const stamp = parseStamp(text);
+    const stamp = parseStamp(raw);
     const rework = parseRework(text);
     const budget = parseBudget(text);
-    const redFirst = /RED-first/i.test(text);
+    // A RED-first control only from a structured field naming the test file and the
+    // commit; a field line outside that shape is UNREAD; prose counts nothing.
+    const redFirst = structuredClaim(text, 'red-first', acceptRedFirst);
+    const unread = [];
+    if (stamp && stamp.unread) unread.push({ field: 'verdict', line: stamp.unread });
     // No machine-readable content (no stamp, no rework, no budget) → no
     // stage-rework record (the invention floor, at the collector level).
     if (stamp || rework || budget != null) {
       const rw = rework;
-      emitReceipt(out, {
+      const rec = {
         kind: 'stage-rework',
         stage: stage, stamp: stamp, rework: rework, budget: budget,
         source: base, evidence: stage + (stamp ? ' stamp' : '') + (rework ? ' rework' : ' budget'), frozen: true,
@@ -351,58 +520,86 @@ function collectRetros(opts) {
           source: base, commit: commit,
           limitation: 'rework/budget read from the retro' + (rw && rw.prose ? ' PROSE (fallback; not the fenced block)' : ' fenced block') + '; ' + FROZEN_TAIL,
         }),
-      });
+      };
+      if (unread.length) rec.unread = unread.slice();
+      emitReceipt(out, rec);
     }
-    if (redFirst) {
+    if (redFirst && redFirst.value) {
       emitReceipt(out, {
-        kind: 'control', control: 'red-first', stage: stage,
+        kind: 'control', control: 'red-first', stage: stage, field: redFirst.line,
         source: base, evidence: stage + ' RED-first', frozen: true,
         receipt: makeReceipt({
           subjectName: base + '#' + stage + ':red-first',
-          claims: [{ kind: 'worked', text: stage + ' RED-first cycle (a demonstrated control)' }],
+          claims: [{ kind: 'worked', text: stage + ' RED-first cycle (a demonstrated control): ' + redFirst.value }],
           source: base, commit: commit,
-          limitation: 'the RED-first affirmation is read from the retro pre-flight prose; ' + FROZEN_TAIL,
+          limitation: 'the RED-first control is read from a structured red-first: line naming the test file and the commit, rendered as written (its shape is checked, not its truth); ' + FROZEN_TAIL,
         }),
       });
     }
+    // A red-first: line that names no test file and commit is no control; collectArc
+    // quotes it in coverage (redFirstUnread), since a retro may carry no record at all.
   }
   return out;
+}
+
+// The red-first: field line a retro carries that is not a control, or null.
+function redFirstUnread(text) {
+  const c = structuredClaim(stripTemplate(text), 'red-first', acceptRedFirst);
+  return c && c.unread ? c.unread : null;
 }
 
 // ---------------------------------------------------------------------------
 // Verifier-findings collector — severities → broke.
 // ---------------------------------------------------------------------------
 
+const FINDINGS_NAME_RE = /V-findings\.md$|-findings\.md$/;
+
+// A finding is fixed only when its own segment (its heading to the next heading)
+// carries a structured `status: resolved|fixed` line or a `fix: <commit>` line; a
+// status outside the vocabulary is UNREAD; anything else is open.
+function findingResolution(seg) {
+  const fix = structuredClaim(seg, 'fix', acceptFix);
+  if (fix && fix.value) return { fixed: true, fix: fix.value };
+  const st = structuredClaim(seg, 'status', acceptStatus);
+  if (st && st.value) return { fixed: st.value === 'fixed', fix: null };
+  const unread = [];
+  if (st && st.unread) unread.push({ field: 'status', line: st.unread });
+  if (fix && fix.unread) unread.push({ field: 'fix', line: fix.unread });
+  return { fixed: false, fix: null, unread: unread };
+}
+
 function collectVerifierFindings(opts) {
   opts = opts || {};
-  const commit = opts.commit;
-  let files = opts.files;
-  if (!files) {
-    try { files = fs.readdirSync(opts.dir).filter((n) => /V-findings\.md$|-findings\.md$/.test(n)).map((n) => path.join(opts.dir, n)); }
-    catch (_) { files = []; }
-  }
   const out = [];
-  for (const f of files) {
-    let text;
-    try { text = fenced.normalize(fs.readFileSync(f, 'utf8')); } catch (_) { continue; }
-    const base = path.basename(f);
+  for (const ent of sourceEntries(opts, FINDINGS_NAME_RE)) {
+    const text = stripTemplate(ent.text);
+    const commit = ent.commit;
+    const base = ent.name;
     const mm = base.match(/^(M[\w.]+?)\.V/);
     const milestone = mm ? mm[1] : base;
-    for (const line of text.split('\n')) {
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const hm = line.match(/^#{1,4}\s+(.*)$/);
       if (!hm) continue;
       const sev = line.indexOf('\u{1F534}') !== -1 ? 'red' : line.indexOf('\u{1F7E1}') !== -1 ? 'yellow' : line.indexOf('\u{1F7E2}') !== -1 ? 'green' : null;
       if (!sev || sev === 'green') continue; // only red/yellow are breaks; a green rider is a nice-to-have (tech-debt)
-      emitReceipt(out, {
-        kind: 'verifier-finding', milestone: milestone, severity: sev, title: hm[1],
+      let j = i + 1;
+      while (j < lines.length && !/^#{1,4}\s/.test(lines[j])) j++;
+      const res = findingResolution(lines.slice(i + 1, j).join('\n'));
+      const rec = {
+        kind: 'verifier-finding', milestone: milestone, severity: sev, title: hm[1], fixed: res.fixed,
         source: base, evidence: hm[1], frozen: true,
         receipt: makeReceipt({
           subjectName: base + '#' + hm[1].slice(0, 40),
-          claims: [{ kind: 'broke', text: '[' + sev + '] ' + hm[1] }],
+          claims: [{ kind: 'broke', text: '[' + sev + '] ' + hm[1] + (res.fixed ? ' (fixed' + (res.fix ? ' by ' + res.fix : '') + ')' : '') }],
           source: base, commit: commit,
-          limitation: 'severity read from the finding heading marker; ' + FROZEN_TAIL,
+          limitation: 'severity read from the finding heading marker; fixed only from a structured status: or fix: line, rendered as written; ' + FROZEN_TAIL,
         }),
-      });
+      };
+      if (res.fix) rec.fix = res.fix;
+      if (res.unread && res.unread.length) rec.unread = res.unread;
+      emitReceipt(out, rec);
     }
   }
   return out;
@@ -414,7 +611,7 @@ function collectVerifierFindings(opts) {
 
 function collectTechDebt(opts) {
   opts = opts || {};
-  const text = fenced.normalize(opts.text || '');
+  const text = stripTemplate(opts.text || '');
   const source = opts.source || 'docs/tech-debt.md';
   const commit = opts.commit;
   const re = /^###\s+(TD-\d+):\s*(.*)$/gm;
@@ -452,7 +649,9 @@ function parseReleaseRework(seg) {
 
 function collectReleaseState(opts) {
   opts = opts || {};
-  const text = fenced.normalize(opts.text || '');
+  // The shipped ledger's example entry sits in an HTML comment: stripped, never a
+  // transition (the class G16 already strips for, the same primitive).
+  const text = stripTemplate(opts.text || '');
   const source = opts.source || 'docs/release-state.md';
   const commit = opts.commit;
   const headRe = /^##\s+(\d{4}-\d{2}-\d{2})\s+—\s+reached\s+`([^`]+)`\s+\(([^)]+)\)\s*$/gm;
@@ -504,11 +703,16 @@ function deriveMilestoneCompletion(opts) {
   const rowByMs = new Map();
   for (const r of rows) if (r.milestone) rowByMs.set(r.milestone, r);
   const out = [];
+  const seen = new Set();
   for (const c of commits) {
     const ms = closeoutMilestone(c.subject);
     if (!ms) continue;
     const row = rowByMs.get(ms);
     if (!row) continue; // requires BOTH — a CHANGELOG-only closeout invents no completion (the M14–M16 case)
+    // One completion per milestone (M34.5.F.10): commits arrive newest first, so a
+    // second closeout commit for the same milestone adds nothing.
+    if (seen.has(ms)) continue;
+    seen.add(ms);
     emitReceipt(out, {
       kind: 'milestone-complete', milestone: ms,
       closeoutCommit: c.hash, releaseRow: row.date || row.milestone,
@@ -516,7 +720,7 @@ function deriveMilestoneCompletion(opts) {
       receipt: makeReceipt({
         subjectName: 'milestone:' + ms,
         claims: [{ kind: 'shipped', text: ms + ' milestone-complete (closeout commit + release-state row)' }],
-        source: 'derived (commit+release-state)', commit: commit || c.hash,
+        source: 'derived (commit+release-state)', commit: c.hash || commit,
         limitation: 'derived completion — requires BOTH the closeout commit and the release-state row; ' + FROZEN_TAIL,
       }),
     });
@@ -535,14 +739,19 @@ function collectArc(opts) {
   const records = [];
   const coverage = [];
 
-  // Resolve the report commit (clean HEAD pins provenance; a dirty tree is stated).
-  let commit = opts.commit;
+  // The report commit: every file below is read from it with `git show`, never from
+  // the working tree (M34.5.F.10). A dirty tree is stated, and its changes are not read.
+  const g = gitIn(cwd);
+  const commit = opts.commit || g.head();
+  let findingsFiles = 0;
   if (!commit) {
-    const h = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: cwd, encoding: 'utf8' });
-    if (!h.error && h.status === 0) commit = (h.stdout || '').trim() || undefined;
-    const st = spawnSync('git', ['status', '--porcelain'], { cwd: cwd, encoding: 'utf8' });
-    if (!st.error && st.status === 0 && (st.stdout || '').trim() !== '') {
-      coverage.push('working tree is DIRTY — receipts pin the last commit; uncommitted changes are excluded (committed history only)');
+    coverage.push('no commit to read: the repository has no commits yet, so no ledger, retrospective or findings file was collected');
+  } else {
+    if (g.dirty()) {
+      coverage.push('working tree has uncommitted changes: this report reads commit ' + commit.slice(0, 12) + ' only; the uncommitted changes are not in it. The event ledgers under .claude/receipts/ are read from disk, since they are never committed');
+    }
+    if (g.shallow()) {
+      coverage.push('shallow clone: a record\'s commit is the last commit this clone holds that touched its source, which may be the shallow boundary rather than the commit that changed it');
     }
   }
 
@@ -550,18 +759,43 @@ function collectArc(opts) {
   try { commits = collectCommits({ cwd: cwd, range: range }); records.push(...commits); }
   catch (e) { coverage.push('git log unavailable for ' + range + ': ' + e.message); }
 
-  const readFile = (rel) => { try { return fs.readFileSync(path.join(cwd, rel), 'utf8'); } catch (_) { return null; } };
-  const cl = readFile('CHANGELOG.md');
-  if (cl != null) records.push(...collectChangelog({ text: cl, source: 'CHANGELOG.md', commit: commit }));
-  const rs = readFile('docs/release-state.md');
-  let releaseRows = [];
-  if (rs != null) { const rows = collectReleaseState({ text: rs, source: 'docs/release-state.md', commit: commit }); records.push(...rows); releaseRows = rows; }
-  const td = readFile('docs/tech-debt.md');
-  if (td != null) records.push(...collectTechDebt({ text: td, source: 'docs/tech-debt.md', commit: commit }));
-  try { records.push(...collectRetros({ dir: path.join(cwd, 'retrospectives'), commit: commit })); } catch (_) { /* no retros */ }
-  try { records.push(...collectVerifierFindings({ dir: path.join(cwd, 'retrospectives'), commit: commit })); } catch (_) { /* no findings */ }
-  if (commits.length && releaseRows.length) {
-    records.push(...deriveMilestoneCompletion({ commits: commits, releaseRows: releaseRows, commit: commit }));
+  if (commit) {
+    const LEDGERS = ['CHANGELOG.md', 'docs/release-state.md', 'docs/tech-debt.md'];
+    const retroNames = g.list(commit, 'retrospectives');
+    const retroPaths = retroNames.filter((n) => /-retrospective\.md$/.test(n) || FINDINGS_NAME_RE.test(n)).map((n) => 'retrospectives/' + n);
+    // Each record is bound to the last commit that touched its source.
+    const touch = g.lastTouch(commit, LEDGERS.concat(['retrospectives/']));
+    const at = (rel) => touch.get(rel) || commit;
+    const cl = g.read(commit, 'CHANGELOG.md');
+    if (cl != null) records.push(...collectChangelog({ text: cl, source: 'CHANGELOG.md', commit: at('CHANGELOG.md') }));
+    const rs = g.read(commit, 'docs/release-state.md');
+    let releaseRows = [];
+    if (rs != null) { const rows = collectReleaseState({ text: rs, source: 'docs/release-state.md', commit: at('docs/release-state.md') }); records.push(...rows); releaseRows = rows; }
+    const td = g.read(commit, 'docs/tech-debt.md');
+    if (td != null) records.push(...collectTechDebt({ text: td, source: 'docs/tech-debt.md', commit: at('docs/tech-debt.md') }));
+    const entries = [];
+    for (const rel of retroPaths) {
+      const text = g.read(commit, rel);
+      if (text != null) entries.push({ name: rel.slice('retrospectives/'.length), text: text, commit: at(rel) });
+    }
+    records.push(...collectRetros({ entries: entries }));
+    records.push(...collectVerifierFindings({ entries: entries }));
+    findingsFiles = entries.filter((e) => FINDINGS_NAME_RE.test(e.name)).length;
+    // RED-first said only in prose, or in a red-first: line that names no test file
+    // and commit, is no control: each field line is quoted, prose is counted once.
+    let proseOnly = 0;
+    for (const e of entries) {
+      if (!/-retrospective\.md$/.test(e.name)) continue;
+      const u = redFirstUnread(e.text);
+      if (u) coverage.push('not a structured claim, shown as UNKNOWN: retrospectives/' + e.name + ': "' + u + '"');
+      else if (mentionsRedFirstInProseOnly(e.text)) proseOnly += 1;
+    }
+    if (proseOnly > 0) {
+      coverage.push(proseOnly + ' retrospective(s) name RED-first only in prose, with no red-first: line naming the test file and the commit, so they count no control');
+    }
+    if (commits.length && releaseRows.length) {
+      records.push(...deriveMilestoneCompletion({ commits: commits, releaseRows: releaseRows, commit: commit }));
+    }
   }
 
   // The collector band: a statement about the COLLECTOR-DERIVED receipts, true
@@ -576,7 +810,7 @@ function collectArc(opts) {
   const summary = { bau: 0, worked: 0, broke: 0, shipped: 0, unclassified: 0 };
   for (const rec of records) { const c = classify(rec); if (summary[c] != null) summary[c]++; }
 
-  return { records: records, summary: summary, coverage: coverage };
+  return { records: records, summary: summary, coverage: coverage, findings_files: commit ? findingsFiles : null };
 }
 
 module.exports = {
@@ -600,4 +834,10 @@ module.exports = {
   reworkOriginSplit,
   parseStamp,
   parseBudget,
+  // M34.5.F.10: the one stripper, the one rule, the committed reader
+  stripTemplate,
+  structuredClaim,
+  VERDICT_WORDS,
+  findingResolution,
+  readCommitted,
 };

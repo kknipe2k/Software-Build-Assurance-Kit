@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // .claude/hooks/user-prompt-submit-mode-check.cjs
 //
 // UserPromptSubmit hook. Enforces the mode separation (work / verifier /
@@ -46,6 +46,21 @@
 // NOT a "work" default: silently assuming work there would disable the 3-brain
 // bias guard exactly when the mode is changing (ERR-002). So this hook FAILS CLOSED
 // on a present-but-unresolvable mode — it blocks and tells the user to fix it.
+//
+// THE /send TOKEN (M34.5.F.2, W4-01): a typed /send --approval mints it only while a release is
+// pending - the builder's latest red-stop for its open stage with no approval-request after it - and
+// records the session, the turn's prompt id, the stage and the red-stop's seq; channel.cjs send
+// --approval takes it only in that session and turn, within ten minutes (deterministic enforcement
+// over the owner's typed word, human authorization). A plain /send mints nothing, and with nothing
+// pending the hook writes nothing and says so on stdout, exit 0.
+//
+// THE PROMPT RECORD (M34.5.F.3, R-245): in an orchestrator session every prompt goes to the session's
+// receipts ledger as a prompt_recorded row - the sha256 of its text (never the text), its turn's
+// prompt_id, and typed or delivered (promptOrigin below, the reading the /send mint reads too). It adds
+// no step for the person. channel.cjs accept takes a stamp only when a prompt typed in that session after
+// the stage-end packet carries its text (deterministic enforcement over the owner's typed word, human
+// authorization), and the evidence review matches a cited owner request against it. The record shows
+// the prompt the session received, not who typed it (observed evidence).
 //
 // Exit codes:
 //   0  -> allow the prompt (match; ad-hoc/no stage prompt; or an absent role marker
@@ -276,6 +291,40 @@ function startRootConflict(root, claudeDir) {
   return here === there ? null : { here, there, startRoot };
 }
 
+// TYPED OR DELIVERED (M34.5.F.3 item 1). Claude Code fires this hook on the person's prompt and also on
+// turns it starts itself: a message another session sends, a background subagent's report, a background
+// task's notification, a scheduled prompt; its documented input marks none of them (the hooks reference,
+// read 2026-11-15). The three it delivers in a wrapper reach the hook's prompt field as that wrapper,
+// captured from this hook's own payload on 2026-11-15: "<cross-session-message from=... from-name=...
+// from-mode=...>", "<agent-message from=...>" and "<task-notification>"; an agent team's
+// "<teammate-message" (not captured) is read the same way. Any of these at the start of the text, after leading
+// whitespace, is delivered; anything else is typed. The limit: a scheduled prompt, an accepted prompt
+// suggestion and a prompt a program sends through the CLI read as typed (observed evidence; no field
+// tells them apart).
+const DELIVERED_RE = /^\s*<(?:cross-session-message|agent-message|teammate-message|task-notification)(?=[\s>])/;
+function promptOrigin(text) { return DELIVERED_RE.test(String(text || '')) ? 'delivered' : 'typed'; }
+// A delivered message's own body: the text inside its wrapper, trimmed.
+function deliveredBody(text) {
+  const m = /^\s*<([a-z-]+)(?:\s[^>]*)?>([\s\S]*?)<\/\1>\s*$/.exec(String(text || ''));
+  return m ? m[2].trim() : null;
+}
+// The record (best effort). Role orchestrator only (gate-1 Q1): the stamp and the owner's requests are
+// typed there, and no other session's prompts are hashed into the receipts.
+function recordPrompt(root, claudeDir, payload, text, origin) {
+  try {
+    if (readActiveMode(claudeDir).state !== 'ok' || readActiveMode(claudeDir).mode !== 'orchestrator') return;
+    const sid = payload && typeof payload.session_id === 'string' ? payload.session_id : null;
+    if (!sid) return;
+    const receipts = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'receipts.cjs'));
+    if (typeof receipts.promptSha !== 'function') return;
+    const row = { schema: receipts.SCHEMA_VERSION, at: new Date().toISOString(), event: 'prompt_recorded', emitter: 'UserPromptSubmit', session: sid, role: 'orchestrator',
+      prompt_id: payload && typeof payload.prompt_id === 'string' ? payload.prompt_id : null, prompt_sha256: receipts.promptSha(text), origin };
+    const body = origin === 'delivered' ? deliveredBody(text) : null;
+    if (body !== null) row.body_sha256 = receipts.promptSha(body);
+    receipts.appendEvent(path.join(root, '.claude', 'receipts'), row);
+  } catch (_) { /* best effort: the consumer refuses without the record */ }
+}
+
 // The project-scope settings files register the read-first hook on SessionStart (parsed
 // registrations, never a string search over the file - a metadata mention counts for nothing).
 function sessionStartWired(root) {
@@ -314,24 +363,56 @@ function main() {
     process.exit(2);
   }
 
+  // THE PROMPT RECORD (M34.5.F.3 item 1, R-245). In an orchestrator session every prompt is recorded in
+  // the session's receipts ledger: the sha256 of its text, its turn's prompt_id and whether it was typed
+  // or delivered (promptOrigin, the one reading the /send mint below reads too). Never the text. accept
+  // reads it to check the stamp, and the review to match a cited request. Best effort: a record that
+  // cannot be written never blocks the prompt (an exit 2 here would erase the person's words); the
+  // consumers refuse without it.
+  const origin = promptOrigin(prompt);
+  recordPrompt(root, claudeDir, payload, prompt, origin);
+
   // THE /send KEYSTROKE (M30.H, the terminal channel). The human typed /send in this terminal:
   // under role=orchestrator the hook stamps a one-shot token that `node scripts/channel.cjs send`
   // consumes - the keystroke is the adjudication record and the hook, not the agent, is the writer
   // of that record. Any other role is blocked in one line: only the orchestrator sends; builder
   // packets publish automatically. (The fence's ask rule on the send command is the other gate;
   // this token is the zero-click one when the raw line reaches the hook.)
-  if (/^\s*\/send\b/.test(prompt)) {
+  if (origin === 'typed' && /^\s*\/send\b/.test(prompt)) {
     const sres = readActiveMode(claudeDir);
     const srole = sres.state === 'absent' ? 'work' : (sres.state === 'unresolved' ? 'unresolved' : sres.mode);
     if (srole !== 'orchestrator') {
       process.stderr.write(`channel: /send is the orchestrator's keystroke (this session's role is ${srole}) - only the orchestrator sends; builder packets publish automatically at surface time.\n`);
       process.exit(2);
     }
-    try {
-      const dir = path.join(claudeDir, 'channel');
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, 'send-token'), JSON.stringify({ at: new Date().toISOString(), session: payload && payload.session_id ? payload.session_id : null }) + '\n');
-    } catch (_) { /* the fence's ask rule remains the other gate */ }
+    // M34.5.F.2 (item 2, W4-01): only the release needs the keystroke (R-144), so only a typed
+    // /send --approval mints, and only while a release is pending - the builder's latest red-stop for
+    // its open stage with no approval-request after it (lib/channel.cjs pendingRelease). The token
+    // records the session, the turn's prompt id, the stage and the red-stop's seq; the send takes it
+    // only in that session and turn, within ten minutes. With nothing pending, nothing is written and
+    // the session is told so. A delivered cross-session message reads delivered (promptOrigin), so it
+    // mints nothing.
+    if (/^\s*\/send\s+--approval\b/.test(prompt)) {
+      let pend = null;
+      try {
+        const ch = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'channel.cjs'));
+        const res = ch.resolve(root);
+        pend = res.ok ? ch.pendingRelease(res) : null;
+      } catch (_) { pend = null; }
+      if (!pend) {
+        process.stdout.write('channel: /send --approval minted no token - no release is pending (no unanswered red-stop for the builder\'s open stage); nothing to send\n');
+        process.exit(0);
+      }
+      try {
+        const dir = path.join(claudeDir, 'channel');
+        fs.mkdirSync(dir, { recursive: true });
+        const tok = path.join(dir, 'send-token');
+        const sid = payload && typeof payload.session_id === 'string' ? payload.session_id : null;
+        const pid = payload && typeof payload.prompt_id === 'string' ? payload.prompt_id : null;
+        fs.writeFileSync(tok + '.tmp', JSON.stringify({ v: 2, at: new Date().toISOString(), session: sid, prompt_id: pid, stage: pend.stage, red_stop_seq: pend.red_stop_seq }) + '\n');
+        fs.renameSync(tok + '.tmp', tok);
+      } catch (_) { /* no token: the send refuses with its keystroke line */ }
+    }
     process.exit(0);
   }
 

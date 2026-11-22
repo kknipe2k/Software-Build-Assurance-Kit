@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/hook-root.cjs
 //   (twin: templates/scripts/lib/hook-root.cjs - byte-identical; ships via kit-update's table)
 //
@@ -92,7 +92,44 @@ const CONTROL_FILE_RE = new RegExp('^' + CONTROL_LIST_GLOB.replace(/\./g, '\\.')
 // rule and denied by the same settings rules (Edit(/<path>)). The installed release manifest is
 // the reference the red gate authenticates the repair script against, so it must not be
 // edit-tool writable into agreement. Never a root marker: only CONTROL_FILES anchor a walk.
-const CONTROL_PATHS = ['sbak/release-manifest.json'];
+// M34.5.F.1 (W4-01, W4-03, C4-02): the channel's own files join, bound in every tree - the send
+// token, the approval record, both logs and the watcher markers - so only the kit's scripts and
+// hooks write them. An entry may carry one * inside its last segment (watch.<side>.json), matched
+// like the read-first glob: any run of name characters.
+const CONTROL_PATHS = ['sbak/release-manifest.json', '.claude/channel/send-token', '.claude/channel/approval.json',
+  '.claude/channel/orch-to-builder.jsonl', '.claude/channel/builder-to-orch.jsonl', '.claude/channel/watch.*.json'];
+// THE COMMIT FLOOR (M34.5.F.1, C2-01): the files the git hooks run or read as policy - the hooks,
+// the validators, the kit scripts the hooks call and the modules those require (listed by name,
+// never scripts/**: a project may own a scripts/ folder of its own). Carved by the same rule and
+// denied by the same settings rules, but bound only where the kit is installed: FLOOR_MARK, the
+// installed release manifest, is a regular file at the root. The kit's own source tree has none,
+// so its builder edits these files under the stage gate. An entry ending in /** is a folder.
+const FLOOR_MARK = 'sbak/release-manifest.json';
+const FLOOR_PATHS = ['.githooks/**', 'validators/**', 'scripts/kit-update.cjs', 'scripts/evidence.cjs', 'scripts/verify-local.cjs',
+  'scripts/lib/channel.cjs', 'scripts/lib/evidence.cjs', 'scripts/lib/hook-chmod.cjs', 'scripts/lib/hook-root.cjs',
+  'scripts/lib/read-ledger.cjs', 'scripts/lib/receipts.cjs', 'scripts/lib/sandbox.cjs', 'scripts/lib/settings-merge.cjs',
+  'scripts/lib/stage-structure.cjs'];
+// One control entry against a repo-relative path, both lowercased by the caller: exact, a folder
+// (/**: the folder and every path under it), or one * inside the last segment.
+function pathEntryMatch(rel, entry) {
+  if (entry.slice(-3) === '/**') { const d = entry.slice(0, -3); return rel === d || rel.indexOf(d + '/') === 0; }
+  if (entry.indexOf('*') === -1) return rel === entry;
+  const re = new RegExp('^' + entry.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[A-Za-z0-9_.-]*') + '$');
+  return re.test(rel);
+}
+// THE SECRET FILES' FAMILY (M34.5.F.1, C2-03; R-260): every name that starts with .env, at any depth,
+// .env.example and .envrc included, and .netrc and .git-credentials. S1-13's exception for
+// .env.example is reversed on the owner's word: Claude Code's permission matcher has no negated
+// character class ([!x] and [^x] are plain sets there), so the family cannot leave one name
+// out exactly, and the deny is kept whole (fail-closed). No pattern here carries a bracket. The one
+// list: every settings block's Read and Edit deny rules for these are derived from it, and the pins read it.
+const SECRET_FAMILY = ['**/.env*', '**/.netrc', '**/.git-credentials'];
+function secretRules() { return SECRET_FAMILY.map((p) => `Read(${p})`).concat(SECRET_FAMILY.map((p) => `Edit(${p})`)); }
+// The settings rule each entry derives (both layers name the same set): Edit(/<entry>).
+function controlRules(withFloor) {
+  return CONTROL_FILES.map((n) => (n === 'hooks' ? 'Edit(/.claude/hooks/**)' : `Edit(/.claude/${n})`))
+    .concat(CONTROL_PATHS.map((p) => `Edit(/${p})`), [`Edit(/.claude/${CONTROL_LIST_GLOB})`], withFloor ? FLOOR_PATHS.map((p) => `Edit(/${p})`) : []);
+}
 // The user's own `~/.claude/` is Claude Code's USER config dir (it carries a settings.json and
 // may carry hooks/), never a project root: a walk that reaches the home directory must not
 // anchor there by its control files (amendment seq 116, found live: a fixture under %TEMP%
@@ -251,4 +288,4 @@ function readHookInput() {
   return { raw, payload, root, claudeDir: path.join(root, '.claude') };
 }
 
-module.exports = { repoRoot, targetRoot, repoRootFor, walkUpToGit, decodeBytes, realOrLexical, readStdinBounded, readHookInput, MAX_STDIN_BYTES, CONTROL_FILES, CONTROL_PATHS, CONTROL_LIST_GLOB };
+module.exports = { repoRoot, targetRoot, repoRootFor, walkUpToGit, decodeBytes, realOrLexical, readStdinBounded, readHookInput, MAX_STDIN_BYTES, CONTROL_FILES, CONTROL_PATHS, CONTROL_LIST_GLOB, FLOOR_PATHS, FLOOR_MARK, pathEntryMatch, controlRules, SECRET_FAMILY, secretRules };

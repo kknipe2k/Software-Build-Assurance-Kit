@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/calibration-score.cjs
 //   (kit source of truth: templates/scripts/calibration-score.cjs)
 //
@@ -22,8 +22,9 @@
 //   * the set (default prompts/calibration under the tree's root) must pass the validator's set check;
 //   * each --session <id>: events-<id>.jsonl is read from .claude/receipts/ of every worktree of this
 //     repository (the verifier runs in another worktree); no ledger refuses, a ledger with no verifier
-//     row refuses, and a recorded read of any file under the set's labels/ voids the exam (the read
-//     ledger's labels rule, compared ref by ref);
+//     row refuses, and a recorded read of any file under labels/ in the set it scores or in either
+//     copy a project holds (prompts/calibration/, sbak/prompts/calibration/) voids the exam (the read
+//     ledger's labels rule, compared ref by ref; M34.5.F.12);
 //   * the verdicts: exactly one calibration-verdicts block, every line well formed, judged-from:
 //     content present, every fixture judged once, no unknown fixture, every class from the catalog or
 //     clean;
@@ -84,8 +85,17 @@ function main() {
   let LEDGER; let CAL; let RECEIPTS;
   try { LEDGER = require(path.join(__dirname, 'lib', 'read-ledger.cjs')); RECEIPTS = require(path.join(__dirname, 'lib', 'receipts.cjs')); }
   catch (e) { refuse(`scripts/lib/read-ledger.cjs or scripts/lib/receipts.cjs did not load (${String((e && e.message) || e).split('\n')[0]})`); }
+  // The validator the scorer loads (M34.5.F.4): before the bootstrap (no project-config.md and
+  // no commit adding it) adopt places no validator, so the refusal names the bootstrap; after it, the
+  // repair that restores the file.
+  const calRel = path.join(__dirname, '..', 'validators', 'validate-calibration.cjs');
   try { CAL = require(path.join(__dirname, '..', 'validators', 'validate-calibration.cjs')); }
-  catch (e) { refuse(`validators/validate-calibration.cjs did not load (${String((e && e.message) || e).split('\n')[0]})`); }
+  catch (e) {
+    const cause = String((e && e.message) || e).split('\n')[0];
+    const before = !fs.existsSync(path.join(root, 'project-config.md')) && !(gitOut(root, ['log', '-n', '1', '--format=%H', '--diff-filter=A', '--', 'project-config.md']) || '').trim();
+    if (before) refuse('validators/validate-calibration.cjs is not here yet: this project is installed but not bootstrapped, and the bootstrap places it with the validators this tier requires; score after the bootstrap');
+    refuse(`validators/validate-calibration.cjs did not load (${cause}); restore it: node scripts/kit-update.cjs ${fs.existsSync(calRel) ? '--apply validators/validate-calibration.cjs' : '--place-floor'}`);
+  }
 
   // 1. the role
   const roleFile = path.join(root, '.claude', 'role');

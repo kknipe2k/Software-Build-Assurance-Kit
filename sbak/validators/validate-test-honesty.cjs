@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-test-honesty.cjs
 //
 // The G9 test-honesty gate, shipped framework-wide so every
@@ -20,7 +20,10 @@
 //       (expect( / assert( / check( / .should / .toBe… / cy.…) is the assertion-
 //       free / exception-only theater class → FLAGGED. Matched as call/member
 //       patterns, never bare substrings, so a comment saying "assert" or the word
-//       "expect" inside a string literal does not satisfy the check.
+//       "expect" inside a string literal does not satisfy the check. M34.5.F.11 (C3-03): a JS/TS
+//       block also starts at the modifier forms (test.each(...)(...), it.only, .skip,
+//       .concurrent, .failing, .sequential, .skipIf/.runIf), and a recognised JS/TS test file in
+//       which no block is found gets a named, non-blocking skip line, never silence.
 //
 // Risk-tiered: the slot's CONTENT carries the risk distinction (mutation vs n/a);
 // the gate never mandates a blanket mutation score (the cargo-cult the research
@@ -53,9 +56,21 @@
 //
 // Severity / the toggle (test_honesty: block | warn, FRAMEWORK-CONFIG §4.17):
 //   default (block, Full)    — any finding → exit 1.
-//   --warn (warn, Standard)  — findings are advisory (NOTE), exit 0. The heuristic
+//   --warn (warn, Lite)      — findings are advisory (NOTE), exit 0. The heuristic
 //                              half (b) carries a residual false-positive rate, so
-//                              the warn tier is the safety valve at Standard.
+//                              the warn tier is the safety valve.
+//   M34.5.F.11 (W3-13): under --staged (the commit gate) the `test_honesty` row of
+//   project-config.md DECIDES when it reads warn or block - read from the staged copy at each
+//   commit; a file-mode run keeps the flag it was given - so a changed value takes
+//   effect with no edit of the pre-commit (F.1's floor refuses '--warn' in a Full project's hook,
+//   and that one flag serves eight validators). Any other value (absent, an unfilled token, a
+//   typo) leaves the hook's flag in force; a present value that reads as neither is named. The
+//   row is read as written: the kit does not check who set it (kit-update --ready names a value
+//   that differs from the bootstrap commit's).
+//
+// THE SUBJECT (M34.5.F.11, W3-11): under --staged every Phase doc and test file is read from the
+// INDEX (git cat-file blob :0:<path>), the bytes that commit, never the working tree, and a rename
+// (git's R) is judged like an add. Paths are read NUL-terminated (-z), so a space is a space.
 //
 // Usage:
 //   node validators/validate-test-honesty.cjs [--warn] <phase-doc.md | test-file>...
@@ -70,7 +85,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
+// M34.5.F.11: the one placeholder rule (shared with validate-retrospective's mutation line) and the
+// comment stripper for the config read, required where they are used: the channel's ack loads this
+// module for countAssertions alone, from trees that may carry this file without validators/lib/.
+const fencedBlock = () => require('./lib/fenced-block.cjs');
 
 // The protocol version that introduced <test_honesty>. A Phase doc with
 // an EXPLICIT banner below this is grandfathered; a doc with NO banner is NOT (see
@@ -279,10 +298,42 @@ function idOf(xml) {
 let m30iCalPath = null;
 function calibrationPath() {
   if (m30iCalPath !== null) return m30iCalPath;
-  let t = '';
-  try { t = fs.readFileSync(path.join(process.cwd(), 'project-config.md'), 'utf8'); } catch (_) { t = ''; }
-  m30iCalPath = /\*\*Calibration:\*\*\s*custom-interview/.test(t) ? 'custom-interview' : 'full-glance';
+  m30iCalPath = /\*\*Calibration:\*\*\s*custom-interview/.test(projectConfigText()) ? 'custom-interview' : 'full-glance';
   return m30iCalPath;
+}
+
+// M34.5.F.11: ONE read of project-config.md for both lines this validator takes from it (the
+// Calibration line above and the test_honesty row below). Under --staged it is the staged copy
+// (the bytes that commit), else the working tree; in file mode the working tree at the cwd.
+let stagedMode = false;
+let configText = null;
+function projectConfigText() {
+  if (configText !== null) return configText;
+  configText = '';
+  if (stagedMode) {
+    const staged = indexBlob('project-config.md');
+    if (staged !== null) { configText = staged; return configText; }
+  }
+  try { configText = fs.readFileSync(path.join(process.cwd(), 'project-config.md'), 'utf8'); } catch (_) { configText = ''; }
+  return configText;
+}
+// The test_honesty row (or a `test_honesty:` field), read the CFI-17 way: comments stripped, the
+// table row first. -> { value: 'warn' | 'block' | null, raw: <the value as written> | null }
+function configSeverity() {
+  const text = fencedBlock().stripHtmlComments(projectConfigText());
+  const row = text.match(/^\|\s*test[_ ]honesty\s*\|\s*`?([^|`\n]*?)`?\s*\|/mi);
+  const field = row || text.match(/^[ \t]*\**\s*test[_ ]honesty\s*\**\s*:\**[ \t]*`?([^\s`|]*)/mi);
+  if (!field) return { value: null, raw: null };
+  const raw = field[1].trim();
+  if (raw === '' || /\{\{.*\}\}/.test(raw)) return { value: null, raw: null }; // unfilled: the flag decides, silently
+  const v = raw.toLowerCase();
+  return { value: v === 'warn' || v === 'block' ? v : null, raw };
+}
+// The staged blob of a root-relative path, or null when the index has no such entry.
+function indexBlob(rel) {
+  try {
+    return execFileSync('git', ['cat-file', 'blob', `:0:${rel}`], { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 }).toString('utf8');
+  } catch (_) { return null; }
 }
 
 // Findings for one Phase doc: each in-scope work stage must carry a valid slot.
@@ -305,6 +356,9 @@ function checkPhaseDoc(file, text) {
       findings.push(`${file}: <${root} id="${id}"> has an empty <test_honesty> — name the mutation (or \`n/a — no risk surface\`).`);
     } else if (/\{\{.*\}\}/.test(body)) {
       findings.push(`${file}: <${root} id="${id}"> <test_honesty> is still a {{placeholder}} — fill in the mutation or \`n/a\`.`);
+    } else if (fencedBlock().placeholderForm(body)) {
+      // M34.5.F.11 (W3-10): "TBD", "TBD - will pick something later" and their like name no mutation.
+      findings.push(`${file}: <${root} id="${id}"> <test_honesty> names no mutation (${fencedBlock().placeholderForm(body)}: "${body.split('\n')[0].slice(0, 60)}") - name the mutation and the test it turns red, or \`n/a - <reason>\`.`);
     }
   }
   return findings;
@@ -321,32 +375,53 @@ function checkPhaseDoc(file, text) {
 //     as KF-44 because it shipped, not because it survived.
 //   • FALSE-FLAG: a commented-out `it(` was scanned as a live test block and reported.
 // Stripping fixes both, and makes the four language paths one rule instead of three-plus-one.
+//
+// M34.5.F.11 (C3-03): THE BLOCK PATTERN SEES THE MODIFIER FORMS (mutant target). `test.each([...])(
+// 'name', fn)`, `it.only(`, `test.skip(`, `it.concurrent.each(`, `test.skipIf(c)(` each start a
+// block, so an assertion-free test written that way is flagged and a modifier test no longer falls
+// inside the slice of the plain test before it. `.todo` carries no body and is not a test;
+// Playwright's test.describe / test.beforeEach / test.step are not matched. Reverting BLOCK_RE to
+// /\b(?:it|test)\s*\(/g turns the "test.each + it.only" smoke case RED.
+const BLOCK_RE = /\b(?:it|test)(?:\s*\.\s*(?:only|skip|concurrent|each|failing|fails|sequential|skipIf|runIf))*\s*\(/g;
 function checkTestFile(file, text) {
   const findings = [];
   const src = stripSlashComments(text.replace(/\r\n?/g, '\n'));
-  const blockRe = /\b(?:it|test)\s*\(/g;
+  const blockRe = new RegExp(BLOCK_RE.source, 'g');
   const starts = [];
   let m;
-  while ((m = blockRe.exec(src)) !== null) starts.push(m.index);
+  while ((m = blockRe.exec(src)) !== null) starts.push({ idx: m.index, head: m[0] });
   for (let i = 0; i < starts.length; i++) {
-    const slice = src.slice(starts[i], i + 1 < starts.length ? starts[i + 1] : src.length);
+    const slice = src.slice(starts[i].idx, i + 1 < starts.length ? starts[i + 1].idx : src.length);
     const hasAssertion = ASSERTION_PATTERNS.some((re) => re.test(slice));
     if (!hasAssertion) {
-      const nameM = /\b(?:it|test)\s*\(\s*['"`]([^'"`]*)/.exec(slice);
+      // The name: the first quoted string right after the head, or after a curried ")(" (each, skipIf).
+      const rest = slice.slice(starts[i].head.length);
+      const nameM = /^\s*['"`]([^'"`]*)/.exec(rest) || /\)\s*\(\s*['"`]([^'"`]*)/.exec(rest);
       const name = nameM ? nameM[1] : '(unnamed)';
       findings.push(`${file}: test "${name}" has no assertion call (expect(/assert(/check(/.should/.toBe…) — an assertion-free / exception-only test proves nothing (the assertion-free theater class).`);
     }
   }
+  // A recognised JS/TS test file in which no block is found: named, never silent (non-blocking -
+  // every .js under tests/ is recognised, helpers and fixtures included).
+  if (starts.length === 0) noteNoBlock(file);
   return findings;
+}
+function noteNoBlock(file) {
+  process.stderr.write(
+    `skip  ${file}: no test block found (it/test and their modifiers), ` +
+    `so no test in this file was judged. Non-blocking.\n`
+  );
 }
 
 // FAIL CLOSED: a git failure must surface and exit non-zero, never
 // collapse to an empty staged set -> silent PASS. "git ran, nothing staged" (empty
 // stdout) is fine; "git failed" (throw) blocks.
+// M34.5.F.11 (W3-11): ACMR - a renamed test is judged like an added one (mutant target: dropping R
+// lets `git mv` + an assertion stripped commit); -z so a path is read as git wrote it.
 function stagedFiles() {
   let out;
   try {
-    out = execSync('git diff --cached --name-only --diff-filter=ACM', {
+    out = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 256 * 1024 * 1024,
     }).toString();
@@ -358,16 +433,28 @@ function stagedFiles() {
     );
     process.exit(2);
   }
-  return out.split(/\r?\n/).filter((f) => f && (isPhaseDoc(f) || isTestFile(f)));
+  return out.split('\0').filter((f) => f && (isPhaseDoc(f) || isTestFile(f)));
+}
+// THE INDEX READ (mutant target): the staged blob, never fs.readFileSync - restoring the working-tree
+// read lets a test staged without an assertion commit while the tree carries one (walk 3's 9965078).
+// A git failure here is a counted finding (fail closed), never a silent skip.
+function readStaged(f) {
+  try {
+    return { text: execFileSync('git', ['cat-file', 'blob', `:0:${f}`], { stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 256 * 1024 * 1024 }).toString('utf8') };
+  } catch (e) {
+    const detail = (e && e.stderr ? e.stderr.toString().trim() : '') || (e && e.message) || 'unknown git error';
+    return { error: `cannot read the staged copy (git cat-file blob :0:${f}): ${detail}` };
+  }
 }
 
 function main() {
   const args = process.argv.slice(2);
-  const warn = args.includes('--warn');
+  const flagWarn = args.includes('--warn');
   const positional = args.filter((a) => !a.startsWith('--'));
 
   let files;
   if (args.includes('--staged')) {
+    stagedMode = true;
     files = stagedFiles();
     if (files.length === 0) process.exit(0); // nothing relevant staged
   } else if (positional.length >= 1) {
@@ -380,12 +467,18 @@ function main() {
   const findings = [];
   for (const f of files) {
     let text;
-    try {
-      text = fs.readFileSync(f, 'utf8');
-    } catch (e) {
-      // A counted finding, not an uncaught mid-list crash.
-      findings.push(`${f}: cannot read file (${e && e.message ? e.message : 'unknown error'})`);
-      continue;
+    if (stagedMode) {
+      const s = readStaged(f);
+      if (s.error) { findings.push(`${f}: ${s.error}`); continue; }
+      text = s.text;
+    } else {
+      try {
+        text = fs.readFileSync(f, 'utf8');
+      } catch (e) {
+        // A counted finding, not an uncaught mid-list crash.
+        findings.push(`${f}: cannot read file (${e && e.message ? e.message : 'unknown error'})`);
+        continue;
+      }
     }
     if (isPhaseDoc(f)) findings.push(...checkPhaseDoc(f, text));
     else if (isTestFile(f)) {
@@ -402,13 +495,24 @@ function main() {
 
   if (findings.length === 0) process.exit(0);
 
+  // THE SEVERITY (M34.5.F.11, W3-13; mutant target): the project-config.md row decides when it reads
+  // warn or block; otherwise the hook's flag. Dropping the row read leaves `warn` in the config inert
+  // (walk 3's R case) and turns the "warn in project-config.md -> NOTE, commit passes" smoke case RED.
+  // The row governs the COMMIT gate (--staged); a file-mode run (a tool or a person naming files)
+  // keeps the flag it was given, so the mini-smoke's own pairs mean what they say.
+  const sev = stagedMode ? configSeverity() : { value: null, raw: null };
+  const warn = sev.value ? sev.value === 'warn' : flagWarn;
+  if (sev.raw !== null && sev.value === null) {
+    process.stderr.write(`NOTE  project-config.md: test_honesty reads "${sev.raw}", neither warn nor block - the hook's ${flagWarn ? '--warn' : 'blocking default'} decides.\n`);
+  }
   const label = warn ? 'NOTE ' : 'FAIL ';
   for (const x of findings) process.stderr.write(`${label} ${x}\n`);
   if (warn) {
-    process.stderr.write(`\n${findings.length} test-honesty finding(s) (advisory — test_honesty: warn). Review before the next milestone.\n`);
+    const from = sev.value === 'warn' ? 'test_honesty: warn, from project-config.md' : "the hook's --warn";
+    process.stderr.write(`\n${findings.length} test-honesty finding(s) (advisory - ${from}). Review before the next milestone.\n`);
     process.exit(0);
   }
-  process.stderr.write(`\n${findings.length} test-honesty finding(s) block this commit (G9). Fix or run under test_honesty: warn.\n`);
+  process.stderr.write(`\n${findings.length} test-honesty finding(s) block this commit (G9). Fix the test, or set test_honesty to warn in project-config.md and stage that file (the person's choice; kit-update --ready names the change).\n`);
   process.exit(1);
 }
 

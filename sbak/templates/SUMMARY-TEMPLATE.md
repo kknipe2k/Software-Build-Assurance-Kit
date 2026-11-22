@@ -112,6 +112,14 @@ For M01: write **"First milestone — no trend baseline."**
 
 ---
 
+## Requirement changes
+
+Paste the block `node validators/validate-spec-chain.cjs --closeout M[NN]` prints: each change file whose Milestone line names this milestone, with the requirement ids it names, the tests named for them, the assumptions it touched and its approval line, or the one line "no requirement changed" (always written, so a quiet milestone reads differently from a missing reconciliation). The command refuses a chain that does not close at the live spec on disk, and the commit floor refused any named id the live spec defined neither before nor after the commit that carried the change (deterministic enforcement); whether the ids a change names are the ids its edit changed, and that the block here is the one it printed, are the review's to check (agent judgment).
+
+{{the block}}
+
+---
+
 ## Hand-off to gap-analysis entry
 
 This summary is one of three artifacts the user reviews at PR time (per `CLAUDE.md` §8 closeout). The other two are:

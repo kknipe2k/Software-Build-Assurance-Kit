@@ -58,4 +58,11 @@ reports/
 /sbak-install.cjs.sha256
 /.sbak-install/
 
+# M34.5.F.1 the secret files' family (C2-03): a .env file at any depth never reaches the history,
+# and the committed template .env.example stays tracked. The deny floor in .claude/settings.json
+# keeps Claude's file tools off the same family.
+.env
+.env.*
+!.env.example
+
 # Add project/stack-specific ignores below (node_modules/, dist/, __pycache__/, etc.)

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -18,8 +18,9 @@
 //       drifted    — content differs from the template (--apply restores)
 //       divergent  — the live file DECLARES itself intentionally divergent (ARC-007 header,
 //                    case-insensitive); reported, NEVER overwritten — --apply refuses it
-//       wiring     — a bootstrap-FILLED file ({{placeholders}} replaced at Phase 3); content
-//                    drift is by design, so only the stamp is compared.
+//       wiring     — a bootstrap-FILLED file ({{placeholders}} replaced at Phase 3), compared
+//                    as the installed template with this project's fills (M34.5.F.4: one value
+//                    per token, read by readFills, F.1's compare); any other change is drifted.
 //                    --apply REFUSES wiring rows even on stamp drift: a placeholder template
 //                    cannot restore a filled file — take a kit update here by bootstrap fill
 //                    or hand-merge (M20.5.V F1)
@@ -59,7 +60,9 @@
 //     runs it automatically (not under --dry-run).
 //
 // M32.J adds `--ready`: the end-of-bootstrap readiness check; M34.D makes it one readiness result,
-// a line per row and one verdict with one next command; see cmdReady below.
+// a line per row and one verdict with one next command; see cmdReady below. M34.5.F.4: the git hooks,
+// the managed files, the drift report and adopt's COMPLETE read content (F.1's compare), and --ready
+// runs the project's mini-smoke as a row.
 //
 // M33.D adds `--migrate`: the update path for a project built on an older kit - the per-file
 // table first, then `--apply-all`, merging the bootstrap-filled wiring rows three ways from the
@@ -155,6 +158,7 @@ const MANAGED = [
   { file: 'validators/validate-carry-forward.cjs', template: 'validators/validate-carry-forward.cjs', render: 'copy', tiers: ['full'] },
   { file: 'validators/validate-spec-examples.cjs', template: 'validators/validate-spec-examples.cjs', render: 'copy', tiers: ['lite', 'full'] },
   { file: 'validators/validate-irl-plan.cjs', template: 'validators/validate-irl-plan.cjs', render: 'copy', tiers: ['lite', 'full'] },
+  { file: 'validators/validate-spec-chain.cjs', template: 'validators/validate-spec-chain.cjs', render: 'copy', tiers: ['full'] },
   { file: 'validators/validate-claude-integrity.cjs', template: 'validators/validate-claude-integrity.cjs', render: 'copy', tiers: ['lite', 'full'] },
   { file: 'validators/validate-closeout-packet.cjs', template: 'validators/validate-closeout-packet.cjs', render: 'copy', tiers: ['full'] },
   { file: 'validators/validate-gate-manifest.cjs', template: 'validators/validate-gate-manifest.cjs', render: 'copy', tiers: ['lite', 'full'] },
@@ -231,14 +235,45 @@ function stampOf(text) { const m = STAMP_RE.exec(String(text)); return m ? m[1] 
 // through the one config reader (CFI-17, scripts/lib/read-ledger.cjs). An unreadable value reads the
 // way that requires more, never less (fail-closed): tier full, app_map on, a risk trigger declared,
 // any locus. -> { tier, why(row) -> { required, why } }
+// M34.5.F.1 (W2-07): the values are read twice - from the live file and from the bootstrap commit
+// (the oldest commit that adds project-config.md: the bootstrap writes it once, at its one commit) -
+// and a row either reading requires stays required: a later edit can add a gate, never remove one.
+// With no such commit (before the bootstrap, not a repository, git absent) the live file alone.
+// `differs` names each value the live file changed. -> { tier, why(row), differs, bootSha }
+const REQUIRED_KEYS = ['tier', 'app_map', 'verification_locus', 'deliverable_type', 'risk_triggers'];
+const SEVERITY_READ_KEYS = ['test_honesty'];
+function bootstrapConfig(projRoot) {
+  try {
+    const log = spawnSync('git', ['log', '--diff-filter=A', '--format=%H', '--', 'project-config.md'], { cwd: projRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    if (log.error || log.status !== 0) return null;
+    const shas = String(log.stdout || '').split('\n').map((s) => s.trim()).filter((s) => /^[0-9a-f]{40,64}$/.test(s));
+    if (!shas.length) return null;
+    const sha = shas[shas.length - 1];
+    const show = spawnSync('git', ['show', `${sha}:./project-config.md`], { cwd: projRoot, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    return show.error || show.status !== 0 ? null : { sha, text: String(show.stdout || '') };
+  } catch (_) { return null; }
+}
+// M34.5.F.4 (item 5, W2-02, W1-04): BEFORE THE BOOTSTRAP - no project-config.md and no commit adding
+// it - the required set is what adopt installs: a row under adopt's three trees (.claude/, .githooks/,
+// scripts/) is required, and a validator or a workflow is not, because the bootstrap places the ones
+// the tier requires. A project whose project-config.md is deleted after the bootstrap still reads the
+// bootstrap commit's values below, so it is never read as before the bootstrap.
 function requiredSet(projRoot) {
+  if (readIf(path.join(projRoot, 'project-config.md')) === null && !bootstrapConfig(projRoot)) {
+    const adopted = (row) => ADOPT_TREES.some((t) => row.file.indexOf(`${t.to}/`) === 0);
+    const why = (row) => (adopted(row) ? { required: true, why: 'before the bootstrap: adopt installs it' }
+      : { required: false, why: `before the bootstrap: adopt installs no ${row.file.indexOf('validators/') === 0 ? 'validator' : 'workflow'}; the bootstrap places the ones this project's tier requires` });
+    return { tier: 'full', why, differs: [], unrecorded: [], unrecordedLine: '', bootSha: null, prebootstrap: true };
+  }
   let rl = null; try { rl = require(path.join(__dirname, 'lib', 'read-ledger.cjs')); } catch (_) { rl = null; }
-  const cfg = readIf(path.join(projRoot, 'project-config.md')) || '';
-  const val = (k) => (rl ? rl.readConfigValue(cfg, k) : null);
-  const t = val('tier'); const tier = t === 'lite' || t === 'full' ? t : 'full';
-  const appMap = val('app_map'); const locus = val('verification_locus'); const deliverable = val('deliverable_type');
-  const risk = rl && typeof rl.readConfigList === 'function' ? rl.readConfigList(cfg, 'risk_triggers') : null;
-  const why = (row) => {
+  const reading = (cfg) => {
+    const val = (k) => (rl ? rl.readConfigValue(cfg, k) : null);
+    const t = val('tier');
+    const risk = rl && typeof rl.readConfigList === 'function' ? rl.readConfigList(cfg, 'risk_triggers') : null;
+    return { tier: t === 'lite' || t === 'full' ? t : 'full', app_map: val('app_map'), verification_locus: val('verification_locus'), deliverable_type: val('deliverable_type'), risk_triggers: risk };
+  };
+  const whyAt = (v, row) => {
+    const { tier, app_map: appMap, verification_locus: locus, deliverable_type: deliverable, risk_triggers: risk } = v;
     if (!Array.isArray(row.tiers) || row.tiers.indexOf(tier) === -1) return { required: false, why: `tier ${tier} does not render it` };
     if (row.app_map && appMap === 'skip') return { required: false, why: 'app_map skip' };
     if (row.risk_armed && Array.isArray(risk) && risk.length === 0) return { required: false, why: 'no risk trigger declared' };
@@ -251,7 +286,47 @@ function requiredSet(projRoot) {
     if (row.deliverable) c.push(`deliverable_type ${deliverable || 'unread'}`);
     return { required: true, why: c.join(', ') };
   };
-  return { tier, why };
+  const live = reading(readIf(path.join(projRoot, 'project-config.md')) || '');
+  const boot = bootstrapConfig(projRoot);
+  // A value the bootstrap commit did not record (unread: absent, a placeholder) holds nothing: the
+  // live value stands for it there, so only a recorded value can keep a gate (gate-1 clarification).
+  const at = boot ? (() => {
+    const b = reading(boot.text); const rv = (k) => (rl ? rl.readConfigValue(boot.text, k) : null);
+    const t = rv('tier');
+    return { tier: t === 'lite' || t === 'full' ? t : live.tier, app_map: b.app_map || live.app_map, verification_locus: b.verification_locus || live.verification_locus,
+      deliverable_type: b.deliverable_type || live.deliverable_type, risk_triggers: Array.isArray(b.risk_triggers) ? b.risk_triggers : live.risk_triggers };
+  })() : null;
+  const shown = (k, v) => (k === 'risk_triggers' ? (Array.isArray(v) ? (v.length ? v.join(', ') : 'none') : 'unread') : (v || 'unread'));
+  const differs = at ? REQUIRED_KEYS.filter((k) => shown(k, live[k]) !== shown(k, at[k])).map((k) => ({ key: k, there: shown(k, at[k]), here: shown(k, live[k]) })) : [];
+  // The keys the bootstrap commit recorded no value for (ruled seq 240: never silent).
+  const unrecorded = boot ? REQUIRED_KEYS.filter((k) => (k === 'risk_triggers' ? !(rl && typeof rl.readConfigList === 'function' && Array.isArray(rl.readConfigList(boot.text, k))) : !(rl && rl.readConfigValue(boot.text, k)))) : [];
+  // M34.5.F.11 (W3-13): the severity rows a validator reads itself (G9 reads test_honesty at each
+  // commit). Not a required-set key - no row's required status moves - but a value changed since the
+  // bootstrap commit is named, so a downgrade to warn is visible (observed evidence; the row is read
+  // as written, and the kit does not check who set it).
+  const sevDiffs = boot && rl ? SEVERITY_READ_KEYS.map((k) => ({ key: k, there: rl.readConfigValue(boot.text, k) || 'unread', here: rl.readConfigValue(readIf(path.join(projRoot, 'project-config.md')) || '', k) || 'unread' }))
+    .filter((d) => d.there !== d.here) : [];
+  const unrecordedNote = (keys) => (keys.length ?`; no value recorded at the bootstrap commit ${boot.sha.slice(0, 12)} for ${keys.join(', ')}; the live value stands` : '');
+  const rowKeys = (row) => ['tier'].concat(row.app_map ? ['app_map'] : [], row.risk_armed ? ['risk_triggers'] : [], Array.isArray(row.locus) ? ['verification_locus'] : [], row.deliverable ? ['deliverable_type'] : []);
+  const why = (row) => {
+    const note = unrecordedNote(unrecorded.filter((k) => rowKeys(row).indexOf(k) !== -1));
+    const a = whyAt(live, row);
+    if (a.required || !at) return { required: a.required, why: a.why + note };
+    const b = whyAt(at, row);
+    return b.required ? { required: true, why: `${b.why} at the bootstrap commit ${boot.sha.slice(0, 12)}; here ${a.why}${note}` } : { required: false, why: a.why + note };
+  };
+  return { tier: at && at.tier === 'full' ? 'full' : live.tier, why, differs, sevDiffs, unrecorded, unrecordedLine: unrecordedNote(unrecorded), bootSha: boot ? boot.sha : null };
+}
+// The managed row's note on a changed value: "" when nothing differs.
+function bootstrapNote(req, projRoot) {
+  const out = [];
+  if (req.differs && req.differs.length) out.push(`; project-config.md differs from the bootstrap commit ${req.bootSha.slice(0, 12)}: ${req.differs.map((d) => `${d.key} (${d.there} there, ${d.here} here)`).join(', ')} - the required set reads both`);
+  if (req.unrecordedLine) out.push(req.unrecordedLine);
+  if (req.sevDiffs && req.sevDiffs.length) out.push(`; ${req.sevDiffs.map((d) => `${d.key} differs from the bootstrap commit ${req.bootSha.slice(0, 12)} (${d.there} there, ${d.here} here)`).join(', ')} - G9 reads this row from the staged copy at each commit, as written; the kit does not check who set it`);
+  // gate 1 C2: a changed fill of a filled floor file is named too, never silent.
+  const f = projRoot ? fillDiffs(projRoot, req.bootSha) : [];
+  if (f.length) out.push(`; fills changed since the bootstrap commit ${req.bootSha.slice(0, 12)}: ${f.map((d) => `${d.file} ${d.token} (${JSON.stringify(d.there)} there, ${JSON.stringify(d.here)} here)`).join(', ')}`);
+  return out.join('');
 }
 
 function usage(msg) {
@@ -261,6 +336,7 @@ function usage(msg) {
     '                                   [--detect] [--adopt [--dry-run]] [--ingest]\n' +
     '                                   [--place-project-claude <filled-file>] [--place-settings <filled-file>] [--ready [--model <m>]]\n' +
     '                                   [--place-read-first <role> <staged-list>] [--upgrade-check <new-tree>]\n' +
+    '                                   [--self-check] [--place-floor [<fills-file>]]\n' +
     '                                   [--migrate [--pin <v>] [--base <dir>] [--apply-all [--release <file>]...]]\n' +
     '  read-only drift report by default; --apply restores ONE managed file from its template;\n' +
     '  --migrate shows the per-file table to take the kit at --kit (replace / merge / retire / keep),\n' +
@@ -271,6 +347,9 @@ function usage(msg) {
     '  .claude/settings.json after checking the kit\'s hook registrations and permissions floor (the\n' +
     '  old bytes archived); --place-read-first places a staged read-first list the same way;\n' +
     '  --upgrade-check names the sbak/ files you changed that unzipping a new release would overwrite;\n' +
+    '  --self-check (the pre-commit\'s call) compares .githooks/pre-commit and the validators it runs with\n' +
+    '  sbak/release-manifest.json; --place-floor places the validators the tier requires and, with a\n' +
+    '  fills file (a JSON object of {{TOKEN}} values), the filled .githooks/pre-commit and scripts/verify-local.cjs;\n' +
     '  --detect classifies the repo state (fresh|project|stripped); --adopt installs the live\n' +
     '  enforcement wiring from templates/ (collisions reported, never overwritten; an existing\n' +
     '  .claude/settings.json is MERGED with a byte-exact archive + rollback, KF-56); --ingest\n' +
@@ -368,8 +447,122 @@ function cmdDetect(projRoot) {
 //   tree       - nothing uncommitted but the channel's own files (lib/channel.cjs OWN_FILES);
 //   migration  - --migrate's own table from the recorded kit_version: no file pending.
 // The root is the cwd, as --detect.
-const READY_ROWS = ['modules', 'state', 'config', 'wiring', 'hooks', 'read-first', 'cli', 'payload', 'managed', 'HEAD', 'tree', 'migration'];
-const MIGRATE_PENDING = ['replace', 'add', 'merge', 'conflict', 'retire'];
+// M34.5.F.4 (item 2, Q6): whether git can start a hook, read from its bytes the way each platform's git
+// starts one. -> null (it can) or the cause.
+//   win32, Git for Windows (compat/mingw.c parse_interpreter and path_lookup, read 2026-11-16): the
+//   first two bytes must be "#!"; the interpreter is the text after the last / (else \) of the first
+//   line, cut at the first CR or LF and the first space, found on PATH as <name>.exe. A byte order
+//   mark, no #! line or a name not found is "cannot spawn" at every commit. A busybox applet is not read.
+//   POSIX (git 2.43.0, proven 2026-11-16): git runs a file the kernel refuses (no #!, a byte order mark)
+//   with sh, so those run; an interpreter that does not exist, or env given a program that does not
+//   resolve (a CR left by CRLF line ends stays in the name), fails every commit. An env option (a
+//   leading "-") and a relative interpreter are not judged.
+// opts.dirs: the folders to search (hookDirs); opts.isExe(p): whether p is a file git can run (the real
+// filesystem by default), so a test can feed either branch on any host.
+function hookRunnable(bytes, platform, opts) {
+  const o = opts || {};
+  const b = Buffer.isBuffer(bytes) ? bytes : Buffer.from(String(bytes), 'utf8');
+  const isExe = o.isExe || ((p) => { try { if (!fs.statSync(p).isFile()) return false; if (process.platform !== 'win32') fs.accessSync(p, fs.constants.X_OK); return true; } catch (_) { return false; } });
+  const dirs = Array.isArray(o.dirs) ? o.dirs : [];
+  if (platform === 'win32') {
+    if (b.length >= 3 && b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf) return 'it starts with a UTF-8 byte order mark before #!, so Git for Windows reads no #! line and cannot spawn it';
+    if (b.length < 4 || b[0] !== 0x23 || b[1] !== 0x21) return 'it has no #! line, so Git for Windows cannot spawn it';
+    const head = b.subarray(0, 259).toString('latin1');
+    const end = head.search(/[\r\n]/);
+    if (end === -1) return 'its #! line has no line end, so Git for Windows cannot spawn it';
+    const line = head.slice(2, end);
+    const cut = line.lastIndexOf('/') !== -1 ? line.lastIndexOf('/') : line.lastIndexOf('\\');
+    if (cut === -1) return `its #! line names no path (${JSON.stringify(line)}), so Git for Windows cannot spawn it`;
+    const name = line.slice(cut + 1).split(' ')[0];
+    if (!name || !dirs.some((d) => isExe(path.join(d, `${name}.exe`)))) return `its #! line names ${JSON.stringify(name)}, which is not on the PATH this git starts hooks with as ${name}.exe, so Git for Windows cannot spawn it`;
+    return null;
+  }
+  if (b.length < 2 || b[0] !== 0x23 || b[1] !== 0x21) return null;
+  const nl = b.indexOf(0x0a);
+  const toks = b.subarray(2, nl === -1 ? Math.min(b.length, 256) : nl).toString('latin1').replace(/^[ \t]+/, '').split(/[ \t]+/).filter((t) => t !== '');
+  const interp = toks[0] || '';
+  const cr = (s) => (/\r/.test(s) ? ' (a CR left by CRLF line ends stays in the name on POSIX)' : '');
+  if (!interp || interp[0] !== '/') return null;
+  if (!isExe(interp)) return `its #! line names ${JSON.stringify(interp)}, which does not exist or cannot run${cr(interp)}, so git cannot run it`;
+  const prog = toks[1];
+  if (path.posix.basename(interp) === 'env' && prog && prog[0] !== '-') {
+    const found = prog.indexOf('/') !== -1 ? isExe(prog) : dirs.some((d) => isExe(path.join(d, prog)));
+    if (!found) return `its #! line runs env ${JSON.stringify(prog)}, which is not on PATH${cr(prog)}, so git cannot run it`;
+  }
+  return null;
+}
+// The folders this process's PATH names for a hook's interpreter, used only to word a cause (the verdict
+// is git's own, hookStarts): POSIX, git's exec path ahead of PATH, or of /usr/bin:/bin when PATH is unset
+// (git's setup_path); win32, PATH as it stands (Git for Windows' launcher adds its own folders for the git
+// it starts, which only that git can say).
+function hookDirs(projRoot) {
+  const inherited = String(process.env.PATH || '');
+  if (process.platform === 'win32') return inherited.split(path.delimiter).filter(Boolean);
+  return [gitOut(projRoot, ['--exec-path'])].concat((inherited || '/usr/bin:/bin').split(':')).filter(Boolean);
+}
+// M34.5.F.4 item 2 (Q6, gate-1 C1): whether the git this shell runs can start a hook, asked of that git: a
+// stub holding the hook's own first line, its exact bytes, then `exit 0`, run by `git hook run` (git 2.36
+// or newer) from the project root with readiness's own environment, so the git and the PATH a commit from
+// this shell uses. Measured on Windows: Git for Windows started bare (its inner git) starts no sh hook,
+// while its cmd launcher and Git Bash do, so which folders that git searches is git's to say, never a
+// model's. The stub runs nothing of the hook but its interpreter: a #! line alone, an empty script, which
+// exits 0 under sh, bash, node, python and perl alike; a file with no #! line at its first byte (none, or
+// a byte order mark first) is one git itself would run with sh (POSIX) or not at all (win32), so its stub
+// is that line and `exit 0`, the sh git would use. A git with no `git hook run` (older than 2.36) is read by
+// oldGitVerdict. -> null (it starts) | { cause, git } | { old: true, version, judged, cause }.
+function hookStarts(projRoot, rel) {
+  const bytes = fs.readFileSync(path.join(projRoot, ...rel.split('/')));
+  const nl = bytes.indexOf(0x0a);
+  const first = nl === -1 ? Buffer.concat([bytes, Buffer.from('\n', 'latin1')]) : bytes.subarray(0, nl + 1);
+  const shebang = bytes.length >= 2 && bytes[0] === 0x23 && bytes[1] === 0x21;
+  const stub = shebang ? first : Buffer.concat([first, Buffer.from('exit 0\n', 'latin1')]);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-update-hook-'));
+  try {
+    const hook = path.join(dir, 'pre-commit');
+    fs.writeFileSync(hook, stub);
+    try { fs.chmodSync(hook, 0o755); } catch (_) { /* win32: git reads the #! line */ }
+    const fwd = dir.split(path.sep).join('/');
+    const r = spawnSync('git', ['-c', `core.hooksPath=${fwd}`, 'hook', 'run', '--ignore-missing', 'pre-commit'], { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30000 });
+    if (r.error) return { cause: `git could not be run to ask (${r.error.code || r.error.message})`, git: '' };
+    if (r.status === 0) return null;
+    const msg = normalize(`${r.stderr || ''}\n${r.stdout || ''}`).split('\n').map((l) => l.trim()).filter(Boolean).join('; ')
+      .split(`${fwd}/pre-commit`).join(rel).split(hook).join(rel).slice(0, 300);
+    if (/'hook' is not a git command/.test(msg)) return Object.assign({ old: true, version: gitOut(projRoot, ['--version']) || 'git' }, oldGitVerdict(bytes, process.platform, { dirs: hookDirs(projRoot) }));
+    const why = hookRunnable(bytes, process.platform, { dirs: hookDirs(projRoot) });
+    return { cause: `${why || 'the interpreter its #! line names is not on the PATH this git starts hooks with'}; git: ${msg}`, git: msg };
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+// A git with no `git hook run` (M34.5.F.4, gate-1 D1): on POSIX the folders git searches for a hook's
+// interpreter do not depend on how git was started (its exec path ahead of PATH), so the bytes rule judges
+// it; on win32 they do (run 2 of the PC probe), so the hook cannot be judged and the git must be updated.
+// -> { judged: true, cause: null | <cause> } | { judged: false, cause }
+function oldGitVerdict(bytes, platform, opts) {
+  if (platform === 'win32') return { judged: false, cause: 'this Git for Windows has no `git hook run` (2.36 or newer has it), and which folders it searches for a hook\'s interpreter depends on how it was started, so the bytes cannot say whether it starts the hook' };
+  return { judged: true, cause: hookRunnable(bytes, platform, opts) };
+}
+// The repair that puts a kit file back (M34.5.F.4): a copied file through --apply; a bootstrap-filled one
+// (--apply refuses it) from git's newest commit whose copy is the template with this project's fills,
+// or through --place-floor for the two the floor door places, or by hand from its sbak/ template.
+// -> { repair, alt }
+function fileRestore(projRoot, row, req, KU) {
+  if (row.render !== 'wiring') return { repair: `${KU} --apply ${row.file}`, alt: `mark it INTENTIONAL DIVERGENCE in its first lines to keep it` };
+  const tpl = readIf(path.join(projRoot, KIT_DIR, ...row.template.split('/'))) || '';
+  const good = lastGoodCommit(projRoot, row.file, tpl, req);
+  const door = FLOOR_FILLED.indexOf(row.file) !== -1 ? `place it from this project's fills: ${KU} --place-floor <fills file>` : `fill ${KIT_DIR}/${row.template} with this project's values by hand`;
+  return good ? { repair: `from your own terminal: git checkout ${good.slice(0, 12)} -- ${row.file} (the newest commit whose copy matches)`, alt: `${door}, or mark it INTENTIONAL DIVERGENCE to keep it` }
+    : { repair: door, alt: 'mark it INTENTIONAL DIVERGENCE in its first lines to keep it' };
+}
+// Where git still holds a file the tree lacks: HEAD (deleted in the working tree only), else the parent of
+// the newest commit that deleted it. -> a ref for `git checkout <ref> -- <file>`, or null.
+function historyRef(projRoot, rel) {
+  if (!rel || /[*?[\]{}]/.test(rel) || rel.indexOf('..') !== -1) return null;
+  if (gitOut(projRoot, ['cat-file', '-e', `HEAD:${rel}`]) !== null) return 'HEAD';
+  const del = gitOut(projRoot, ['log', '-n', '1', '--format=%H', '--diff-filter=D', '--', rel]);
+  return del && /^[0-9a-f]{40,64}$/.test(del.trim()) ? `${del.trim().slice(0, 12)}^` : null;
+}
+const READY_ROWS = ['modules', 'state', 'config', 'wiring', 'hooks', 'read-first', 'cli', 'payload', 'managed', 'smoke', 'HEAD', 'tree', 'migration'];
+// M34.5.F.7: a resolved row is pending too - the pin it waits on rises only at the next --apply-all.
+const MIGRATE_PENDING = ['replace', 'add', 'merge', 'resolved', 'conflict', 'retire'];
 // A path as the person's repository names it (forward slashes), or its basename when it lies outside.
 function relOf(projRoot, p) {
   const r = path.relative(projRoot, path.resolve(String(p))).split(path.sep).join('/');
@@ -577,7 +770,7 @@ function cmdReady(projRoot, opts) {
       const off = sm.disablingFinding(loc);
       if (off) { fail('wiring', `.claude/settings.local.json ${off}; it outranks .claude/settings.json`, HUMAN('.claude/settings.local.json')); return; }
     }
-    pass('wiring', `.claude/settings.json registers ${n === null ? 'the session hooks (no kit template here to compare its registrations against)' : `the kit's ${n} hook registrations with their matchers, the red gate's onFailure block and the session hooks`}, every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved), and neither it nor .claude/settings.local.json sets disableAllHooks (user, managed and command-line settings are not read)`);
+    pass('wiring', `.claude/settings.json registers ${n === null ? 'the session hooks (no kit template here to compare its registrations against)' : `the kit's ${n} hook registrations with their matchers, the red gate's onFailure block and the session hooks`}, every hook script a node command names under .claude/, scripts/ or validators/ is present (other commands are not resolved), and neither it nor .claude/settings.local.json sets disableAllHooks to anything but false (user, managed and command-line settings are not read: a session started with disableAllHooks true at user or command-line level, with --setting-sources that leaves out project, or with --bare runs with no project hooks, and this row cannot see it)`);
   });
   // hooks
   guard('hooks', () => {
@@ -591,8 +784,52 @@ function cmdReady(projRoot, opts) {
       else if (!st.isFile()) bad.push(`${f} is not a regular file`);
       else if (process.platform !== 'win32' && !(st.mode & 0o111)) bad.push(`${f} is not executable`);
     }
-    if (bad.length) fail('hooks', `core.hooksPath reads .githooks, but ${bad.join('; ')}`, ADOPT);
-    else pass('hooks', `core.hooksPath reads .githooks; ${hookFiles.join(', ')} ${process.platform === 'win32' ? 'are regular files' : 'are regular executable files'}`);
+    if (bad.length) { fail('hooks', `core.hooksPath reads .githooks, but ${bad.join('; ')}`, ADOPT); return; }
+    // M34.5.F.4 item 1 (W2-01, C2-02): each hook is the kit's by content - F.1's compare against the
+    // installed release, this project's fills read as the kit's, the severity the tier requires judged
+    const inst = installedPayload(projRoot);
+    if (!inst.map) { fail('hooks', `the git hooks cannot be compared with an installed release (${inst.why})`, `re-run the installer (sbak-install.cjs), which places ${KIT_DIR}/release-manifest.json, then ${READY_AGAIN}`); return; }
+    const req = requiredSet(projRoot);
+    // M34.5.F.4 item 2: each hook can start, asked of the git this shell runs (hookStarts); a hook whose
+    // bytes are the kit's that git cannot start names the shell, a changed one its restore
+    const byBytes = [];
+    for (const f of hookFiles) {
+      const st = hookStarts(projRoot, f);
+      if (!st) continue;
+      if (st.old && !st.judged) { fail('hooks', `${f} cannot be judged: ${st.cause}`, `update Git for Windows (2.36 or newer), then ${READY_AGAIN}`); return; }
+      const oldNote = st.old ? ` (judged by its bytes: this git (${st.version}) has no \`git hook run\`)` : '';
+      if (st.old && !st.cause) { byBytes.push(`${f} judged by its bytes: this git (${st.version}) has no \`git hook run\``); continue; }
+      const c0 = floorCompare(projRoot, f, inst.map, req.prebootstrap ? undefined : req);
+      const fix = fileRestore(projRoot, MANAGED.find((r) => r.file === f), req, KU);
+      fail('hooks', `${f} cannot run: ${st.cause}${oldNote}`, c0.status === 'same' || c0.status === 'divergent'
+        ? `commit from a shell whose git starts hooks with sh on its PATH (Git Bash, or cmd through Git's cmd\\git.exe), and run ${READY_AGAIN} from that shell`
+        : `${fix.repair}, then ${READY_AGAIN}`);
+      return;
+    }
+    const kept = [];
+    for (const f of hookFiles) {
+      // before the bootstrap the template is unfilled: its severity is the bootstrap's to fill, not judged
+      const c = floorCompare(projRoot, f, inst.map, req.prebootstrap ? undefined : req);
+      if (c.status === 'same') continue;
+      if (c.status === 'divergent') { kept.push(f); continue; }
+      if (c.status !== 'differ' || c.template) { fail('hooks', `${f} cannot be compared: ${c.why}`, `re-run the installer (sbak-install.cjs), which re-verifies the payload, then ${READY_AGAIN}`); return; }
+      const s = stampOf(readIf(path.join(projRoot, f)) || '');
+      if (s !== null && cur && s !== cur) { fail('hooks', `${f} is v${s}'s copy, not this kit's (v${cur}); the migration merges it`, MIGRATE); return; }
+      if (kitRoot && kitHookState(projRoot, kitRoot, path.posix.basename(f)) === 'own') { fail('hooks', `${f} is not the kit's (your own file, no @kit-version stamp), so the kit's ${f.endsWith('pre-push') ? 'push' : 'commit'} checks never run`, `${KU} --adopt --hooks chain (it moves to ${HOOKS_PREVIOUS}/ and runs first, then the kit's checks; or --hooks replace), then ${READY_AGAIN}`); return; }
+      const fix = fileRestore(projRoot, MANAGED.find((r) => r.file === f), req, KU);
+      fail('hooks', `${f} is not the kit's: ${s !== null ? 'it carries the kit\'s stamp, but ' : ''}${c.why}`, `${fix.repair}, then ${READY_AGAIN}`);
+      return;
+    }
+    // F.5's declaration, read through its own chainFolder: a declared chain must be in effect
+    const chain = gitOut(projRoot, ['config', '--get', 'sbak.hookschain']);
+    let chainNote = '';
+    if (chain !== null) {
+      const dir = chainFolder(projRoot, chain);
+      if (!dir || !fs.existsSync(dir)) { fail('hooks', `git config sbak.hooksChain names ${chain}, whose folder ${dir ? relOf(projRoot, dir) : '(unresolved)'} is absent, so your chained hooks do not run`, `restore that folder, or stop the chain with git config --unset sbak.hooksChain, then ${READY_AGAIN}`); return; }
+      chainNote = `; yours chained from ${chain} (git config sbak.hooksChain)`;
+    }
+    const same = hookFiles.filter((f) => kept.indexOf(f) === -1);
+    pass('hooks', `core.hooksPath reads .githooks; ${hookFiles.join(' and ')} are regular, ${process.platform === 'win32' ? '' : 'executable, '}runnable files${same.length ? `, ${same.length === hookFiles.length ? 'both ' : `${same.join(', ')} `}the installed release's by content (this project's fills read as the kit's)` : ''}${kept.length ? `; ${kept.join(', ')} kept (INTENTIONAL DIVERGENCE, declared)` : ''}${chainNote}${byBytes.length ? `; ${byBytes.join("; ")}` : ""}`);
   });
   // read-first
   guard('read-first', () => {
@@ -601,7 +838,18 @@ function cmdReady(projRoot, opts) {
     const r = run(process.execPath, [hook, '--check']);
     if (r.status === 0) { pass('read-first', 'the read-first lists pass the hook\'s own --check'); return; }
     const why = readyReason(r, projRoot);
-    fail('read-first', why, why.endsWith(READY_LOAD_FAIL) ? ADOPT : `correct the entry it names in a staged copy of the list, then place it: ${KU} --place-read-first <role> <staged copy>`);
+    if (why.endsWith(READY_LOAD_FAIL)) { fail('read-first', why, ADOPT); return; }
+    // M34.5.F.4 item 7 (W2-06): a dead entry whose file git still holds is restored, never edited out
+    // of the lists; CLAUDE.md first. Only an entry git never held keeps the list edit.
+    const all = normalize(`${r.stderr || ''}\n${r.stdout || ''}`);
+    const dead = []; const re = /: ([^\s;]+) - resolves to no file/g; let m;
+    while ((m = re.exec(all))) if (dead.indexOf(m[1]) === -1) dead.push(m[1]);
+    dead.sort((a, b) => (b === 'CLAUDE.md') - (a === 'CLAUDE.md'));
+    for (const d of dead) {
+      const ref = historyRef(projRoot, d);
+      if (ref) { fail('read-first', why, `restore ${d} from git, from your own terminal: git checkout ${ref} -- ${d}${d === 'CLAUDE.md' ? ` (or place it: ${KU} --place-project-claude <filled-file>)` : ''}, then ${READY_AGAIN}`); return; }
+    }
+    fail('read-first', why, `correct the entry it names in a staged copy of the list, then place it: ${KU} --place-read-first <role> <staged copy>`);
   });
   // cli
   guard('cli', () => {
@@ -636,18 +884,33 @@ function cmdReady(projRoot, opts) {
     // M34.6.A: a required row's absent live file is NOT READY; a row the tier or a toggle
     // does not render stays a skip, and the pass line counts them
     const req = requiredSet(projRoot); const absent = []; let notRendered = 0;
+    // M34.5.F.4 item 3 (W2-03): every present file by content, through F.1's compare against the
+    // installed release (a copied file its payload hash, a bootstrap-filled one the template with this
+    // project's fills); a stamp other than this kit's stays the migration's; the two git hooks are the
+    // hooks row's. With no installed release manifest, the stamps, a missing stamp a difference.
+    const inst = installedPayload(projRoot); const changed = []; const unlisted = [];
     for (const row of MANAGED) {
       const live = readIf(path.join(projRoot, row.file)); const tpl = readIf(path.join(kitRoot, row.template));
       if (tpl === null) continue;
       if (live === null) { const w = req.why(row); if (w.required) absent.push({ row, w }); else notRendered++; continue; }
       if (declaresDivergence(live)) { kept.push(row.file); continue; }
+      const ls = stampOf(live); const ts = stampOf(tpl);
+      const hook = row.file.indexOf('.githooks/') === 0;
       if (row.render === 'wiring') {
         const s = live.match(/\{\{[A-Za-z0-9_]+\}\}/g);
-        if (s) unfilled.push({ file: row.file, tok: s[0] }); else filled++;
+        if (s) { unfilled.push({ file: row.file, tok: s[0] }); continue; }
+        if (ls !== null && ts !== null && ls !== ts) { stale.push({ file: row.file, stamp: ls }); continue; }
+        if (!hook && inst.map) { const c = floorCompare(projRoot, row.file, inst.map, req); if (c.status === 'differ') { changed.push({ row, why: c.why }); continue; } }
+        filled++;
         continue;
       }
-      const ls = stampOf(live); const ts = stampOf(tpl);
-      if (ls !== null && ts !== null && ls !== ts) stale.push({ file: row.file, stamp: ls }); else at++;
+      if (ls !== null && ts !== null && ls !== ts) { stale.push({ file: row.file, stamp: ls }); continue; }
+      if (hook) { at++; continue; }
+      if (!inst.map) { if (ls === null) changed.push({ row, why: `${row.file} carries no @kit-version stamp` }); else at++; continue; }
+      const c = floorCompare(projRoot, row.file, inst.map);
+      if (c.status === 'differ') changed.push({ row, why: c.why });
+      else if (c.status === 'unchecked') unlisted.push(row.file);
+      else at++;
     }
     const keptNote = kept.length ? `; ${kept.length} kept (INTENTIONAL DIVERGENCE): ${kept.join(', ')}` : '';
     const why = [];
@@ -656,10 +919,36 @@ function cmdReady(projRoot, opts) {
       why.push(`${absent[0].row.file} is absent, and this project's tier (${req.tier}) requires it${extra ? ` (${extra})` : ''}${absent.length > 1 ? `; ${absent.length - 1} more required kit file(s) absent: ${absent.slice(1, 4).map((a) => a.row.file).join(', ')}` : ''}`);
     }
     if (stale.length) why.push(`${stale.length} kit file(s) not at v${cur}: ${stale.slice(0, 3).map((s) => `${s.file} @${s.stamp}`).join(', ')}`);
+    if (changed.length) why.push(`${changed.length} kit file(s) differ from the installed release by content, first: ${changed[0].why}${changed.length > 1 ? `; also ${changed.slice(1, 4).map((c) => c.row.file).join(', ')}` : ''}`);
     if (unfilled.length) why.push(`${unfilled.length} bootstrap-filled file(s) with an unfilled {{TOKEN}}: ${unfilled.slice(0, 3).map((u) => `${u.file} (${u.tok})`).join(', ')}`);
     if (stale.length) staleStamps = true;
-    if (why.length) fail('managed', why.join('; ') + keptNote, absent.length ? ADOPT : stale.length ? `${KU} --apply ${stale[0].file} (or mark it INTENTIONAL DIVERGENCE to keep it)` : `fill ${unfilled[0].tok} in ${unfilled[0].file}, commit it, then ${READY_AGAIN}`);
-    else pass('managed', `${at} managed files at v${cur}, ${filled} filled, 0 unfilled tokens, ${notRendered} not rendered by this project's tier or toggles${keptNote}`);
+    // the repair restores (W2-02, W2-06): an absent validator through the floor's door, any other absent
+    // file through adopt; a changed one through --apply, or a filled one from git's last good copy
+    const absentRepair = () => (absent[0].row.file.indexOf('validators/') === 0 ? `${KU} --place-floor (it places each validator this project's tier requires that is absent, checked against the installed release), then ${READY_AGAIN}` : ADOPT);
+    const changedRepair = () => { const fix = fileRestore(projRoot, changed[0].row, req, KU); return `${fix.repair} (or ${fix.alt}), then ${READY_AGAIN}`; };
+    const unlistedNote = unlisted.length ? `; ${unlisted.length} the installed release lists no hash for, not compared: ${unlisted.slice(0, 3).join(', ')}` : '';
+    if (why.length) fail('managed', why.join('; ') + keptNote + bootstrapNote(req, projRoot), absent.length ? absentRepair() : stale.length ? `${KU} --apply ${stale[0].file} (or mark it INTENTIONAL DIVERGENCE to keep it)` : changed.length ? changedRepair() : `fill ${unfilled[0].tok} in ${unfilled[0].file}, commit it, then ${READY_AGAIN}`);
+    else pass('managed', `${at} managed files ${inst.map ? `are the installed release's by content (v${cur}; the git hooks on the hooks row)` : `at v${cur} by stamp (no ${KIT_DIR}/release-manifest.json to compare content with)`}, ${filled} filled with this project's fills, 0 unfilled tokens, ${notRendered} not rendered by this project's tier or toggles${unlistedNote}${keptNote}${bootstrapNote(req, projRoot)}`);
+  });
+  // M34.5.F.4 item 4 (W2-12): readiness runs the project's own floor - the mini-smoke, its pre-commit
+  // fixture included - and reports it as one row with its seconds
+  guard('smoke', () => {
+    const sp = path.join(projRoot, 'scripts', 'smoke-project.cjs');
+    if (!fs.existsSync(sp)) { fail('smoke', 'scripts/smoke-project.cjs is absent, so the mini-smoke cannot run', ADOPT); return; }
+    const t0 = Date.now();
+    const r = spawnSync(process.execPath, [sp], { cwd: projRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180000, maxBuffer: 16 * 1024 * 1024 });
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    const out = normalize(String(r.stdout || ''));
+    const ok = /^smoke-project: all (\d+) checks passed \((\d+) visible skip\(s\)\)\.$/m.exec(out);
+    if (r.status === 0 && ok) {
+      const pc = /^ok {4}hook pre-commit \(git\): failing case/m.test(out) ? 'and the pre-commit refused an assertion-free test' : `and the pre-commit fixture was a visible skip (${((/^skip {2}hook pre-commit \(git\) \S+ (.*)$/m.exec(out) || [])[1] || 'see its output').slice(0, 160)})`;
+      pass('smoke', `scripts/smoke-project.cjs passed ${ok[1]} checks (${ok[2]} visible skips) in ${secs} s: each present hook and validator fired on its fixtures, ${pc}`);
+      return;
+    }
+    const f = /^smoke-project: (\d+) of (\d+) checks FAILED:$/m.exec(out);
+    const first = (out.split('\n').find((l) => /^FAIL {2}/.test(l)) || '').replace(/^FAIL\s+/, '').slice(0, 200);
+    fail('smoke', f ? `scripts/smoke-project.cjs: ${f[1]} of ${f[2]} checks FAILED in ${secs} s, first: ${first}` : `scripts/smoke-project.cjs did not finish (${r.error ? (r.error.code || r.error.message) : `exit ${r.status}`}): ${readyReason(r, projRoot)}`,
+      `node scripts/smoke-project.cjs (it names each failing check), restore what it names (${KU} --apply <file>, or the pre-commit as the hooks row says), then ${READY_AGAIN}`);
   });
   // HEAD
   const head = run('git', ['rev-parse', '--verify', '--short', 'HEAD']);
@@ -734,10 +1023,20 @@ function cmdReady(projRoot, opts) {
 // from memory dropped the set-mode line). Without --model no block is printed - a literal
 // placeholder would fail as a shell redirect - and the role line names the flag; the READY line then
 // stays the last line, as every caller that runs --ready without it (the installer's upgrade) reads.
+// M34.5.F.13 (C4-04, Q9, Q4): each shell's cd line quotes the path by that shell's own rules - cmd in
+// double quotes, PowerShell in single quotes with each ' doubled, bash in single quotes with each '
+// written '\'' - so & $ and ' land as typed; a path cmd cannot carry in a pasted line (a double quote,
+// or two % signs, a %NAME% pair interactive cmd may expand) gets no cmd line, and the block names why.
+// The cmd launch line quotes its set (set "X=1" &&), so the child sees 1, not "1 " (Q4).
+function cmdCannotCarry(p) {
+  if (String(p).indexOf('"') !== -1) return 'a double quote (")';
+  if ((String(p).match(/%/g) || []).length >= 2) return 'two % signs (a %NAME% pair cmd may expand)';
+  return null;
+}
 const READY_SHELLS = {
-  cmd: { label: 'cmd', other: 'cmd', cd: (p) => `cd /d ${p}`, launch: (m) => `set CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 && claude --model ${m}` },
-  powershell: { label: 'PowerShell', other: 'PowerShell', cd: (p) => `cd "${p}"`, launch: (m) => `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model ${m}` },
-  bash: { label: 'bash', other: 'POSIX', cd: (p) => `cd "${p}"`, launch: (m) => `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model ${m}` },
+  cmd: { label: 'cmd', other: 'cmd', cd: (p) => `cd /d "${p}"`, launch: (m) => `set "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1" && claude --model ${m}` },
+  powershell: { label: 'PowerShell', other: 'PowerShell', cd: (p) => `cd '${String(p).replace(/'/g, "''")}'`, launch: (m) => `$env:CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP="1"; claude --model ${m}` },
+  bash: { label: 'bash', other: 'POSIX', cd: (p) => `cd '${String(p).replace(/'/g, "'\\''")}'`, launch: (m) => `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model ${m}` },
 };
 const READY_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._[\]-]{0,63}$/;
 function readyRole(projRoot) {
@@ -774,11 +1073,16 @@ function handoff(projRoot, opts) {
   if (!model) return { role: `role: none - this is the bootstrap window; run --ready again with --model and the model this session runs on${typeof opts.model === 'string' && opts.model ? ` ("${opts.model}" is not a model name)` : ''}, and the leaving-bootstrap block follows the READY line.`, block: null };
   const lite = requiredSet(projRoot).tier === 'lite';
   const sh = readyShell(projRoot);
-  const f = READY_SHELLS[sh.shell];
   const p = path.resolve(projRoot);
-  const others = Object.keys(READY_SHELLS).filter((s) => s !== sh.shell).map((s) => `${READY_SHELLS[s].other}: ${READY_SHELLS[s].cd(p)} and ${READY_SHELLS[s].launch(model)}`);
+  const bad = cmdCannotCarry(p);
+  const shell = sh.shell === 'cmd' && bad ? 'powershell' : sh.shell;
+  const f = READY_SHELLS[shell];
+  const others = Object.keys(READY_SHELLS).filter((s) => s !== shell).map((s) => (s === 'cmd' && bad
+    ? `cmd: none - this path holds ${bad}, which a pasted cmd line cannot carry`
+    : `${READY_SHELLS[s].other}: ${READY_SHELLS[s].cd(p)} and ${READY_SHELLS[s].launch(model)}`));
   const lines = [];
   if (sh.note) lines.push(sh.note);
+  if (shell !== sh.shell) lines.push(`shell: this path holds ${bad}, which a pasted cmd line cannot carry - the PowerShell lines follow (or move the project to a path without it).`);
   lines.push(
     'Bootstrap is done. Five steps:',
     '1. Open a NEW terminal window.',
@@ -888,6 +1192,169 @@ const ADOPT_TREES = [
   { from: 'templates/scripts', to: 'scripts' },
 ];
 const FILE_CLASSES = ['payload', 'repo-identity'];
+
+// ── the person's own git hooks (M34.5.F.5) ──────────────────────────────────────────────────
+// Before adopt writes anything it reads what git runs today (W1-02, C1-03): the effective
+// core.hooksPath and its scope, or git's default folder (<git-common-dir>/hooks) when none is set,
+// the hooks in that folder, the kit's own two paths in .githooks/, and whether this checkout is a
+// linked worktree (whose configuration is shared with every other checkout). One reading, behind
+// --hooks-in-effect; the installer runs the release's own copy of this script for its report. The
+// person's word (--hooks chain | replace) is the only thing that changes their hooks: chain keeps
+// them running from the kit's hooks, first; replace stops them; either is recorded in git config
+// (sbak.hooksChain or sbak.hooksReplaced, "<scope>:<folder>"). The names are githooks(5)'s, read at
+// git 2.43.0.
+const GIT_HOOK_NAMES = ['applypatch-msg', 'pre-applypatch', 'post-applypatch', 'pre-commit', 'pre-merge-commit',
+  'prepare-commit-msg', 'commit-msg', 'post-commit', 'pre-rebase', 'post-checkout', 'post-merge', 'pre-push',
+  'pre-receive', 'update', 'proc-receive', 'post-receive', 'post-update', 'reference-transaction', 'push-to-checkout',
+  'pre-auto-gc', 'post-rewrite', 'sendemail-validate', 'fsmonitor-watchman', 'p4-changelist', 'p4-prepare-changelist',
+  'p4-post-changelist', 'p4-pre-submit', 'post-index-change'];
+const KIT_HOOKS = ['pre-commit', 'pre-push'];
+const HOOKS_PREVIOUS = '.githooks/previous';
+const FORWARDER_MARK = '# sbak hook forwarder';
+// The chained folder from its record value: <scope>:<folder>, "default:" being git's own folder.
+// The kit's two hooks and each forwarder resolve it with the same three shell lines (a lockstep pin).
+function forwarderText(name) {
+  return ['#!/usr/bin/env sh',
+    `${FORWARDER_MARK} (kit-update --adopt --hooks chain): runs your own ${name} from the folder`,
+    '# git config sbak.hooksChain names, with git\'s arguments and input, and exits with its code. With',
+    `# no chain declared, or no ${name} in that folder, it does nothing.`,
+    'sbak_chain=$(git config --get sbak.hookschain 2>/dev/null) || exit 0',
+    'sbak_dir=${sbak_chain#*:}',
+    'case "$sbak_chain" in default:*) sbak_dir="$(git rev-parse --git-common-dir)/hooks" ;; esac',
+    'case "$sbak_dir" in "~/"*) sbak_dir="$HOME/${sbak_dir#"~/"}" ;; esac',
+    `[ -x "$sbak_dir/${name}" ] || exit 0`,
+    '[ "$(cd "$sbak_dir" && pwd -P)" != "$(cd .githooks 2>/dev/null && pwd -P)" ] || exit 0',
+    `exec "$sbak_dir/${name}" "$@"`,
+    ''].join('\n');
+}
+function gitOut(cwd, args) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  return r.error || r.status !== 0 ? null : String(r.stdout || '').replace(/\r?\n$/, '');
+}
+function sameDir(a, b) {
+  const real = (s) => { try { return fs.realpathSync.native(s); } catch (_) { try { return fs.realpathSync(s); } catch (__) { return path.resolve(s); } } };
+  const n = (s) => { const r = path.resolve(real(s)); return process.platform === 'win32' ? r.toLowerCase() : r; };
+  return n(a) === n(b);
+}
+// The hooks git would run from a folder: a file named for a git hook, executable (POSIX) or starting
+// "#!" (win32, where Git for Windows reads the first line); never a .sample.
+function hookNamesIn(dir) {
+  if (!dir) return [];
+  const out = [];
+  for (const name of GIT_HOOK_NAMES) {
+    const p = path.join(dir, name);
+    let st; try { st = fs.statSync(p); } catch (_) { continue; }
+    if (!st.isFile()) continue;
+    if (process.platform === 'win32') { let head = ''; try { head = fs.readFileSync(p).subarray(0, 2).toString('latin1'); } catch (_) { head = ''; } if (head === '#!') out.push(name); }
+    else if (st.mode & 0o111) out.push(name);
+  }
+  return out;
+}
+// The kit's own file at .githooks/<name>, or the person's: kit when its head declares INTENTIONAL
+// DIVERGENCE (the person's declared copy), when readFills reads it as the template with this
+// project's fills (the compare M34.5.F.1's self-check uses), when it equals the template (CRLF read as
+// LF), or when it carries a @kit-version stamp (an earlier release's copy, which --migrate merges).
+function kitHookState(projRoot, kitRoot, name) {
+  const live = readIf(path.join(projRoot, '.githooks', name));
+  if (live === null) return 'absent';
+  if (declaresDivergence(live)) return 'kit';
+  const tpl = kitRoot ? readIf(path.join(kitRoot, 'templates', 'dot-githooks', name)) : null;
+  if (tpl !== null && (normalize(live) === normalize(tpl) || readFills(normalize(tpl), normalize(live)) !== null)) return 'kit';
+  return stampOf(live) !== null ? 'kit' : 'own';
+}
+function hooksInEffect(projRoot, kitRoot) {
+  const g = (args) => gitOut(projRoot, args);
+  const h = { kind: 'none', ask: false, repo: false, scope: null, folder: null, resolved: null, how: null, names: [], own: [], previousLocal: null,
+    linkedWorktreeOf: null, otherCheckouts: [], chain: null, replaced: null, summary: '' };
+  const top = g(['rev-parse', '--show-toplevel']);
+  h.repo = top !== null;
+  let rows = g(['config', '--show-scope', '--get-all', 'core.hooksPath']);
+  rows = (rows || '').split('\n').filter(Boolean).map((l) => { const i = l.indexOf('\t'); return i === -1 ? { scope: 'unknown', value: l } : { scope: l.slice(0, i), value: l.slice(i + 1) }; });
+  const eff = rows.length ? rows[rows.length - 1] : null;
+  const common = h.repo ? g(['rev-parse', '--git-common-dir']) : null;
+  const gitDir = h.repo ? g(['rev-parse', '--git-dir']) : null;
+  const commonAbs = common === null ? null : path.resolve(projRoot, common);
+  if (h.repo) {
+    h.previousLocal = g(['config', '--local', '--get', 'core.hooksPath']);
+    h.chain = g(['config', '--get', 'sbak.hookschain']);
+    h.replaced = g(['config', '--get', 'sbak.hooksreplaced']);
+    const wts = (g(['worktree', 'list', '--porcelain']) || '').split('\n').filter((l) => l.indexOf('worktree ') === 0).map((l) => l.slice(9));
+    if (gitDir !== null && commonAbs !== null && !sameDir(path.resolve(projRoot, gitDir), commonAbs)) h.linkedWorktreeOf = wts[0] || path.dirname(commonAbs);
+    h.otherCheckouts = wts.filter((w) => !sameDir(w, top));
+  }
+  const HOW = { local: 'core.hooksPath in this repository\'s config', worktree: 'a per-worktree core.hooksPath', global: 'a user-level core.hooksPath', system: 'a system core.hooksPath' };
+  if (eff) { h.scope = eff.scope === 'global' ? 'global' : eff.scope; h.folder = eff.value; h.how = HOW[eff.scope] || `core.hooksPath (${eff.scope} scope)`; }
+  else if (h.repo) { h.scope = 'default'; h.folder = ''; h.how = 'git\'s default folder; no core.hooksPath is set'; }
+  else {
+    const tpl = gitOut(projRoot, ['config', '--path', '--get', 'init.templateDir']);
+    if (tpl) { h.scope = 'template'; h.folder = path.join(tpl, 'hooks'); h.how = 'git init copies them from your init.templateDir'; }
+  }
+  if (h.scope === 'default') h.resolved = path.join(commonAbs, 'hooks');
+  else if (h.folder !== null) {
+    let p = h.folder; if (/^~[\\/]/.test(p)) p = path.join(os.homedir(), p.slice(2));
+    h.resolved = path.isAbsolute(p) ? p : path.resolve(top || projRoot, p);
+  }
+  const kitPath = h.repo && h.resolved !== null && h.scope !== 'default' && h.scope !== 'template' && sameDir(h.resolved, path.join(top, '.githooks'));
+  h.names = kitPath ? [] : hookNamesIn(h.resolved);
+  if (h.repo) h.own = KIT_HOOKS.filter((n) => kitHookState(projRoot, kitRoot, n) === 'own').map((n) => `.githooks/${n}`);
+  const shown = h.scope === 'default' ? (path.relative(top, h.resolved).split(path.sep).join('/') || '.git/hooks') : h.folder;
+  if (h.linkedWorktreeOf && !kitPath) {
+    h.kind = 'linked';
+    h.summary = `this folder is a linked worktree of ${h.linkedWorktreeOf}${h.names.length ? `; ${h.names.join(', ')} from ${shown} (${h.how}) in effect` : ''}`;
+  } else if (h.own.length) {
+    h.kind = 'own'; h.ask = true;
+    h.summary = `${h.own.join(' and ')} ${h.own.length === 1 ? 'is' : 'are'} your own, not the kit's${h.names.length ? `; also ${h.names.join(', ')} from ${shown} (${h.how})` : ''}`;
+  } else if (kitPath) {
+    h.kind = 'kit';
+    h.summary = `the kit's hooks in .githooks${h.chain !== null ? `; yours chained from ${h.chain} (git config sbak.hooksChain)` : ''}`;
+  } else if (h.names.length) {
+    h.kind = h.scope === 'global' ? 'user' : h.scope; h.ask = true;
+    h.summary = `${h.names.join(', ')} from ${shown} (${h.how})`;
+  } else h.summary = 'none';
+  return h;
+}
+// The record value for the word: "<scope>:<folder as configured>" ("default:" is git's own folder).
+function hooksRecordValue(h) {
+  if (h.kind === 'own') return `moved:${HOOKS_PREVIOUS}`;
+  if (h.scope === 'default' || h.scope === 'template') return 'default:';
+  return `${h.scope}:${h.folder}`;
+}
+// The folder a record value names, as the hooks resolve it.
+function chainFolder(projRoot, value) {
+  if (!value) return null;
+  const i = value.indexOf(':'); const scope = value.slice(0, i); let v = value.slice(i + 1);
+  if (scope === 'default') { const c = gitOut(projRoot, ['rev-parse', '--git-common-dir']); return c === null ? null : path.join(path.resolve(projRoot, c), 'hooks'); }
+  if (/^~[\\/]/.test(v)) v = path.join(os.homedir(), v.slice(2));
+  return path.isAbsolute(v) ? v : path.resolve(projRoot, v);
+}
+// A forwarder at .githooks/<name> for each hook of the chained folder the kit does not ship;
+// install-if-absent (a file already there is the person's and runs as it is). -> [written paths]
+function writeForwarders(projRoot, value, dryRun, W) {
+  const dir = chainFolder(projRoot, value);
+  const out = [];
+  if (!dir || value.indexOf(`moved:`) === 0) return out;
+  for (const name of hookNamesIn(dir)) {
+    if (KIT_HOOKS.indexOf(name) !== -1) continue;
+    const rel = `.githooks/${name}`; const to = path.join(projRoot, '.githooks', name);
+    let exists = true; try { fs.lstatSync(to); } catch (_) { exists = false; }
+    if (exists) continue;
+    if (dryRun) { W(`  would-forward ${rel} -> ${dir}/${name}`); continue; }
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    const tmp = to + '.kit-update.tmp';
+    fs.writeFileSync(tmp, forwarderText(name));
+    try { fs.chmodSync(tmp, 0o755); } catch (_) { /* win32 */ }
+    fs.renameSync(tmp, to);
+    W(`  forwarder  ${rel} -> ${dir.split(path.sep).join('/')}/${name}`);
+    out.push(rel);
+  }
+  return out;
+}
+function cmdHooksInEffect(projRoot, kitRoot, json) {
+  const h = hooksInEffect(projRoot, kitRoot);
+  process.stdout.write(json ? `${JSON.stringify(h)}\n` : `hooks: ${h.summary}${h.ask ? ' (the person\'s word is needed: --hooks chain or --hooks replace)' : ''}\n`);
+  return 0;
+}
+
 function walkFiles(root) {
   const out = [];
   (function w(dir, rel) {
@@ -900,7 +1367,7 @@ function walkFiles(root) {
   })(root, '');
   return out;
 }
-function cmdAdopt(projRoot, kitRoot, dryRun) {
+function cmdAdopt(projRoot, kitRoot, dryRun, hooksWord) {
   // Route table: the file-classes from THIS repo's release-manifest.json — the
   // same classes the pack path reads (C.3.5, one source of truth). FAIL-CLOSED
   // when absent or unclassified: the installer never guesses what is kit
@@ -948,6 +1415,34 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
   const missingControls = [];
   const missing = (control, why, repair, alt) =>
     missingControls.push({ control: control, why: why, repair: repair || null, alt: alt || null });
+  // M34.5.F.5: what git runs today, read before any write (W1-02, C1-03); the person's word is the
+  // only thing that changes it. Case d on the word: the person's own .githooks/pre-commit and pre-push
+  // move to .githooks/previous/ (never over a file there), so the kit's install in this same run.
+  const hk = hooksInEffect(projRoot, kitRoot);
+  W('  hooks      in effect: ' + hk.summary);
+  const hookWordNeeded = hk.ask && !hooksWord;
+  const hookBoth = hk.kind === 'own' && hk.names.length > 0;
+  const movedHooks = [];
+  let hookClash = false;
+  if (hk.kind === 'own' && hooksWord && !hookBoth) {
+    const clash = hk.own.filter((rel) => fs.existsSync(path.join(projRoot, HOOKS_PREVIOUS, path.basename(rel))));
+    if (clash.length) {
+      hookClash = true;
+      W('  refused    ' + clash.map((r) => HOOKS_PREVIOUS + '/' + path.basename(r)).join(', ') + ' already exists; nothing moved');
+      missing('the kit\'s ' + hk.own.map((r) => path.basename(r)).join(' and ') + ' (' + hk.own.join(', ') + ')',
+        clash.map((r) => HOOKS_PREVIOUS + '/' + path.basename(r)).join(', ') + ' already exists, so your own ' + hk.own.join(' and ') + ' could not move there; adopt never overwrites a file',
+        null, 'move or rename ' + clash.map((r) => HOOKS_PREVIOUS + '/' + path.basename(r)).join(', ') + ' yourself, then re-run --adopt --hooks ' + hooksWord);
+    } else {
+      for (const rel of hk.own) {
+        const to = HOOKS_PREVIOUS + '/' + path.basename(rel);
+        if (dryRun) { W('  would-move ' + rel + ' -> ' + to); continue; }
+        fs.mkdirSync(path.join(projRoot, HOOKS_PREVIOUS), { recursive: true });
+        fs.renameSync(path.join(projRoot, rel), path.join(projRoot, to)); // bytes and mode kept
+        movedHooks.push(rel + ' -> ' + to);
+        W('  moved      ' + rel + ' -> ' + to + ' (your file; a change in the working tree for your own commit)');
+      }
+    }
+  }
   for (const t of ADOPT_TREES) {
     const srcRoot = path.join(kitRoot, t.from);
     if (!fs.existsSync(srcRoot)) {
@@ -1149,13 +1644,50 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
         + 'adopt will not write configuration into a repository it was not pointed at',
       'git init',
       'adopt the enclosing repository instead — run --adopt from ' + gitTop);
+  } else if (hk.kind === 'linked') {
+    // M34.5.F.5 item 4: a linked worktree shares .git/config with every checkout (git-worktree(1),
+    // CONFIGURATION FILE), so a write here would change the main checkout's hooks. Refused, named.
+    W('  hooksPath  NOT CHANGED - this folder is a linked worktree of ' + hk.linkedWorktreeOf + '; git keeps one hooks setting for every checkout of a repository');
+    missing('Git hook activation (core.hooksPath)',
+      'this folder is a linked worktree of ' + hk.linkedWorktreeOf + '; git keeps one hooks setting for every checkout of a repository, so adopt will not change it from here',
+      null, 'run --adopt from ' + hk.linkedWorktreeOf);
+  } else if (hookBoth && (hooksWord || hookWordNeeded)) {
+    W('  hooksPath  NOT CHANGED - ' + hk.summary);
+    missing('Git hook activation (core.hooksPath)',
+      'your repository has its own ' + hk.own.join(' and ') + ' and also runs ' + hk.names.join(', ') + ' (' + hk.how + '); adopt chains or replaces one set, so nothing was changed',
+      null, 'move one set of hooks yourself, then re-run --adopt with --hooks chain or --hooks replace');
+  } else if (hookWordNeeded && hk.kind !== 'own') {
+    W('  hooksPath  NOT CHANGED - your repository runs its own git hooks; nothing changes until you choose: --hooks chain or --hooks replace');
+    missing('Git hook activation (core.hooksPath)',
+      'your repository runs its own git hooks (' + hk.summary + '); the kit does not chain or replace them without your word',
+      'node scripts/kit-update.cjs --adopt --hooks chain',
+      'node scripts/kit-update.cjs --adopt --hooks replace   (yours stop running; the previous setting is kept in git config sbak.hooksReplaced)');
+  } else if (hookWordNeeded && hpCur !== '.githooks') {
+    // case d with the path not yet .githooks: setting it would run the person's file in the kit's place
+    W('  hooksPath  NOT CHANGED - ' + hk.summary + '; nothing changes until you choose: --hooks chain or --hooks replace');
   } else {
+    // The word, recorded before the path changes (M34.5.F.5 items 2 and 3): sbak.hooksChain is the
+    // declaration the kit's own hooks and F.4's readiness read; sbak.hooksReplaced the previous setting.
+    const was = hpCur === '' ? null : hpCur;
+    if (hk.ask && hooksWord && !dryRun) {
+      const key = hooksWord === 'chain' ? 'sbak.hooksChain' : 'sbak.hooksReplaced';
+      const other = hooksWord === 'chain' ? 'sbak.hooksReplaced' : 'sbak.hooksChain';
+      spawnSync('git', ['config', '--unset', other], { cwd: projRoot, encoding: 'utf8' });
+      const r = spawnSync('git', ['config', key, hooksRecordValue(hk)], { cwd: projRoot, encoding: 'utf8' });
+      W(r.status === 0 ? '  hooks      ' + hooksWord + ' recorded: git config ' + key + '=' + hooksRecordValue(hk)
+        : '  hooks      FAILED to record ' + key + ' (' + String(r.stderr || '').trim() + ')');
+      if (r.status !== 0) missing('the hooks record (git config ' + key + ')', 'git config could not write it', 'git config ' + key + ' ' + hooksRecordValue(hk));
+    } else if (hk.ask && hooksWord && dryRun) W('  would-record git config ' + (hooksWord === 'chain' ? 'sbak.hooksChain' : 'sbak.hooksReplaced') + '=' + hooksRecordValue(hk));
     if (hpCur === '.githooks') W('  hooksPath  already .githooks');
     else if (dryRun) W('  would-set  core.hooksPath = .githooks');
     else {
       const r = spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: projRoot, encoding: 'utf8' });
-      W(r.status === 0 ? '  hooksPath  set to .githooks' : '  hooksPath  FAILED to set (' + String(r.stderr || '').trim() + ') — run: git config core.hooksPath .githooks');
+      W(r.status === 0 ? '  hooksPath  set to .githooks' + (was ? ' (was ' + was + ')' : '') : '  hooksPath  FAILED to set (' + String(r.stderr || '').trim() + ') — run: git config core.hooksPath .githooks');
     }
+    // A declared chain (this run's word or an earlier one): each other hook of the chained folder gets
+    // its forwarder, install-if-absent, so a clean re-run writes nothing.
+    const chainValue = hk.ask && hooksWord === 'chain' ? hooksRecordValue(hk) : (hk.ask ? null : hk.chain);
+    if (chainValue) writeForwarders(projRoot, chainValue, dryRun, W);
     // READ IT BACK. A write that reported success and a value that reads back wrong are the
     // same inactive control, and only one of them is visible in the write's exit status.
     if (!dryRun) {
@@ -1189,6 +1721,62 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
     hookRefused += hookRes.refused.length;
   }
 
+  // M34.5.F.5 item 5 (C1-03): COMPLETE needs the kit's own pre-commit and pre-push in .githooks/;
+  // presence is not enough. A file there that is the person's own is kept (adopt never overwrites)
+  // and named, with the word that moves it aside.
+  if (!dryRun && !hookBoth && !hookClash && hk.kind !== 'linked') {
+    for (const name of KIT_HOOKS) {
+      const rel = '.githooks/' + name;
+      if (refusedRows.has(rel) || kitHookState(projRoot, kitRoot, name) !== 'own') continue;
+      missing('the kit\'s ' + name + ' (' + rel + ')',
+        rel + ' is your own file, not the kit\'s, so the kit\'s ' + (name === 'pre-commit' ? 'commit' : 'push') + ' checks never run; adopt never overwrites it',
+        'node scripts/kit-update.cjs --adopt --hooks chain   (it moves to ' + HOOKS_PREVIOUS + '/ and runs first, then the kit\'s checks)',
+        'node scripts/kit-update.cjs --adopt --hooks replace   (it moves to ' + HOOKS_PREVIOUS + '/ and stops running)');
+    }
+    // M34.5.F.4 item 1 (W2-01, C2-02): the kit's own hook by content, not by its stamp - F.1's compare
+    // against the installed release (the severity rule off, so a fresh install's unfilled template reads
+    // as the kit's). An earlier release's stamp stays F.5's rule: the migration merges that copy.
+    const hookInst = installedPayload(projRoot);
+    const kitVer = versionAt(kitRoot);
+    if (!hookInst.map) W('  hooks      content not compared - ' + hookInst.why);
+    else {
+      for (const name of KIT_HOOKS) {
+        const rel = '.githooks/' + name;
+        if (refusedRows.has(rel) || kitHookState(projRoot, kitRoot, name) === 'own') continue;
+        const live = readIf(path.join(projRoot, rel));
+        const s = live === null ? null : stampOf(live);
+        if (live === null || (s !== null && s !== kitVer)) continue;
+        const c = floorCompare(projRoot, rel, hookInst.map);
+        if (c.status !== 'differ') continue;
+        const fix = c.template ? { repair: 're-run the installer (sbak-install.cjs), which re-verifies the payload', alt: null }
+          : fileRestore(projRoot, managedByFile.get(rel), null, 'node scripts/kit-update.cjs');
+        missing('the kit\'s ' + name + ' (' + rel + ')',
+          rel + ' is not the kit\'s: ' + (s !== null ? 'it carries this kit\'s stamp, but ' : '') + c.why + ', so the kit\'s ' + (name === 'pre-commit' ? 'commit' : 'push') + ' checks may not run; adopt never overwrites it',
+          fix.repair, fix.alt);
+      }
+    }
+  }
+  // M34.5.F.4 item 5 (W2-02): COMPLETE reads the required set --ready reads. A file it requires that
+  // adopt does not install (a validator, a workflow) and that is absent is MISSING, with the repair that
+  // restores it. Before the bootstrap none is required; with a migration pending (the kit pin is not this
+  // kit's version) a file new since the pin is the migration's, so the check waits for it.
+  if (!dryRun) {
+    const reqSet = requiredSet(projRoot);
+    let pin = null; try { pin = readPin(projRoot).value; } catch (_) { pin = null; }
+    if (!reqSet.prebootstrap && pin && pin === versionAt(kitRoot)) {
+      for (const row of MANAGED) {
+        if (ADOPT_TREES.some((t) => row.file.indexOf(t.to + '/') === 0) || readIf(path.join(projRoot, row.file)) !== null) continue;
+        const w = reqSet.why(row);
+        if (!w.required) continue;
+        const v = row.file.indexOf('validators/') === 0;
+        missing(row.file + ' (this project\'s ' + w.why + ' requires it)',
+          row.file + ' is absent; adopt installs .claude/, .githooks/ and scripts/, never ' + row.file.split('/')[0] + '/',
+          v ? 'node scripts/kit-update.cjs --place-floor   (places each validator this project\'s tier requires that is absent, checked against the installed release)' : null,
+          v ? null : 'restore it from git (git checkout <commit> -- ' + row.file + ') or fill ' + KIT_DIR + '/' + row.template + ' with this project\'s values by hand');
+      }
+    }
+  }
+
   // Receipts verification (#0): the hook whose absence let the kit lose its own telemetry.
   const rcptLive = readIf(path.join(projRoot, '.claude/hooks/receipts-lifecycle.cjs'));
   const rcptTpl = readIf(path.join(kitRoot, 'templates/dot-claude/hooks/receipts-lifecycle.cjs'));
@@ -1210,9 +1798,17 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
 
   // Root paperwork audit: repo-identity names are the HOST repo's files; adopt
   // never installs or overwrites them (C.3.5 route table; #16's real fix).
+  // M34.5.F.6 (W1-05): the root .gitattributes sbak-install writes where a repository has none is the
+  // kit's own line-ending rule, byte-equal to templates/dot-gitattributes; it is named as that, never as
+  // the repository's paperwork the kit "never installs"
+  let kitGitattributes = null;
+  try { kitGitattributes = fs.readFileSync(path.join(kitRoot, 'templates', 'dot-gitattributes')); } catch (_) { kitGitattributes = null; }
   for (const dest of repoIdentity) {
     if (!dest.endsWith('/') && fs.existsSync(path.join(projRoot, dest))) {
-      W('  left-alone ' + dest + ' — repo-identity (your repo\'s paperwork; the kit never installs or overwrites these)');
+      let kitOwn = false;
+      if (dest === '.gitattributes' && kitGitattributes) { try { kitOwn = fs.readFileSync(path.join(projRoot, dest)).equals(kitGitattributes); } catch (_) { kitOwn = false; } }
+      if (kitOwn) W('  kit-file   .gitattributes - the kit\'s line-ending rule (sbak-install writes it where the repository had none); adopt leaves it as it is');
+      else W('  left-alone ' + dest + ' — repo-identity (your repo\'s paperwork; the kit never installs or overwrites these)');
     }
   }
   if (placeholderNote) W('  note: installed wiring files carry {{placeholders}} — they are filled by the bootstrap (or by hand), never by adopt.');
@@ -1323,7 +1919,17 @@ function cmdAdopt(projRoot, kitRoot, dryRun) {
 // the oldest commit in this repository whose sbak/release-manifest.json reads it; a tag v<pin> in
 // the --kit checkout. Never a network fetch. Refused while a stage is open or the tree is dirty,
 // so a migration is one reviewable diff at a milestone boundary.
-const MIGRATE_ORDER = ['current', 'replace', 'add', 'merge', 'conflict', 'retire', 'modified', 'retire-kept', 'keep-divergent', 'absent'];
+const MIGRATE_ORDER = ['current', 'replace', 'add', 'merge', 'resolved', 'conflict', 'retire', 'modified', 'retire-kept', 'keep-divergent', 'absent'];
+// M34.5.F.7 (W1-01): the record of the conflicts an apply wrote markers into. A conflict leaves the pin,
+// so a re-run merged from the same pinned base again and wrote the markers back over any resolution
+// that kept the person's content in a hunk the release changed - forever. The apply that writes a
+// conflict records, per file, the live file's hash before the merge and the version merged to; the
+// person commits it with the resolution. The re-run takes a committed file with no markers whose
+// bytes differ from that hash as resolved: its base advances to the version recorded (when that is
+// this kit, the row is "resolved" and nothing is written to it), and the pin rises once no file is
+// left with markers; the raise removes the record. A file with markers is still refused first, and a
+// file put back to its pre-migration bytes is merged again, never taken as resolved.
+const MIGRATE_RECORD = '.claude/kit-migrate.json';
 // Where a kit file lands live, for the retire class: adopt's three trees and the rendered validators.
 const RETIRE_ROUTES = ADOPT_TREES.concat([{ from: 'validators', to: 'validators' }]);
 const CONFLICT_MARKER_RE = /^<{7}( |$)/m;
@@ -1439,23 +2045,123 @@ function resolveBase(projRoot, kitRoot, pin, baseArg) {
 // The project's fills: the pinned template read as a pattern over the live file, each {{TOKEN}} a
 // one-line value (the same token, the same value). -> { TOKEN: value } or null (no token, or the
 // live file is not the template filled).
+// M34.5.F.1 (gate-1 clarification Q10): read line by line. A value is one line, so the template and
+// the live file have the same line count, a line with no token is equal as it stands, and a line with
+// tokens is matched by its own anchored pattern, a token already read carried as its literal value - the
+// whole-file pattern's meaning without its size (scripts/verify-local.cjs made that one pattern "too
+// large" for V8, and its catch read every project's verify-local as unfilled).
 function readFills(tpl, live) {
-  const names = [];
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const rx = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
-  let src = '^'; let last = 0; let m;
-  while ((m = rx.exec(tpl))) {
-    src += esc(tpl.slice(last, m.index)) + (names.indexOf(m[1]) === -1 ? `(?<${m[1]}>[^\\n]*?)` : `\\k<${m[1]}>`);
-    if (names.indexOf(m[1]) === -1) names.push(m[1]);
-    last = rx.lastIndex;
+  const TOKEN = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+  if (!/\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/.test(tpl)) return null;
+  const T = tpl.split('\n'); const L = String(live).split('\n');
+  if (T.length !== L.length) return null;
+  const out = {};
+  for (let i = 0; i < T.length; i++) {
+    const t = T[i];
+    if (!/\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/.test(t)) { if (t !== L[i]) return null; continue; }
+    const names = []; let src = '^'; let last = 0; let m; TOKEN.lastIndex = 0;
+    while ((m = TOKEN.exec(t))) {
+      src += esc(t.slice(last, m.index));
+      if (Object.prototype.hasOwnProperty.call(out, m[1])) src += esc(out[m[1]]);
+      else if (names.indexOf(m[1]) !== -1) src += `\\k<${m[1]}>`;
+      else { src += `(?<${m[1]}>[^\\n]*?)`; names.push(m[1]); }
+      last = TOKEN.lastIndex;
+    }
+    let r = null;
+    try { r = new RegExp(src + esc(t.slice(last)) + '$').exec(L[i]); } catch (_) { r = null; }
+    if (!r) return null;
+    Object.assign(out, r.groups || {});
   }
-  if (!names.length) return null;
-  let r = null;
-  try { r = new RegExp(src + esc(tpl.slice(last)) + '$').exec(live); } catch (_) { r = null; }
-  return r && r.groups ? Object.assign({}, r.groups) : null;
+  return out;
 }
 function fillTokens(text, fills) {
   return text.replace(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g, (t, n) => (Object.prototype.hasOwnProperty.call(fills, n) ? fills[n] : t));
+}
+// M34.5.F.7 (W1-01, C.1's widening): the migration's fallback when readFills cannot read the live
+// file. One line of the person's anywhere fails readFills, and the merge then read every filled
+// {{TOKEN}} line as the person's change, so a release that changed a token line conflicted on it for
+// every edited project. This reader aligns the template's lines with the live file's (a longest common
+// subsequence: a token-free line matches only itself, a token line any line its own anchored pattern
+// matches) and reads each token from its matched lines; a token read with two values takes the one
+// most of its lines carry (ties: the first), the other line staying the person's change.
+// -> { TOKEN: value } or null (no token read). The migration only: readFills stays the compare's
+// reader (F.4), where a file the person edited must not read as the kit's.
+function readFillsAligned(tpl, live) {
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const TOKEN = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+  const T = String(tpl).split('\n'); const L = String(live).split('\n');
+  const pat = T.map((t) => {
+    if (!/\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/.test(t)) return null;
+    const names = []; let src = '^'; let last = 0; let m; TOKEN.lastIndex = 0;
+    while ((m = TOKEN.exec(t))) {
+      src += esc(t.slice(last, m.index));
+      if (names.indexOf(m[1]) !== -1) src += `\\k<${m[1]}>`;
+      else { src += `(?<${m[1]}>[^\\n]*?)`; names.push(m[1]); }
+      last = TOKEN.lastIndex;
+    }
+    try { return new RegExp(src + esc(t.slice(last)) + '$'); } catch (_) { return /(?!)/; }
+  });
+  if (pat.every((p) => p === null)) return null;
+  const n = T.length; const w = L.length + 1;
+  const hit = (i, j) => (pat[i] ? pat[i].test(L[j]) : T[i] === L[j]);
+  const dp = new Int32Array((n + 1) * w);
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = L.length - 1; j >= 0; j--) dp[i * w + j] = hit(i, j) ? dp[(i + 1) * w + j + 1] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+  }
+  const seen = {}; let order = 0;
+  for (let i = 0, j = 0; i < n && j < L.length;) {
+    if (hit(i, j) && dp[i * w + j] === dp[(i + 1) * w + j + 1] + 1) {
+      if (pat[i]) {
+        const g = pat[i].exec(L[j]).groups || {};
+        for (const k of Object.keys(g)) {
+          const tally = seen[k] || (seen[k] = new Map());
+          const v = tally.get(g[k]) || { n: 0, first: order++ };
+          v.n++; tally.set(g[k], v);
+        }
+      }
+      i++; j++;
+    } else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) i++;
+    else j++;
+  }
+  // A token line the release MOVED cannot align (a subsequence keeps order): a token still unread
+  // takes its value from every live line its template line's pattern matches, only when they agree.
+  for (let i = 0; i < n; i++) {
+    if (!pat[i]) continue;
+    const vals = {};
+    for (const l of L) { const r = pat[i].exec(l); if (!r) continue; for (const [k, v] of Object.entries(r.groups || {})) if (!seen[k]) (vals[k] = vals[k] || new Set()).add(v); }
+    for (const k of Object.keys(vals)) if (vals[k].size === 1 && !seen[k]) seen[k] = new Map([[Array.from(vals[k])[0], { n: 1, first: order++ }]]);
+  }
+  const out = {};
+  for (const k of Object.keys(seen)) {
+    let best = null;
+    for (const [v, s] of seen[k]) if (!best || s.n > best.s.n || (s.n === best.s.n && s.first < best.s.first)) best = { v, s };
+    out[k] = best.v;
+  }
+  return Object.keys(out).length ? out : null;
+}
+// The record's hash: sha256 over the text with CRLF read as LF (the table's own normalize), so a
+// checkout that writes CRLF reads the same.
+function lfSha256(text) { return crypto.createHash('sha256').update(normalize(text), 'utf8').digest('hex'); }
+// Read fail-closed (gate-1 C1): a record that does not parse, whose shape is not the one the apply
+// writes, or that was written from another pin is used for no file, and the table says why.
+// -> { record } (usable), { why } (present, not used) or {} (absent).
+const SHA256_RE = /^[0-9a-f]{64}$/;
+// Never through a link (F.6's rule): the record's path confined to the project and not a link itself.
+function recordLinkRefusal(projRoot) {
+  try { const abs = assertInside(projRoot, MIGRATE_RECORD); return classifyDestination(abs).kind === 'symlink' ? 'it is a symbolic link' : null; } catch (e) { return e.message; }
+}
+function readMigrateRecord(projRoot, pin) {
+  const text = readIf(path.join(projRoot, MIGRATE_RECORD));
+  if (text === null) return {};
+  const link = recordLinkRefusal(projRoot);
+  if (link) return { why: link };
+  let r; try { r = JSON.parse(text); } catch (_) { return { why: 'it does not parse as JSON' }; }
+  if (!r || typeof r !== 'object' || Array.isArray(r) || typeof r.from !== 'string' || !r.files || typeof r.files !== 'object' || Array.isArray(r.files)) return { why: 'its shape is not the one --apply-all writes' };
+  const bad = Object.keys(r.files).find((f) => { const e = r.files[f]; return !e || typeof e !== 'object' || typeof e.before !== 'string' || !SHA256_RE.test(e.before) || typeof e.to !== 'string' || !VERSION_RE.test(e.to); });
+  if (bad !== undefined) return { why: `its entry for ${bad} is not a 64-hex sha256 "before" with a version "to"` };
+  if (r.from !== pin) return { why: `it was written from v${r.from}, and this project's pin is v${pin}` };
+  return { record: r };
 }
 
 // One three-way merge through git (exit 0 clean, N > 0 conflicts left as markers).
@@ -1477,6 +2183,42 @@ function writeKeepingMode(abs, data) {
   fs.writeFileSync(tmp, data);
   if (mode !== null) { try { fs.chmodSync(tmp, mode); } catch (_) { /* win32: no exec bit */ } }
   fs.renameSync(tmp, abs);
+}
+
+// M34.7.B: the upgrade split. A project built before the live spec holds one spec; --migrate freezes it
+// as the original at its current bytes, writes spec/live-spec.md as its byte copy and starts
+// spec/spec-chain.json there (the shape validators/validate-spec-chain.cjs --freeze writes), and places
+// prompts/SPEC-CHANGE-TEMPLATE.md when it is absent. A project already split, one with no spec, and one
+// with a live spec but no chain are left as they are. The table run says what it would do and writes
+// nothing. Returns the one report line.
+// M34.7.E (R-309, V iteration 2 finding 1): a chain with no check behind it is a promise the kit does
+// not keep, so the split runs only where the project's required set carries the spec-chain validator -
+// `chainCarried` is the reading `--required validators/validate-spec-chain.cjs` gives, taken once by
+// cmdMigrate before any write, so the table run and the apply print the same line. Where it is not
+// carried the split writes nothing and says so; the three exits above it keep their lines everywhere.
+function specSplit(projRoot, kitRoot, apply, chainCarried) {
+  const S = 'spec';
+  const orig = [S, 'project-spec.md'].join('/');
+  const live = [S, 'live-spec.md'].join('/');
+  const chain = [S, 'spec-chain.json'].join('/');
+  const tplRel = ['prompts', 'SPEC-CHANGE-TEMPLATE.md'].join('/');
+  const abs = (rel) => path.join(projRoot, rel);
+  if (fs.existsSync(abs(chain))) return `spec: already split (${chain} present) - left as it is`;
+  if (!fs.existsSync(abs(orig))) return `spec: no ${orig} - nothing to split`;
+  if (fs.existsSync(abs(live))) return `spec: ${live} exists with no ${chain} - left as it is; nothing split`;
+  const validator = ['validators', 'validate-spec-chain.cjs'].join('/');
+  if (!chainCarried || !chainCarried.required) return `spec: left as it is - this project does not carry the spec-chain validator (${validator}; node scripts/kit-update.cjs --required ${validator} says why), so the split starts no chain that nothing would check; nothing split`;
+  const ob = fs.readFileSync(abs(orig));
+  const h = payloadSha256(ob);
+  const tplSrc = path.join(kitRoot, 'templates', 'SPEC-CHANGE-TEMPLATE.md');
+  const placeTpl = fs.existsSync(tplSrc) && !fs.existsSync(abs(tplRel));
+  const what = `${live} ${apply ? 'written' : 'would be written'} as its byte copy, ${chain} ${apply ? 'started' : 'would be started'}${placeTpl ? ` and ${tplRel} ${apply ? 'placed' : 'would be placed'}` : ''}`;
+  if (!apply) return `spec: split - ${orig} would be frozen at its current bytes (sha256 ${h.slice(0, 12)}), ${what}; nothing written`;
+  writeKeepingMode(abs(live), ob);
+  const rec = { original: { path: orig, sha256: h, commit: null }, live: { path: live, sha256: h }, changes: [] };
+  writeKeepingMode(abs(chain), JSON.stringify(rec, null, 2) + '\n');
+  if (placeTpl) { fs.mkdirSync(path.dirname(abs(tplRel)), { recursive: true }); writeKeepingMode(abs(tplRel), fs.readFileSync(tplSrc)); }
+  return `spec: split - ${orig} frozen at its current bytes (sha256 ${h.slice(0, 12)}), ${what}; the first change to the live spec adds the REQ- ids it names and the Assumptions section (the commit floor checks both on every live-spec change)`;
 }
 
 function cmdMigrate(projRoot, kitRoot, opts) {
@@ -1511,6 +2253,9 @@ function cmdMigrate(projRoot, kitRoot, opts) {
     E(`kit-update: --migrate refused - .claude/settings.json ${off}; the agent cannot edit this file: remove the key in your own editor (or place a copy without it with --place-settings), then re-run; nothing was written.`);
     return 2;
   }
+  // M34.7.E: whether this project carries the spec-chain validator, read once before anything is written
+  // (the reading --required gives), so the split's table line and its apply line agree.
+  const chainCarried = requiredSet(projRoot).why(MANAGED.find((r) => r.file === 'validators/validate-spec-chain.cjs'));
   // 3. the pin: recorded, or answered once with --pin (the stamps are the evidence, never a guess)
   const recorded = readPin(projRoot);
   if (recorded.value && opts.pin && recorded.value !== opts.pin) {
@@ -1529,17 +2274,19 @@ function cmdMigrate(projRoot, kitRoot, opts) {
   // 4 and 5. the base and the table (the --ready migration row reads the same table)
   const t = migrationTable(projRoot, kitRoot, pin, opts.base, opts.release);
   if (t.refuse) { E(t.refuse); return 2; }
-  const { base, hashes, rows } = t;
+  const { base, hashes, rows, recordNote } = t;
   // 6. the table
   const unverified = hashes ? '' : `; base unverified: v${pin} ships no hashes`;
   W(opts.apply
     ? `kit-update --migrate --apply-all (v${pin} -> v${cur}; base: ${base.label}${unverified})`
     : `kit-update --migrate - table only, nothing written (v${pin} -> v${cur}; base: ${base.label}${unverified})`);
+  if (recordNote) W(`  ${recordNote}; every file merges from v${pin}`);
   rows.sort((a, b) => MIGRATE_ORDER.indexOf(a.cls) - MIGRATE_ORDER.indexOf(b.cls) || (a.row.file < b.row.file ? -1 : 1));
   for (const r of rows) W(`  ${r.cls.padEnd(15)} ${r.row.file.padEnd(50)} ${r.detail}`.replace(/\s+$/, ''));
   const count = (c) => rows.filter((r) => r.cls === c).length;
   W(`=> ${MIGRATE_ORDER.map((c) => `${count(c)} ${c}`).join(', ')}`);
   if (!opts.apply) {
+    W(specSplit(projRoot, kitRoot, false, chainCarried));
     W('Nothing was written. Re-run the same command with --apply-all to write it' + (recorded.value ? '.' : ` (keep --pin ${pin}).`));
     return 0;
   }
@@ -1547,6 +2294,11 @@ function cmdMigrate(projRoot, kitRoot, opts) {
   if (!recorded.value) writePin(projRoot, pin);
   let replaced = 0; let added = 0; let merged = 0; let retired = 0;
   const conflicts = [];
+  // M34.5.F.7: the record this apply leaves when it writes a conflict - the entries a previous run
+  // wrote from this pin kept (a resolved file stays resolved), each new conflict added.
+  const recAbs = path.join(projRoot, MIGRATE_RECORD);
+  const record = readMigrateRecord(projRoot, pin).record || null;
+  const recFiles = record ? Object.assign({}, record.files) : {};
   for (const r of rows) {
     if (r.unresolved) { conflicts.push(r.row.file); continue; }
     if (['replace', 'add', 'merge', 'conflict', 'retire'].indexOf(r.cls) === -1) continue;
@@ -1555,14 +2307,24 @@ function cmdMigrate(projRoot, kitRoot, opts) {
     if (r.cls === 'retire') { fs.unlinkSync(abs); retired++; }
     else if (r.cls === 'add') { fs.mkdirSync(path.dirname(abs), { recursive: true }); writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); added++; }
     else if (r.cls === 'replace') { writeKeepingMode(abs, fs.readFileSync(path.join(kitRoot, r.row.template))); replaced++; }
-    else { writeKeepingMode(abs, r.text); if (r.cls === 'merge') merged++; else conflicts.push(r.row.file); }
+    else {
+      writeKeepingMode(abs, r.text);
+      if (r.cls === 'merge') merged++;
+      else { conflicts.push(r.row.file); recFiles[r.row.file] = { before: r.before, to: cur }; }
+    }
   }
   W(`=> wrote ${replaced} replaced, ${added} added, ${merged} merged, ${retired} retired${conflicts.length ? `, ${conflicts.length} with conflicts` : ''}; ${count('modified')} modified, ${count('retire-kept')} retire-kept and ${count('keep-divergent')} keep-divergent left as they are.`);
+  W(`=> ${specSplit(projRoot, kitRoot, true, chainCarried)}`);
   if (conflicts.length) {
-    W(`=> CONFLICT in ${conflicts.join(', ')}: the markers are in the file. kit_version stays v${pin}. Resolve them, commit, then re-run with --apply-all.`);
+    const refusal = recordLinkRefusal(projRoot);
+    if (refusal) E(`  refused ${MIGRATE_RECORD} - ${refusal}; nothing recorded, so a resolution of this conflict is merged from v${pin} again`);
+    else fs.mkdirSync(path.dirname(recAbs), { recursive: true });
+    if (!refusal) writeKeepingMode(recAbs, JSON.stringify({ note: 'kit-update --migrate: the conflicts it wrote markers into, from this pin. It is yours to commit with your resolution; the re-run keeps a file you resolved as you committed it for this upgrade, and removes this file when it raises the pin.', from: pin, files: recFiles }, null, 2) + '\n');
+    W(`=> CONFLICT in ${conflicts.join(', ')}: the markers are in the file. kit_version stays v${pin}. Resolve them, commit (with ${MIGRATE_RECORD}, the record of this conflict), then re-run with --apply-all: a file you resolved is kept as you committed it for this upgrade, and the pin rises once no file is left with markers (the record is removed then). Or take one of the two other exits: move your edit out of the lines the release changed, or mark the file INTENTIONAL DIVERGENCE near its top to keep it and stop receiving its fixes.`);
     return 1;
   }
   writePin(projRoot, cur);
+  if (fs.existsSync(recAbs) && !recordLinkRefusal(projRoot)) { fs.rmSync(recAbs, { force: true }); W(`=> removed ${MIGRATE_RECORD} (the record of the conflicts you resolved).`); }
   W(`=> kit_version raised to v${cur}. Review the diff and commit it, then run: node scripts/kit-update.cjs --ready`);
   return 0;
 }
@@ -1577,6 +2339,13 @@ function migrationTable(projRoot, kitRoot, pin, baseArg, release) {
   if (!base) return { refuse: `kit-update: --migrate refused - no v${pin} kit tree to merge from (tried: --base, ${KIT_DIR}/, this repo's history, tag v${pin} in --kit). Pass --base <path to a v${pin} kit tree>; nothing was written.` };
   const hashes = base.manifest && base.manifest.payload && typeof base.manifest.payload === 'object' ? base.manifest.payload : null;
   const labels = ['live', `v${pin}`, `v${cur}`];
+  // M34.5.F.7: the record of this pin's conflicts, and the kit trees a resolution's base advanced to
+  // (resolved once per version, offline, the same four sources as the pin's).
+  const rec = readMigrateRecord(projRoot, pin);
+  const record = rec.record || null;
+  const recordNote = rec.why ? `the record ${MIGRATE_RECORD} is not used: ${rec.why}` : null;
+  const advMemo = {};
+  const advanced = (v) => (Object.prototype.hasOwnProperty.call(advMemo, v) ? advMemo[v] : (advMemo[v] = resolveBase(projRoot, kitRoot, v, null)));
   // classify every MANAGED row
   const rows = [];
   for (const row of MANAGED) {
@@ -1605,19 +2374,38 @@ function migrationTable(projRoot, kitRoot, pin, baseArg, release) {
     if (P !== null) P = normalize(P);
     if (row.render === 'wiring') {
       if (CONFLICT_MARKER_RE.test(L)) { rows.push({ row, cls: 'conflict', unresolved: true, detail: 'unresolved conflict markers - resolve them, commit, then re-run' }); continue; }
+      // M34.5.F.7 (W1-01): a conflict this pin's migration recorded. The file resolved (no markers,
+      // not its pre-migration bytes) advances its base to the version it was merged to.
+      let from = pin; let recNote = '';
+      const ent = record && Object.prototype.hasOwnProperty.call(record.files, row.file) ? record.files[row.file] : null;
+      if (ent) {
+        if (lfSha256(L) === ent.before) recNote = ` (as it was before the v${pin} -> v${ent.to} conflict: merged again)`;
+        else if (ent.to === cur) { rows.push({ row, cls: 'resolved', detail: `your resolution of the v${pin} -> v${cur} conflict, kept as you committed it for this upgrade (${MIGRATE_RECORD})` }); continue; }
+        else {
+          const adv = advanced(ent.to);
+          let Pa = adv && !adv.refuse ? adv.read(row.template) : null;
+          const want = adv && adv.manifest && adv.manifest.payload ? adv.manifest.payload[`${KIT_DIR}/${row.template}`] : null;
+          if (Pa !== null && want && payloadSha256(Pa) !== want) Pa = null;
+          if (Pa !== null) { P = normalize(Pa); from = ent.to; recNote = ` (your resolution of the v${pin} -> v${ent.to} conflict kept: merged from v${ent.to})`; }
+          else recNote = ` (no v${ent.to} kit tree for your resolution's base: merged from v${pin})`;
+        }
+      }
       if (P === null) { rows.push({ row, cls: 'modified', detail: `no v${pin} template to merge from${baseNote}` }); continue; }
       if (P === C) { rows.push({ row, cls: 'current', detail: 'the template did not change' }); continue; }
       // M34.D: both templates are filled with the project's own fills, read back from the live file
       // against the pinned template, so a fill on a line the template also changed (a comment that
       // names the token) merges clean; a live file that no longer reads as the pinned template
       // filled merges from the raw templates, as before.
-      const fills = readFills(P, L);
-      const m = fills ? mergeThree(L, fillTokens(P, fills), fillTokens(C, fills), labels) : mergeThree(L, P, C, labels);
+      // M34.5.F.7: a live file the whole reading cannot read (a person's line anywhere) has its fills
+      // read by alignment, so a token line the release changed merges on its own line.
+      const fills = readFills(P, L) || readFillsAligned(P, L);
+      const lab = [labels[0], `v${from}`, labels[2]];
+      const m = fills ? mergeThree(L, fillTokens(P, fills), fillTokens(C, fills), lab) : mergeThree(L, P, C, lab);
       if (m.error) { rows.push({ row, cls: 'modified', detail: `the merge failed: ${m.error}` }); continue; }
-      if (m.conflicts === 0 && m.text === L) { rows.push({ row, cls: 'current', detail: 'already carries the template change' }); continue; }
+      if (m.conflicts === 0 && m.text === L) { rows.push({ row, cls: 'current', detail: `already carries the template change${recNote}` }); continue; }
       rows.push(m.conflicts === 0
-        ? { row, cls: 'merge', text: m.text, detail: `v${pin} -> v${cur}, your fills kept` }
-        : { row, cls: 'conflict', text: m.text, detail: `${m.conflicts} conflicting hunk(s), written with markers` });
+        ? { row, cls: 'merge', text: m.text, detail: `v${from} -> v${cur}, your fills kept${recNote}` }
+        : { row, cls: 'conflict', text: m.text, before: lfSha256(L), detail: `${m.conflicts} conflicting hunk(s), written with markers${recNote}` });
       continue;
     }
     if (L === C) { rows.push({ row, cls: 'current', detail: '' }); continue; }
@@ -1655,7 +2443,7 @@ function migrationTable(projRoot, kitRoot, pin, baseArg, release) {
     }
     hit.cls = 'replace'; hit.detail = 'released by you (--release)';
   }
-  return { base, cur, hashes, rows };
+  return { base, cur, hashes, rows, recordNote };
 }
 
 // ── hard rule 5, the MERGE form (M30.D; gate-1 ruling 2 2026-08-30) ─────────────────────
@@ -1882,6 +2670,239 @@ function cmdUpgradeCheck(projRoot, treeArg) {
   return 1;
 }
 
+// ── the commit floor (M34.5.F.1) ────────────────────────────────────────────────────────────────
+// The pre-commit runs its validators from the working tree, so before it runs any it asks this
+// script to compare itself and each of them with the installed release: sbak/release-manifest.json's
+// payload map, hashed by the release's own rule (item 2, C2-01, W2-03). floorCompare is the one
+// compare; F.4 reads it for --ready, adopt and the drift report. A copied file matches its payload
+// hash; a bootstrap-filled one (the pre-commit) is the installed template - itself matching its hash -
+// with only its {{TOKEN}}s filled, read by readFills (one value per token, so the bootstrap's own
+// fills read as the kit's); a file whose head declares INTENTIONAL DIVERGENCE is not compared.
+// The red gate keeps the agent's tools off these files (the floor in the control set); the compare
+// is the second layer, for a write the gate does not judge. A neutered pre-commit does not ask.
+const FLOOR_HOOK = '.githooks/pre-commit';
+const FLOOR_ARCHIVE_REL = '.claude/floor.archive';
+const FLOOR_FILLED = ['.githooks/pre-commit', 'scripts/verify-local.cjs'];
+// The installed payload map -> { map } or { why } (the self-check did not run, said why).
+function installedPayload(projRoot) {
+  const p = path.join(projRoot, KIT_DIR, 'release-manifest.json');
+  if (!fs.existsSync(p)) return { why: `no ${KIT_DIR}/release-manifest.json` };
+  const man = readJsonIf(p);
+  if (!man) return { why: `${KIT_DIR}/release-manifest.json is not valid JSON` };
+  return man.payload && typeof man.payload === 'object' ? { map: man.payload } : { why: `${KIT_DIR}/release-manifest.json carries no payload map` };
+}
+// The severity the pre-commit runs its validators at (gate 1 C2): the required set's tier - the
+// stricter of the bootstrap commit's and the live one - decides; '' (block) is always allowed, and
+// '--warn' only at lite. Any other value is refused.
+function severityAllowed(req, value) { return value === '' || (req.tier === 'lite' && value === '--warn'); }
+function severityLine(req, value) { return `runs its validators with ${value === '' ? 'no flag' : JSON.stringify(value)}, and this project's tier (${req.tier}${req.bootSha ? `, the stricter of the bootstrap commit's and the live value` : ''}) requires ${req.tier === 'lite' ? "'--warn' or none" : 'none (they block)'}`; }
+// floorCompare(projRoot, rel, map[, req]) -> { status: same | differ | divergent | absent | unchecked, why }
+// With req (the required set), a filled file's VALIDATOR_SEVERITY_FLAG is judged too.
+function floorCompare(projRoot, rel, map, req) {
+  let live = null;
+  try { live = fs.readFileSync(path.join(projRoot, ...rel.split('/'))); } catch (_) { return { status: 'absent', why: `${rel} is absent` }; }
+  if (declaresDivergence(live.toString('utf8'))) return { status: 'divergent', why: `${rel} declares INTENTIONAL DIVERGENCE` };
+  const row = MANAGED.find((r) => r.file === rel);
+  if (row && row.render === 'wiring') {
+    const tplRel = `${KIT_DIR}/${row.template}`;
+    const want = map[tplRel];
+    if (typeof want !== 'string') return { status: 'unchecked', why: `the installed release carries no hash for ${tplRel}` };
+    let tpl = null; try { tpl = fs.readFileSync(path.join(projRoot, ...tplRel.split('/'))); } catch (_) { tpl = null; }
+    if (tpl === null || payloadSha256(tpl) !== want) return { status: 'differ', template: true, why: `${tplRel} differs from the installed release's hash` };
+    const fills = readFills(normalize(tpl.toString('utf8')), normalize(live.toString('utf8')));
+    if (fills === null) return { status: 'differ', why: `${rel} is not the installed release's ${path.basename(rel)} with this project's fills (${tplRel})` };
+    if (req && Object.prototype.hasOwnProperty.call(fills, 'VALIDATOR_SEVERITY_FLAG') && !severityAllowed(req, fills.VALIDATOR_SEVERITY_FLAG.trim())) return { status: 'differ', severity: true, why: `${rel} ${severityLine(req, fills.VALIDATOR_SEVERITY_FLAG.trim())}` };
+    return { status: 'same', fills, why: `${rel} is ${tplRel} with this project's fills` };
+  }
+  // M34.5.F.4 (Q1, a recorded deviation): the payload map is keyed by the row's template path, which
+  // equals the live path only under validators/ (.githooks/pre-push is sbak/templates/dot-githooks/pre-push).
+  const key = `${KIT_DIR}/${row ? row.template : rel}`;
+  const want = map[key];
+  if (typeof want !== 'string') return { status: 'unchecked', why: `the installed release carries no hash for ${key}` };
+  return payloadSha256(live) === want ? { status: 'same', why: `${rel} matches the installed release` } : { status: 'differ', why: `${rel} differs from the installed release (${KIT_DIR}/release-manifest.json)` };
+}
+// The validators the pre-commit's own text runs (node validators/<name>.cjs), and the validators/lib
+// modules those require, followed through lib - so the compared set cannot drift from the stanzas.
+function floorSet(projRoot, hookText) {
+  const out = [];
+  const add = (rel) => { if (out.indexOf(rel) === -1) out.push(rel); };
+  const re = /\bnode\s+validators\/([A-Za-z0-9_.-]+\.cjs)\b/g; let m;
+  while ((m = re.exec(hookText))) add(`validators/${m[1]}`);
+  // Each file's relative requires, resolved from its own folder: require('./lib/x.cjs') and
+  // require(path.join(__dirname, 'lib', 'x.cjs')); only those inside validators/ are followed.
+  for (let i = 0; i < out.length; i++) {
+    const text = readIf(path.join(projRoot, ...out[i].split('/')));
+    if (text === null) continue;
+    const dir = path.posix.dirname(out[i]);
+    const found = [];
+    const rq = /require\(\s*['"](\.{1,2}\/[A-Za-z0-9_./-]+\.cjs)['"]\s*\)/g; let r;
+    while ((r = rq.exec(text))) found.push(path.posix.join(dir, r[1]));
+    const pj = /path\.join\(\s*__dirname\s*,\s*((?:['"][A-Za-z0-9_.-]+['"]\s*,\s*)*['"][A-Za-z0-9_.-]+\.cjs['"])\s*\)/g;
+    while ((r = pj.exec(text))) found.push(path.posix.join(dir, ...r[1].split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, ''))));
+    for (const f of found) if (f.indexOf('validators/') === 0) add(f);
+  }
+  return out;
+}
+// The newest commit (at most 50 back) whose copy of a filled floor file passes the compare.
+function lastGoodCommit(projRoot, rel, tplText, req) {
+  const log = gitAt(projRoot, ['log', '-n', '50', '--format=%H', '--', rel]);
+  if (log.error || log.status !== 0) return null;
+  for (const sha of String(log.stdout || '').split('\n').map((s) => s.trim()).filter(Boolean)) {
+    const s = gitAt(projRoot, ['show', `${sha}:./${rel}`]);
+    const f = s.status === 0 ? readFills(normalize(tplText), normalize(String(s.stdout))) : null;
+    if (f !== null && (!req || !Object.prototype.hasOwnProperty.call(f, 'VALIDATOR_SEVERITY_FLAG') || severityAllowed(req, f.VALIDATOR_SEVERITY_FLAG.trim()))) return sha;
+  }
+  return null;
+}
+// The fills of each bootstrap-filled floor file at the bootstrap commit, read with the template the
+// bootstrap commit carries under sbak/ (the version it was filled from), against the live fills
+// -> [{ file, token, there, here }]; [] with no bootstrap commit or nothing changed (gate 1 C2).
+function fillDiffs(projRoot, bootSha) {
+  if (!bootSha) return [];
+  const out = [];
+  for (const rel of FLOOR_FILLED) {
+    const row = MANAGED.find((r) => r.file === rel);
+    const tplNow = readIf(path.join(projRoot, KIT_DIR, ...row.template.split('/')));
+    const live = readIf(path.join(projRoot, ...rel.split('/')));
+    const tplThen = gitAt(projRoot, ['show', `${bootSha}:./${KIT_DIR}/${row.template}`]);
+    const then = gitAt(projRoot, ['show', `${bootSha}:./${rel}`]);
+    if (tplNow === null || live === null || tplThen.status !== 0 || then.status !== 0) continue;
+    const a = readFills(normalize(String(tplThen.stdout)), normalize(String(then.stdout)));
+    const b = readFills(normalize(tplNow), normalize(live));
+    if (!a || !b) continue;
+    for (const k of Object.keys(b)) if (Object.prototype.hasOwnProperty.call(a, k) && a[k] !== b[k]) out.push({ file: rel, token: k, there: a[k], here: b[k] });
+  }
+  return out;
+}
+// --self-check: the pre-commit's call. Exit 0 (every file matches, or the check did not run: one
+// line says why), 1 (a refusal line per differing file), never a silent pass on a fault.
+function cmdSelfCheck(projRoot) {
+  const say = (l) => process.stderr.write(`pre-commit: ${l}\n`);
+  const inst = installedPayload(projRoot);
+  if (!inst.map) { say(`self-check did not run - ${inst.why}, so this hook and its validators were not compared with an installed release`); return 0; }
+  const hook = readIf(path.join(projRoot, ...FLOOR_HOOK.split('/')));
+  if (hook === null) { say(`REFUSED - ${FLOOR_HOOK} cannot be read, so its validators cannot be compared with the installed release`); return 1; }
+  let bad = 0;
+  const req = requiredSet(projRoot);
+  for (const rel of [FLOOR_HOOK].concat(floorSet(projRoot, hook))) {
+    const c = floorCompare(projRoot, rel, inst.map, req);
+    if (c.status === 'divergent') { say(`${rel} kept (INTENTIONAL DIVERGENCE), not compared with the installed release`); continue; }
+    if (c.status !== 'differ') continue; // same; absent (the gate's own guard names it when it would run); unchecked
+    bad++;
+    if (c.template) { say(`REFUSED - ${c.why}; re-run the installer, which re-verifies the payload`); continue; }
+    if (FLOOR_FILLED.indexOf(rel) !== -1) {
+      const row = MANAGED.find((r) => r.file === rel);
+      const tpl = readIf(path.join(projRoot, KIT_DIR, ...row.template.split('/'))) || '';
+      const good = lastGoodCommit(projRoot, rel, tpl, req);
+      say(`REFUSED - ${c.why}; restore it from your own terminal: ${good ? `git checkout ${good.slice(0, 12)} -- ${rel} (the newest commit whose copy matches), or ` : ''}place it from this project's fills: node scripts/kit-update.cjs --place-floor <fills file> (a JSON object of each {{TOKEN}} in ${KIT_DIR}/${row.template} and its value)`);
+    } else say(`REFUSED - ${c.why}; restore it: node scripts/kit-update.cjs --apply ${rel} (or mark it INTENTIONAL DIVERGENCE in its first lines to keep it)`);
+  }
+  return bad ? 1 : 0;
+}
+// --place-floor [<fills file>]: the one door the commit floor's files arrive through (gate 1 Q1, C1):
+// the bootstrap's Phase 3 runs it once, a later re-fill the same way. In one call it places each
+// validator this project's required set renders that is absent, copied from sbak/ after a check
+// against its payload hash (a present file that differs is named, never overwritten: its repair is
+// --apply), and, given a fills file - one JSON object, each {{TOKEN}} of the installed templates and
+// its one-line value - renders the bootstrap-filled floor files the project renders
+// (.githooks/pre-commit, scripts/verify-local.cjs) from their templates, checked against the payload
+// hashes. The fills are judged (C2): every token the templates carry has a value, no other key, and
+// VALIDATOR_SEVERITY_FLAG is the value the tier requires or stricter. Once a bootstrap commit exists,
+// each fill that differs from the bootstrap commit's copy is printed, old and new, before anything is
+// written. The prior bytes are archived under .claude/floor.archive/. Nothing is written on a refusal.
+// The call is an ask rule in every profile: the prompt is the person's (human authorization).
+function cmdPlaceFloor(projRoot, fillsArg) {
+  const refuse = (why) => { process.stderr.write(`kit-update: --place-floor refused - ${why}; nothing was placed.\n`); return 2; };
+  const inst = installedPayload(projRoot);
+  if (!inst.map) return refuse(`${inst.why}, so nothing can be checked against an installed release`);
+  const req = requiredSet(projRoot);
+  const authentic = (tplRel) => { let b = null; try { b = fs.readFileSync(path.join(projRoot, ...tplRel.split('/'))); } catch (_) { b = null; } return b !== null && typeof inst.map[tplRel] === 'string' && payloadSha256(b) === inst.map[tplRel] ? b : null; };
+  // The filled files, rendered and judged before anything is written.
+  const filled = [];
+  let fillsAbs = null;
+  if (fillsArg) {
+    // ruled seq 240 item 4: the fills file lies outside .claude/ and outside the floor it fills
+    fillsAbs = path.resolve(projRoot, fillsArg);
+    const rel = path.relative(projRoot, fillsAbs).split(path.sep).join('/');
+    const inside = rel && !rel.startsWith('..') && !path.isAbsolute(rel);
+    if (inside && (rel === '.claude' || rel.startsWith('.claude/') || /^(\.githooks|validators)(\/|$)/.test(rel) || ['scripts/kit-update.cjs', 'scripts/evidence.cjs', 'scripts/verify-local.cjs'].indexOf(rel) !== -1 || rel.startsWith('scripts/lib/'))) {
+      return refuse(`${fillsArg} lies under .claude/ or the commit floor; write the fills file outside both (for example floor.fills.json at the project root)`);
+    }
+    let fills;
+    try { fills = JSON.parse(fs.readFileSync(fillsAbs, 'utf8')); } catch (e) { return refuse(`${fillsArg} is not a readable JSON object (${String(e.code || e.message).split('\n')[0]})`); }
+    if (!fills || typeof fills !== 'object' || Array.isArray(fills)) return refuse(`${fillsArg} is not a JSON object of {{TOKEN}} values`);
+    const bad = Object.keys(fills).find((k) => typeof fills[k] !== 'string' || /[\r\n]/.test(fills[k]));
+    if (bad) return refuse(`${fillsArg}: ${bad} is not a one-line string`);
+    const known = [];
+    for (const rel of FLOOR_FILLED) {
+      const row = MANAGED.find((r) => r.file === rel);
+      if (!req.why(row).required) continue;
+      const tplRel = `${KIT_DIR}/${row.template}`;
+      const tpl = authentic(tplRel);
+      if (tpl === null) return refuse(`${tplRel} is missing or differs from the installed release's hash (re-run the installer)`);
+      const text = normalize(tpl.toString('utf8'));
+      const tokens = (text.match(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g) || []).map((t) => t.slice(2, -2)).filter((t, i, a) => a.indexOf(t) === i);
+      const missing = tokens.find((t) => !Object.prototype.hasOwnProperty.call(fills, t));
+      if (missing) return refuse(`${fillsArg} has no value for {{${missing}}} (${rel})`);
+      if (tokens.indexOf('VALIDATOR_SEVERITY_FLAG') !== -1 && !severityAllowed(req, fills.VALIDATOR_SEVERITY_FLAG.trim())) return refuse(`the fills would leave ${rel} ${severityLine(req, fills.VALIDATOR_SEVERITY_FLAG.trim())}`);
+      known.push(...tokens);
+      const out = fillTokens(text, fills);
+      if (/\{\{[A-Za-z_][A-Za-z0-9_]*\}\}/.test(out)) return refuse(`${rel} still carries a {{TOKEN}} after the fills (a value that is itself a token)`);
+      filled.push({ rel, row, out });
+    }
+    const extra = Object.keys(fills).find((k) => known.indexOf(k) === -1);
+    if (extra) return refuse(`${fillsArg} names ${extra}, which no floor template this project renders carries`);
+  }
+  // The validators the required set renders that are absent, each source authenticated.
+  const copies = []; const differ = [];
+  for (const row of MANAGED.filter((r) => r.file.startsWith('validators/') && r.render === 'copy')) {
+    if (!req.why(row).required) continue;
+    const liveAbs = path.join(projRoot, ...row.file.split('/'));
+    let live = null; try { live = fs.readFileSync(liveAbs); } catch (_) { live = null; }
+    const src = `${KIT_DIR}/${row.template}`;
+    if (live !== null) { if (typeof inst.map[src] === 'string' && payloadSha256(live) !== inst.map[src] && !declaresDivergence(live.toString('utf8'))) differ.push(row.file); continue; }
+    const buf = authentic(src);
+    if (buf === null) return refuse(`${src} is missing or differs from the installed release's hash (re-run the installer)`);
+    copies.push({ rel: row.file, buf });
+  }
+  // Once a bootstrap commit exists, each fill that differs from its copy, old and new, before any write.
+  if (req.bootSha) {
+    for (const f of filled) {
+      const tplThen = gitAt(projRoot, ['show', `${req.bootSha}:./${KIT_DIR}/${f.row.template}`]);
+      const then = gitAt(projRoot, ['show', `${req.bootSha}:./${f.rel}`]);
+      const a = tplThen.status === 0 && then.status === 0 ? readFills(normalize(String(tplThen.stdout)), normalize(String(then.stdout))) : null;
+      const b = readFills(normalize(authentic(`${KIT_DIR}/${f.row.template}`).toString('utf8')), f.out);
+      if (!a) { process.stdout.write(`kit-update: --place-floor: ${f.rel} at the bootstrap commit ${req.bootSha.slice(0, 12)} cannot be read as its template filled; every fill is new\n`); continue; }
+      for (const k of Object.keys(b)) if (a[k] !== b[k]) process.stdout.write(`kit-update: --place-floor: ${f.rel} ${k} changes from the bootstrap commit's ${JSON.stringify(a[k] === undefined ? null : a[k])} to ${JSON.stringify(b[k])}\n`);
+    }
+  }
+  const archived = [];
+  try {
+    for (const f of filled) {
+      const liveAbs = assertInside(projRoot, f.rel);
+      if (classifyDestination(liveAbs).kind === 'symlink') return refuse(`${f.rel} is a link; the door never writes over or through one`);
+      let prior = null; try { prior = fs.readFileSync(liveAbs); } catch (_) { prior = null; }
+      if (prior !== null) archived.push(path.basename(writeArchive(path.join(projRoot, ...FLOOR_ARCHIVE_REL.split('/')), prior, new Date(), '.' + path.basename(f.rel))));
+      writeKeepingMode(liveAbs, f.out);
+    }
+    for (const c of copies) {
+      const liveAbs = assertInside(projRoot, c.rel);
+      fs.mkdirSync(path.dirname(liveAbs), { recursive: true });
+      fs.writeFileSync(liveAbs + '.tmp', c.buf); fs.renameSync(liveAbs + '.tmp', liveAbs);
+    }
+  } catch (e) { return refuse(`a write failed (${e.code || e.message}); the files already written stay, re-run it`); }
+  const parts = [];
+  parts.push(`${copies.length} validator(s) the tier and toggles require placed${copies.length ? ` (${copies.map((c) => c.rel).join(', ')})` : ''}`);
+  if (filled.length) parts.push(`${filled.map((f) => f.rel).join(' and ')} placed from ${fillsArg} (checked: each the installed template with every {{TOKEN}} filled, the severity the tier requires${archived.length ? `; the prior bytes archived under ${FLOOR_ARCHIVE_REL}/` : ''})`);
+  if (differ.length) parts.push(`${differ.length} present and different from the installed release, not overwritten: ${differ.join(', ')} (restore each with node scripts/kit-update.cjs --apply <file>)`);
+  process.stdout.write(`kit-update: --place-floor: ${parts.join('; ')}.\n`);
+  // ruled seq 240 item 4: the fills are now in the files placed, so the fills file goes
+  if (fillsAbs && filled.length) {
+    try { fs.rmSync(fillsAbs, { force: true }); process.stdout.write(`kit-update: --place-floor: ${fillsArg} deleted (its values are in the files placed).\n`); } catch (e) { process.stdout.write(`kit-update: --place-floor: ${fillsArg} could not be deleted (${e.code || e.message}); delete it yourself.\n`); }
+  }
+  return differ.length ? 1 : 0;
+}
+
 function main() {
   const argv = process.argv.slice(2);
   const kitIdx = argv.indexOf('--kit');
@@ -1897,6 +2918,11 @@ function main() {
   const adopt = argv.includes('--adopt');
   const ingest = argv.includes('--ingest');
   const dryRun = argv.includes('--dry-run');
+  // --hooks chain | replace (M34.5.F.5): the person's word on their own git hooks, the only way adopt
+  // changes them; the installer passes the word its --step hooks recorded.
+  const hooksIdx = argv.indexOf('--hooks');
+  const hooksWord = hooksIdx === -1 ? null : argv[hooksIdx + 1];
+  if (hooksIdx !== -1 && !/^(chain|replace)$/.test(hooksWord || '')) usage('--hooks needs chain or replace');
 
   const projRoot = process.cwd();
 
@@ -1934,6 +2960,23 @@ function main() {
     const w = requiredSet(projRoot).why(row);
     process.stdout.write(`${w.required ? 'required' : 'not required'} (${w.why})\n`);
     process.exit(0);
+  }
+  // --self-check (M34.5.F.1): the pre-commit's call, before it runs any validator - itself and the
+  // validators it names against the installed release. Dispatched here: it reads the project root only.
+  if (argv.includes('--self-check')) process.exit(cmdSelfCheck(projRoot));
+  // --hooks-in-effect [--json] [--kit <dir>] (M34.5.F.5): read-only - what git runs today, and whether
+  // the person's word is needed. The installer runs the release's own copy from its temp dir.
+  if (argv.includes('--hooks-in-effect')) {
+    let kr = kitIdx !== -1 ? path.resolve(argv[kitIdx + 1]) : null;
+    if (kr === null && fs.existsSync(path.join(projRoot, 'templates'))) kr = projRoot;
+    if (kr === null && fs.existsSync(path.join(projRoot, KIT_DIR, 'templates'))) kr = path.join(projRoot, KIT_DIR);
+    process.exit(cmdHooksInEffect(projRoot, kr, argv.includes('--json')));
+  }
+  // --place-floor [<fills file>] (M34.5.F.1): the commit floor's one door (Phase 3 runs it once).
+  const floorIdx = argv.indexOf('--place-floor');
+  if (floorIdx !== -1) {
+    const a = argv[floorIdx + 1];
+    process.exit(cmdPlaceFloor(projRoot, a && !a.startsWith('--') ? a : null));
   }
 
   // KIT-REPO NO-OP — the workshop-only pair, BOTH required (see the header note:
@@ -1977,10 +3020,11 @@ function main() {
     argv.forEach((a, i) => { if (a === '--release') { if (!argv[i + 1] || argv[i + 1].startsWith('--')) usage('--release needs a managed live-file path'); release.push(argv[i + 1]); } });
     process.exit(cmdMigrate(projRoot, kitRoot, { pin, base: valOf('--base'), release, apply: argv.includes('--apply-all') }));
   }
-  if (adopt) process.exit(cmdAdopt(projRoot, kitRoot, dryRun));
+  if (adopt) process.exit(cmdAdopt(projRoot, kitRoot, dryRun, hooksWord));
 
   // Classify every managed row against its template.
   const report = [];
+  const driftInst = installedPayload(projRoot);
   for (const row of MANAGED) {
     const liveAbs = path.join(projRoot, row.file);
     const tplAbs = path.join(kitRoot, row.template);
@@ -2015,8 +3059,13 @@ function main() {
       const surviving = (live.match(/\{\{[A-Za-z0-9_]+\}\}/g) || []).filter((v, i, a) => a.indexOf(v) === i);
       if (surviving.length) {
         report.push({ row, cls: 'unfilled', detail: `bootstrap-filled row still carries ${surviving.join(', ')} — Phase 3 did not fill it; fill the live file (fill-verification, KF-27)` });
+      } else if (!driftInst.map) {
+        report.push({ row, cls: 'wiring', detail: `bootstrap-filled; content not compared (${driftInst.why})` });
       } else {
-        report.push({ row, cls: 'wiring', detail: `bootstrap-filled; stamp compared only (@${liveStamp || 'unstamped'} ok)` });
+        // M34.5.F.4 item 1 (W2-01): F.1's compare - the installed template with this project's fills
+        const c = floorCompare(projRoot, row.file, driftInst.map);
+        if (c.status === 'differ') { const fix = fileRestore(projRoot, row, null, 'node scripts/kit-update.cjs'); report.push({ row, cls: 'drifted', detail: `${c.why}; restore: ${fix.repair}` }); }
+        else report.push({ row, cls: 'wiring', detail: 'bootstrap-filled; the installed template with this project\'s fills' });
       }
       continue;
     }
@@ -2113,7 +3162,7 @@ function main() {
   process.exit(drifted.length ? 1 : 0);
 }
 
-module.exports = { MANAGED, DIVERGENCE_RE, declaresDivergence, STAMP_RE, normalize, detectRepoState, harvestKnownIssues, READY_ROWS, readyMarkers };
+module.exports = { MANAGED, DIVERGENCE_RE, declaresDivergence, STAMP_RE, normalize, detectRepoState, harvestKnownIssues, READY_ROWS, readyMarkers, hookRunnable, hookStarts, oldGitVerdict };
 
 if (require.main === module) {
   try { main(); } catch (e) {

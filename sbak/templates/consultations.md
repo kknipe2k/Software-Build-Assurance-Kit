@@ -2,7 +2,7 @@
 
 > Append-only ledger of unplanned orchestrator consultations: the "I'm seeing X, what should I do?" moments that happen between planned stages. Each entry records the question, what the orchestrator read to ground the answer, and the decision. This is how a future orchestrator session inherits a call it wasn't present for.
 >
-> **Append-only.** Don't edit or delete prior entries — that defeats the audit trail. Enforced by the kit's shared append-only checker — `validators/check-append-only.cjs`, run on every PR by `.github/workflows/append-only-ledger.yml` (Full-enforced; Standard-advisory): prior committed content must remain a byte-prefix of the current file. A consultation that graduates into a real decision (scope/tier/contract change) also lands in its proper artifact (ADR / `project-config.md` override log / Phase-doc revision); note the cross-reference here.
+> **Append-only.** Don't edit or delete prior entries — that defeats the audit trail. Unchecked unless the project declares a risk trigger. Only then does the kit's shared append-only checker, `validators/check-append-only.cjs`, guard it: the pre-push leg and `.github/workflows/append-only-ledger.yml` (generated only then) refuse a change to a prior entry (deterministic enforcement), since prior committed content must remain a byte-prefix of the current file. A consultation that graduates into a real decision (scope/tier/contract change) also lands in its proper artifact (ADR / `project-config.md` override log / Phase-doc revision); note the cross-reference here.
 >
 > Newest entries at the bottom.
 

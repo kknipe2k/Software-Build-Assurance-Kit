@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/lib/read-ledger.cjs
 //   (kit source of truth: templates/scripts/lib/read-ledger.cjs)
 //
@@ -309,11 +309,16 @@ function loadManifest(listFile) {
 
 // ---- the stage prompt's <read_first> (stage-open only) ----
 function stagePromptReadFirst(root, stageId) {
+  // M34.5.F.8 (item 6): the one Phase-doc path set (docs/build-prompts/, docs/bugfix/, proposals/,
+  // scripts/lib/stage-structure.cjs) and the structural read of the prompt (a live one in an xml
+  // fence first; the raw first match only where none is live, as before).
+  let ss = null;
+  try { ss = SS(); } catch (_) { ss = null; }
   const docs = [];
-  for (const dir of ['docs/build-prompts', 'proposals']) {
+  for (const dir of ss ? ss.PHASE_DOC_HOMES : ['docs/build-prompts', 'proposals']) {
     let names = [];
     try { names = fs.readdirSync(path.join(root, dir)).filter((n) => /\.md$/i.test(n)); } catch (_) { names = []; }
-    for (const n of names) docs.push(path.join(root, dir, n));
+    for (const n of names) if (!ss || ss.isPhaseDoc(`${dir}/${n}`)) docs.push(path.join(root, dir, n));
   }
   const escaped = String(stageId).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const openRe = new RegExp('<\\w+_stage_prompt\\s+id="' + escaped + '"', 'i');
@@ -321,11 +326,16 @@ function stagePromptReadFirst(root, stageId) {
   for (const doc of docs) {
     let text;
     try { text = fs.readFileSync(doc, 'utf8'); } catch (_) { continue; }
-    const at = text.search(openRe);
-    if (at === -1) continue;
-    const body = text.slice(at);
-    const end = body.search(/<\/\w+_stage_prompt>/i);
-    const prompt = end === -1 ? body : body.slice(0, end);
+    const live = ss ? ss.livePrompts(text, stageId) : [];
+    let prompt;
+    if (live.length) prompt = live[0].body;
+    else {
+      const at = text.search(openRe);
+      if (at === -1) continue;
+      const body = text.slice(at);
+      const end = body.search(/<\/\w+_stage_prompt>/i);
+      prompt = end === -1 ? body : body.slice(0, end);
+    }
     const rf = /<read_first>([\s\S]*?)<\/read_first>/i.exec(prompt);
     if (!rf) continue;
     for (const fm of rf[1].matchAll(/<file>([\s\S]*?)<\/file>/gi)) {
@@ -418,28 +428,40 @@ function recordedReads(root, scope) {
 function recordedRefs(root, scope) { return new Set(recordedReads(root, scope).keys()); }
 
 // ---- the labels rule (M34.6.D, G14): a recorded read of a sealed calibration label voids the exam ----
-// Every file under <set>/labels/ (default prompts/calibration, the set the verifier is examined on) is
-// resolved to its canonical repo-relative path and hashed to its ref, the form the ledger stores; a
-// label whose ref is among `refs` is returned by its repo-relative path. Ref against ref: the ledger
-// never carries a path. A label that does not resolve inside the root is returned as unresolved (a
-// caller that cannot compare refuses rather than passing a check it could not run). A fixture read is
-// never compared: only labels/ is enumerated. The rule sees what the ledger recorded (a Read-tool read
-// or a shell command naming the file); a glob, a directory search or another program is outside it.
+// Every file under <set>/labels/ is resolved to its canonical repo-relative path and hashed to its ref,
+// the form the ledger stores; a label whose ref is among `refs` is returned by its repo-relative path.
+// Ref against ref: the ledger never carries a path. The sets enumerated: the one the caller names
+// (default prompts/calibration, the set the verifier is examined on) and, always, both copies a
+// bootstrapped project holds (M34.5.F.12): the scaffold's prompts/calibration/ and the kit's
+// own sbak/prompts/calibration/, which every upgrade restores; a labels/ folder reached twice is
+// enumerated once, and one that is absent has nothing to compare. A label that does not resolve inside
+// the root is returned as unresolved: the scorer refuses then rather than passing a check it could not
+// run; --check verify reports only the labels read. A fixture read is never compared: only labels/ is enumerated. The rule sees what
+// the ledger recorded (a Read-tool read or a shell command naming the file); a glob, a directory search
+// or another program is outside it, and so are answers carried in another document.
 // -> { read: [rel...], unresolved: [abs...] }
 const CALIBRATION_SET = 'prompts/calibration';
+const SHIPPED_CALIBRATION_SETS = Object.freeze([CALIBRATION_SET, 'sbak/prompts/calibration']);
 function labelsRead(root, refs, setDir) {
-  const set = setDir ? path.resolve(root, setDir) : path.join(root, ...CALIBRATION_SET.split('/'));
-  const dir = path.join(set, 'labels');
   const out = { read: [], unresolved: [] };
-  let names = [];
-  try { names = fs.readdirSync(dir).sort(); } catch (_) { return out; }
-  for (const n of names) {
-    const abs = path.join(dir, n);
-    let isFile = false; try { isFile = fs.statSync(abs).isFile(); } catch (_) { isFile = false; }
-    if (!isFile) continue;
-    const canonical = canonicalRel(root, abs);
-    if (canonical === null) { out.unresolved.push(abs); continue; }
-    if (refs.has(refFor(canonical))) out.read.push(path.relative(realOrLexical(root), realOrLexical(abs)).split(path.sep).join('/'));
+  const sets = [setDir ? path.resolve(root, setDir) : path.join(root, ...CALIBRATION_SET.split('/'))]
+    .concat(SHIPPED_CALIBRATION_SETS.map((s) => path.join(root, ...s.split('/'))));
+  const seen = new Set();
+  for (const set of sets) {
+    const dir = path.join(set, 'labels');
+    let names = [];
+    try { names = fs.readdirSync(dir).sort(); } catch (_) { continue; }
+    const key = realOrLexical(dir);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const n of names) {
+      const abs = path.join(dir, n);
+      let isFile = false; try { isFile = fs.statSync(abs).isFile(); } catch (_) { isFile = false; }
+      if (!isFile) continue;
+      const canonical = canonicalRel(root, abs);
+      if (canonical === null) { out.unresolved.push(abs); continue; }
+      if (refs.has(refFor(canonical))) out.read.push(path.relative(realOrLexical(root), realOrLexical(abs)).split(path.sep).join('/'));
+    }
   }
   return out;
 }
@@ -540,14 +562,19 @@ function measure(root, stage) {
   return { stage, opened, minutes, bytes, lanes, line };
 }
 
-// ---- the stage section at HEAD (M34.C, Q9): the ONE reader of a stage's section of its Phase doc.
-// stage-view carries it in the view, approve-red hashes it into the approval record, and the
-// channel's amendment and stage-end publishes compare it (materiality case 4), so "the section as
-// the view carries it" is one function. The section is the one H2 outside a code fence whose text,
-// after `## ` and an optional `§`, is the stage id or `Stage <the id after the milestone>`, followed
-// by neither a word character nor a dot, in the one Phase doc (docs/build-prompts/ or proposals/,
-// named M<nn>-*.md) that carries it; it runs to the next H2. A Phase doc with no stage headings at
-// all (one task list) is the stage's section whole. HEAD only, never the working tree.
+// ---- the stage section (M34.C, Q9): the ONE reader of a stage's section of its Phase doc.
+// stage-view carries it in the view, the release records it (scopeRecord, below), and the channel's
+// amendment and stage-end publishes compare it (materiality case 4), so "the section as the view
+// carries it" is one function. M34.5.F.8: the Phase doc is found in the one path set
+// (scripts/lib/stage-structure.cjs PHASE_DOC_RE: docs/build-prompts/M<nn>*.md, proposals/M<nn>*.md,
+// docs/bugfix/<bug-id>.md), read at a subject: HEAD (the default), the index (the bytes the commit
+// will carry) or a commit. In a milestone's Phase doc the section is the one H2 outside a code fence
+// whose text, after `## ` and an optional `§`, is the stage id or `Stage <the id after the
+// milestone>`, followed by neither a word character nor a dot; it runs to the next H2, and a
+// milestone doc with no stage headings at all (one task list) is the stage's section whole. In a
+// bug-fix Phase doc (whose `## Phase A` headings carry no id, and two bug docs each carry one) the
+// section is the H2 that holds the live stage prompt carrying the id. Never the working tree.
+const SS = () => require(path.join(__dirname, 'stage-structure.cjs'));
 const mdLines = (text) => String(text).split('\n');
 function mdTrimTail(arr) { const a = arr.slice(); while (a.length && /^\s*(---)?\s*$/.test(a[a.length - 1])) a.pop(); return a; }
 // headings outside fences: [{ i, level, text }]
@@ -566,42 +593,71 @@ function mdSliceFrom(ls, hs, h) {
   return mdTrimTail(ls.slice(h.i, next ? next.i : ls.length)).join('\n');
 }
 const reEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// path -> { blob, text } | null, one `git cat-file --batch` per call. -> { ok, map } | { ok: false, why }
-function headReadAt(root, paths) {
+// M34.5.F.8 (item 1): the subject a read names - 'HEAD' (the default), 'index' or a commit - as git's
+// object-name prefix (`HEAD:`, `:` for the index's stage 0, `<commit>:`), and as words for a line.
+const atRev = (at) => (at === 'index' ? '' : (at === undefined || at === null || at === '' ? 'HEAD' : String(at)));
+const atWords = (at) => (at === 'index' ? 'in the index' : `at ${atRev(at) === 'HEAD' ? 'HEAD' : atRev(at).slice(0, 7)}`);
+// path -> { blob, text } | null, one `git cat-file --batch` per call, at the subject `at`.
+// -> { ok, map } | { ok: false, why }
+function headReadAt(root, paths, at) {
   const { spawnSync } = require('child_process');
   const map = new Map();
   if (!paths.length) return { ok: true, map };
-  const r = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: paths.map((p) => `HEAD:./${p}`).join('\n') + '\n', maxBuffer: 256 << 20, timeout: 60000, windowsHide: true });
+  const r = spawnSync('git', ['cat-file', '--batch'], { cwd: root, input: paths.map((p) => `${atRev(at)}:./${p}`).join('\n') + '\n', maxBuffer: 256 << 20, timeout: 60000, windowsHide: true });
   if (r.error) return { ok: false, why: `git could not run (${r.error.message})` };
   if (r.status !== 0) return { ok: false, why: `git cat-file failed (${String(r.stderr).trim()})` };
   const buf = r.stdout;
-  let at = 0;
+  let at0 = 0;
   for (const p of paths) {
-    const nl = buf.indexOf(10, at);
-    const head = buf.slice(at, nl).toString('utf8');
-    at = nl + 1;
+    const nl = buf.indexOf(10, at0);
+    const head = buf.slice(at0, nl).toString('utf8');
+    at0 = nl + 1;
     const m = /^([0-9a-f]{40}(?:[0-9a-f]{24})?) (\w+) (\d+)$/.exec(head);
     if (!m) { map.set(p, null); continue; }
     const size = Number(m[3]);
-    map.set(p, m[2] === 'blob' ? { blob: m[1], text: buf.slice(at, at + size).toString('utf8').replace(/\r\n/g, '\n') } : null);
-    at += size + 1;
+    map.set(p, m[2] === 'blob' ? { blob: m[1], text: buf.slice(at0, at0 + size).toString('utf8').replace(/\r\n/g, '\n') } : null);
+    at0 += size + 1;
   }
   return { ok: true, map };
 }
-// -> { ok: true, doc, blob, text, docText } | { ok: false, none: true, why } (no Phase doc for the
-//    milestone at HEAD, or no HEAD) | { ok: false, why } (git did not run, no section, two sections)
-function stageSectionAt(root, stage) {
+// The Phase docs at the subject, by the one path set: `git ls-files` for the index, `git ls-tree -r`
+// for a commit. A subject git cannot read (an unborn HEAD) holds none. -> { ok, names } | { ok: false, why }
+function phaseDocsAt(root, at) {
   const { spawnSync } = require('child_process');
+  const ss = SS();
+  const homes = ss.PHASE_DOC_HOMES.map((h) => `./${h}/`);
+  const args = at === 'index' ? ['ls-files', '-z', '--'].concat(homes) : ['ls-tree', '-r', '-z', '--name-only', atRev(at), '--'].concat(homes);
+  const ls = spawnSync('git', args, { cwd: root, maxBuffer: 64 << 20, timeout: 60000, windowsHide: true });
+  if (ls.error) return { ok: false, why: `git could not run (${ls.error.message})` };
+  const names = ls.status === 0 ? String(ls.stdout).split(String.fromCharCode(0)).filter(Boolean).map((p) => p.replace(/\\/g, '/')) : [];
+  return { ok: true, names: names.filter((p) => ss.isPhaseDoc(p)).sort() };
+}
+const PHASE_DOC_HOMES_WORDS = 'docs/build-prompts/M<nn>*.md, docs/bugfix/<bug-id>.md or proposals/M<nn>*.md';
+// -> { ok: true, doc, blob, text, docText } | { ok: false, none: true, why } (no Phase doc at all at the
+//    subject, or no HEAD) | { ok: false, why, repair } (git did not run; Phase docs there and none
+//    carries the stage, or the id names no milestone; no section; two sections)
+function stageSectionAt(root, stage, at) {
+  const ss = SS();
+  const list = phaseDocsAt(root, at);
+  if (!list.ok) return { ok: false, why: list.why };
+  if (!list.names.length) return { ok: false, none: true, why: `no Phase doc ${atWords(at)} (${PHASE_DOC_HOMES_WORDS})` };
+  const bugDocs = list.names.filter((p) => ss.phaseDocMilestone(p) === null);
   const sm = /^M(\d+)\.(.+)$/.exec(String(stage));
-  if (!sm) return { ok: false, none: true, why: `${stage} names no milestone (a stage id like M01.A), so no Phase doc carries it` };
+  if (!sm) {
+    // Q2: a stage runs under its prompt's id; name the ids the bug-fix docs carry for its letter.
+    const letter = String(stage).split('.').slice(1).join('.');
+    const read = headReadAt(root, bugDocs, at);
+    const ids = [];
+    if (read.ok) for (const p of bugDocs) { const d = read.map.get(p); if (!d) continue; for (const m of d.text.matchAll(/<(?:work|verifier|refactor|closeout)_stage_prompt\s[^>]*\bid="(M\d+(?:\.[0-9A-Za-z]+)+)"/g)) if (m[1].split('.').slice(1).join('.') === letter && ss.livePrompts(d.text, m[1]).length && !ids.some((x) => x.id === m[1])) ids.push({ id: m[1], p }); }
+    return { ok: false, why: `${stage} names no milestone, and a stage runs under its prompt's id (M<nn>.<letter>; in a bug_fix project the id the docs/bugfix/<bug-id>.md prompt carries)`,
+      repair: ids.length ? `open the stage as ${ids.map((x) => `${x.id} (${x.p})`).join(' or ')}` : 'open the stage under the id its Phase doc\'s prompt carries (M<nn>.<letter>)' };
+  }
   const msNum = Number(sm[1]);
   const rest = sm[2];
-  const ls = spawnSync('git', ['ls-tree', '--name-only', 'HEAD', './docs/build-prompts/', './proposals/'], { cwd: root, maxBuffer: 64 << 20, timeout: 60000, windowsHide: true });
-  if (ls.error) return { ok: false, why: `git could not run (${ls.error.message})` };
-  const names = ls.status === 0 ? String(ls.stdout).split(/\r?\n/).filter(Boolean) : [];
-  const docPaths = names.filter((p) => { const m = /^(?:docs\/build-prompts|proposals)\/M(\d+)-[^/]*\.md$/.exec(p); return m && Number(m[1]) === msNum; });
-  if (!docPaths.length) return { ok: false, none: true, why: `no Phase doc for M${String(msNum).padStart(2, '0')} at HEAD (docs/build-prompts/ or proposals/, named M<nn>-*.md)` };
-  const read = headReadAt(root, docPaths);
+  const pad = `M${String(msNum).padStart(2, '0')}`;
+  const docPaths = list.names.filter((p) => { const n = ss.phaseDocMilestone(p); return n === null || n === msNum; });
+  if (!docPaths.length) return { ok: false, why: `no Phase doc ${atWords(at)} carries ${stage}: ${list.names.length} Phase doc(s), none for ${pad} (docs/build-prompts/${pad}-*.md or proposals/${pad}-*.md) and no docs/bugfix/ doc`, repair: `give ${stage} its section in its milestone's Phase doc (docs/build-prompts/${pad}-<title>.md), commit it, then run the release again` };
+  const read = headReadAt(root, docPaths, at);
   if (!read.ok) return { ok: false, why: read.why };
   const STAGE_HEAD = new RegExp(`^§?\\s*(?:${reEscape(stage)}|Stage\\s+${reEscape(rest)})(?![\\w.])`);
   const ANY_STAGE_HEAD = /^§?\s*(?:M\d+(?:\.[0-9A-Za-z]+)+|Stage\s+[0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*)(?![\w.])/;
@@ -611,6 +667,11 @@ function stageSectionAt(root, stage) {
     if (!d) continue;
     const l = mdLines(d.text); const hs = mdHeadings(l);
     const h2 = hs.filter((h) => h.level === 2);
+    if (ss.phaseDocMilestone(p) === null) {
+      // a bug-fix doc: the H2 that holds the live prompt carrying the id
+      for (const h of h2) if (ss.livePrompts(mdSliceFrom(l, hs.filter((x) => x.level <= 2), h), stage).length) hits.push({ p, d, l, hs, h });
+      continue;
+    }
     for (const h of h2.filter((x) => STAGE_HEAD.test(x.text))) hits.push({ p, d, l, hs, h });
     if (!h2.some((h) => ANY_STAGE_HEAD.test(h.text))) lite.push({ p, d, l });
   }
@@ -620,22 +681,35 @@ function stageSectionAt(root, stage) {
     return { ok: true, doc: x.p, blob: x.d.blob, docText: x.d.text, text: mdSliceFrom(x.l, x.hs.filter((h) => h.level <= 2), x.h) };
   }
   if (lite.length === 1 && docPaths.length === 1) return { ok: true, doc: lite[0].p, blob: lite[0].d.blob, docText: lite[0].d.text, text: mdTrimTail(lite[0].l).join('\n') };
-  return { ok: false, why: `no section for ${stage} in ${docPaths.join(', ')} (an H2 "## §${stage} ..." or "## Stage ${rest} ...")` };
+  return { ok: false, why: `no section for ${stage} in ${docPaths.join(', ')} (an H2 "## §${stage} ..." or "## Stage ${rest} ..."${bugDocs.length ? `; in docs/bugfix/, the H2 holding the live ${stage} prompt` : ''})` };
 }
 
+// ---- the stage prompt (M34.5.F.8 item 6, C8-02): read through the validator's structural reader
+// (scripts/lib/stage-structure.cjs livePrompts: an ```xml fence, its comments inert, the top-level
+// root carrying the id), the section first, then the whole doc. A second live prompt for the id, or a
+// prompt named only where the structural read cannot take it (outside a fence, or inside a comment),
+// is refused, never read as no prompt. -> { ok: true, body, root } | { ok: true, body: null } (the
+// stage has no prompt) | { ok: false, why }
+function stagePromptOf(sectionText, docText, stage) {
+  const ss = SS();
+  for (const [where, text] of [[`the ${stage} section`, sectionText], ['the Phase doc', docText]]) {
+    const live = ss.livePrompts(text, stage);
+    if (live.length > 1) return { ok: false, why: `${live.length} live stage prompts carry ${stage} in ${where} (the xml blocks at lines ${live.map((x) => x.line).join(', ')} of it)` };
+    if (live.length === 1) return { ok: true, body: live[0].body, root: live[0].root };
+    if (ss.mentionsPrompt(text, stage)) return { ok: false, why: `${where} names a ${stage} stage prompt that is not a live one in an \`\`\`xml fence (outside a fence, or inside a comment)` };
+  }
+  return { ok: true, body: null };
+}
 // ---- the refs a stage prompt names (M34.6.A, item n): the scope the RED is approved against is the
 // stage section AND every <scope_locks>, <deliverable> and <acceptance_criteria> the prompt names by
 // ref, plus docs/scope.md when present. Transitive refs are not followed: the prompt's own refs are
 // the contract. -> [{ tag, ref, section | null }] in prompt order
 const REF_TAGS = ['scope_locks', 'deliverable', 'acceptance_criteria'];
-function stagePromptRefs(sectionText, docText, stage) {
-  const re = new RegExp(`<(\\w+)_stage_prompt\\s+id="${reEscape(stage)}"[^>]*>([\\s\\S]*?)</\\1_stage_prompt>`);
-  const m = re.exec(String(sectionText || '')) || re.exec(String(docText || ''));
-  if (!m) return [];
+function promptRefsIn(body) {
   const out = [];
   const tagRe = new RegExp(`<(${REF_TAGS.join('|')})\\b([^>]*?)/?>`, 'g');
   let t;
-  while ((t = tagRe.exec(m[2])) !== null) {
+  while ((t = tagRe.exec(String(body || ''))) !== null) {
     const ref = /\bref="([^"]*)"/.exec(t[2]);
     if (!ref) continue; // the inline form names no file
     const sec = /\bsection="([^"]*)"/.exec(t[2]);
@@ -643,21 +717,73 @@ function stagePromptRefs(sectionText, docText, stage) {
   }
   return out;
 }
-// One section of one doc at HEAD (CRLF read as LF): the one heading outside a fence whose text, a
-// leading section sign stripped, is `heading` or starts with it followed by a space, a colon or a
-// dash (so "M01.A" never matches "M01.A.5 CLI Prompt"), sliced to the next heading of the same or
-// higher level. No heading -> the whole file. -> { ok, doc, blob, text } | { ok: false, why }
-function sectionAt(root, doc, heading) {
-  const read = headReadAt(root, [doc]);
+// The same through the structural read; a refused read names no ref (stagePromptOf says why).
+function stagePromptRefs(sectionText, docText, stage) {
+  const p = stagePromptOf(sectionText, docText, stage);
+  return p.ok && p.body !== null ? promptRefsIn(p.body) : [];
+}
+// One section of one doc at a subject (HEAD by default; CRLF read as LF): the one heading outside a
+// fence whose text, a leading section sign stripped, is `heading` or starts with it followed by a
+// space, a colon or a dash (so "M01.A" never matches "M01.A.5 CLI Prompt"), sliced to the next heading
+// of the same or higher level. No heading -> the whole file. opts.level keeps headings of that level
+// only, opts.exact the equal text only (the recorded Scope H2, M34.5.F.8 item 4).
+// -> { ok, doc, blob, text, parent } | { ok: false, why }; parent is the text of the H2 that holds a
+// deeper heading (null for an H2 or the whole file).
+function sectionAt(root, doc, heading, at, opts) {
+  const o = opts || {};
+  const read = headReadAt(root, [doc], at);
   if (!read.ok) return { ok: false, why: read.why };
   const d = read.map.get(doc);
-  if (!d) return { ok: false, why: 'is not at HEAD' };
-  if (heading === null || heading === undefined || heading === '') return { ok: true, doc, blob: d.blob, text: d.text, whole: true };
+  if (!d) return { ok: false, why: at === 'index' ? 'is not in the index' : `is not ${atWords(at)}` };
+  if (heading === null || heading === undefined || heading === '') return { ok: true, doc, blob: d.blob, text: d.text, whole: true, parent: null };
   const l = mdLines(d.text); const hs = mdHeadings(l);
-  const hit = hs.filter((h) => { const x = h.text.replace(/^§\s*/, ''); return x === heading || (x.startsWith(heading) && /^[:\s—-]/.test(x.slice(heading.length))); });
+  const hit = hs.filter((h) => {
+    if (o.level && h.level !== o.level) return false;
+    const x = h.text.replace(/^§\s*/, '');
+    return x === heading || (!o.exact && x.startsWith(heading) && /^[:\s—-]/.test(x.slice(heading.length)));
+  });
   if (hit.length !== 1) return { ok: false, why: `matches ${hit.length} headings` };
-  return { ok: true, doc, blob: d.blob, text: mdSliceFrom(l, hs, hit[0]) };
+  const h2 = hit[0].level > 2 ? hs.filter((x) => x.level === 2 && x.i < hit[0].i).pop() : null;
+  return { ok: true, doc, blob: d.blob, text: mdSliceFrom(l, hs, hit[0]), parent: h2 ? h2.text.replace(/^§\s*/, '').trim() : null };
 }
+
+// ---- the release's record (M34.C item 5, M34.6.A item n, M34.5.F.8 items 2, 4 and 5): the scope the
+// RED is approved against, read at HEAD through the readers above. The stage's section (its doc's
+// blob and the section's sha256); every ref its prompt names (a ref with a section by that section's
+// sha256, one without by the file's blob); for a <scope_locks> ref naming a heading under the H2
+// `Scope`, that whole H2 beside it (level 2, the equal text: In scope, Out of scope and Key
+// constraints in one); docs/scope.md by blob; docs/identity.md's "What this isn't" and "Stack (locked)"
+// sections by sha256. A ref that does not resolve refuses; a missing docs/scope.md, docs/identity.md or
+// identity heading records nothing. No Phase doc at HEAD at all records no scope and says why.
+// -> { ok: true, scope, none } | { ok: false, why, repair }
+const IDENTITY_LOCKS = Object.freeze(["What this isn't", 'Stack (locked)']);
+function scopeRecord(root, stage) {
+  const h = (t) => crypto.createHash('sha256').update(t, 'utf8').digest('hex');
+  const sec = stageSectionAt(root, stage, 'HEAD');
+  if (!sec.ok && sec.none) return { ok: true, scope: null, none: sec.why };
+  if (!sec.ok) return { ok: false, why: sec.why, repair: sec.repair || 'give the stage its section in the Phase doc, commit it, then run the release again' };
+  const pr = stagePromptOf(sec.text, sec.docText, stage);
+  if (!pr.ok) return { ok: false, why: pr.why, repair: `leave one live ${stage} prompt in an \`\`\`xml fence in its section, commit it, then run the release again` };
+  const refs = [];
+  for (const r of pr.body === null ? [] : promptRefsIn(pr.body)) {
+    const s = sectionAt(root, r.ref, r.section);
+    if (!s.ok) return { ok: false, why: `the ${r.tag} ref ${r.section ? `"${r.section}" in ` : ''}${r.ref} ${s.why}`, repair: 'name a heading the doc carries (or the file alone), commit it, then run the release again' };
+    refs.push(r.section ? { tag: r.tag, doc: r.ref, section: r.section, blob: s.blob, section_sha256: h(s.text) } : { tag: r.tag, doc: r.ref, blob: s.blob });
+    if (r.tag === 'scope_locks' && r.section && s.parent === 'Scope' && !refs.some((x) => x.tag === 'scope_locks' && x.doc === r.ref && x.section === 'Scope')) {
+      const w = sectionAt(root, r.ref, 'Scope', 'HEAD', { level: 2, exact: true });
+      if (w.ok) refs.push({ tag: 'scope_locks', doc: r.ref, section: 'Scope', level: 2, widened_from: r.section, blob: w.blob, section_sha256: h(w.text) });
+    }
+  }
+  const sd = sectionAt(root, 'docs/scope.md', null);
+  if (sd.ok) refs.push({ tag: 'docs/scope.md', doc: 'docs/scope.md', blob: sd.blob });
+  for (const name of IDENTITY_LOCKS) {
+    const s = sectionAt(root, 'docs/identity.md', name);
+    if (s.ok) refs.push({ tag: 'docs/identity.md', doc: 'docs/identity.md', section: name, blob: s.blob, section_sha256: h(s.text) });
+  }
+  return { ok: true, scope: { doc: sec.doc, blob: sec.blob, section_sha256: h(sec.text), refs }, none: null };
+}
+// A recorded ref's section read again at a subject, by the rule it was recorded with.
+function refSectionAt(root, r, at) { return sectionAt(root, r.doc, r.section, at, r.level ? { level: r.level, exact: true } : undefined); }
 
 // The refusal lines a gate prints for a checkReads result, `label` naming what was checked.
 function refusalLines(res, prefix, label) {
@@ -685,8 +811,10 @@ module.exports = {
   // the refs the stage prompt names and one section of one doc (M34.6.A, item n): approve-red
   // records them, the channel's publishes compare them
   stagePromptRefs, sectionAt, REF_TAGS,
+  // M34.5.F.8: the reads at a subject, the structural prompt read, the release's record
+  phaseDocsAt, stagePromptOf, promptRefsIn, scopeRecord, refSectionAt, IDENTITY_LOCKS,
   readConfigList, // the list form of a config value (M34.6.A: risk_triggers), beside readConfigValue
-  labelsRead, CALIBRATION_SET, // the labels rule (M34.6.D): --check verify and scripts/calibration-score.cjs --session
+  labelsRead, CALIBRATION_SET, SHIPPED_CALIBRATION_SETS, // the labels rule (M34.6.D; both shipped copies, M34.5.F.12): --check verify and scripts/calibration-score.cjs --session
 };
 
 if (require.main === module) {

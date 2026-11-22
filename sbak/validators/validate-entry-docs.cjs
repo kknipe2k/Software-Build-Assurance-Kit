@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-entry-docs.cjs
 //
 // THE DOC-SYNC ENGINE — one source of truth for what the kit SAYS about
@@ -427,6 +427,28 @@ function hitQuoted(line /*, token */) {
   return /^\s*>/.test(line);
 }
 
+// The forecast class's matcher (M34.7.C): per sentence, an (observed evidence) label on a
+// performance, scale or future-behaviour claim with no record named, or a forecast label that names
+// no assumption.
+const FORECAST_KEYWORDS = /\b(?:performance|throughput|latency|scales?|scaling|at scale|under load|per second|concurrent(?:ly)?|in the future|going forward|will (?:keep|stay|hold|continue|remain|scale|work|handle|perform))\b/i;
+const FORECAST_RECORD = /`[^`]*(?:\/[^`]*|\.(?:json|jsonl|txt|md|csv))`/;
+function forecastHits(text) {
+  const out = [];
+  eachLine(text, (line, ln) => {
+    if (!/\((?:observed evidence|forecast)/i.test(line)) return;
+    for (const s of line.split(/(?<=[.!?])\s+(?=[A-Z*`([])/)) {
+      if (/\(observed evidence/i.test(s) && FORECAST_KEYWORDS.test(s.replace(/`[^`]*`/g, '``')) && !FORECAST_RECORD.test(s)) {
+        out.push({ line: ln, value: 'a forecast stated as observed evidence, no record named', quoted: hitQuoted(line) });
+      }
+      const re = /\(forecast\b([^)]*)\)/gi; let m;
+      while ((m = re.exec(s)) !== null) {
+        if (!/^,\s*assuming\s+\S/i.test(m[1])) out.push({ line: ln, value: 'a forecast label naming no assumption', quoted: hitQuoted(line) });
+      }
+    }
+  });
+  return out;
+}
+
 // Each class's `find(text)` returns raw matches [{ line, value, quoted, meta }] — NO manifest
 // comparison (that is the FINDING predicate, applied in scanDoc). Unit-tested directly via findInText.
 const VERSION_SIGNAL = /protocol|stage[\s-]?prompt|schema|PHASE-DOC-TEMPLATE|STAGE-PROMPT/i;
@@ -635,6 +657,19 @@ const VALUE_CLASSES = [
     },
     expected: (mf) => 'a derived reference count (' + Object.entries(mf.scaffold_counts || {}).map(([k, v]) => k + '=' + v).join(', ') + ' — golden-manifest.json, row-derived)',
     foundStr: (hit) => '~' + hit.value + ' (scaffold-count claim)',
+  },
+  // FORECAST (M34.7.C): the fifth label. A sentence labelled (observed evidence) that makes a
+  // performance, scale or future-behaviour claim must name its record beside it (a backticked path);
+  // a (forecast ...) label must name its assumptions: "(forecast, assuming <the conditions>)". A
+  // keyword list over this doc set; a claim worded outside it, or in another document, is the
+  // reviewer's to read.
+  {
+    name: 'forecast', field: null,
+    docSet: [...ENTRY_DOCS, 'STAGE-PROMPT-PROTOCOL.md', 'BUILD-PLAYBOOK.md', 'persistence-architecture.md', 'FRAMEWORK-CONFIG.md', 'PROCESS-VALIDATION.md'],
+    find(text) { return forecastHits(text); },
+    predicate: () => true,
+    expected: () => 'a forecast labelled (forecast, assuming <the conditions>), or the observation\'s record named beside it',
+    foundStr: (hit) => hit.value,
   },
   {
     name: 'hook_count', field: 'hook_count', docSet: ENTRY_DOCS,

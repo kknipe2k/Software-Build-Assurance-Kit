@@ -138,7 +138,7 @@ Required. Ordered list of files to read before any code. Cardinality: usually 4�
   <file>BUILD-PLAYBOOK.md</file>
   <file>docs/identity.md</file>
   <file>docs/gates.md</file>
-  <file>spec/project-spec.md §1</file>
+  <file>spec/live-spec.md §1</file>
   <file>docs/scope.md §M01</file>
   <file>docs/style.md</file>
   <file>docs/gotchas.md</file>
@@ -284,6 +284,18 @@ The red-stop adds a third approval gate to the per-stage loop. Without it the lo
 
 The red stop has no off switch. In a Claude Code session with the kit's settings loaded, the red gate's hook refuses an implementation edit while a work stage is open and unapproved, at every tier (deterministic enforcement); no toggle in `project-config.md` turns it off. The validator treats this tag as optional, so neither presence nor absence is an error — it is a behavioral default, not a structural requirement.
 
+### The five labels
+
+Every sentence that says what the kit or the project does names how that is known, with one of five labels in parentheses:
+
+- (deterministic enforcement): a program checks or refuses it on every run it is wired to.
+- (agent judgment): a session's reading, which a reviewer can disagree with.
+- (human authorization): a person's word, recorded as text.
+- (observed evidence): a record of a run that happened, named beside the claim.
+- (forecast, assuming <the conditions>): a claim about conditions not exercised (a performance, a scale, a behaviour in the future), with its assumptions named.
+
+A forecast is never written as observed evidence. The doc check's forecast class (`validators/validate-entry-docs.cjs`) refuses a sentence in the kit's own documents it scans that labels a performance, scale or future-behaviour claim observed evidence with no record named beside it, and a forecast label that names no assumption (deterministic enforcement over those documents and its keyword list); a claim worded outside the list, or in a document it does not scan, a project's documents included, is the reviewer's to read (agent judgment).
+
 ### The evidence path
 
 A stage leaves its acceptance evidence as records under `.claude/evidence/<stage>/`, committed with the stage, that a later reader can check (observed evidence): the RED and the GREEN runs (`tests_run.red.json` and `tests_run.green.json`, written by `node scripts/verify-local.cjs --stage <id> --subject red|green`), the lane run (`lane_run.json`, written by `node scripts/verify-local.cjs --lane fast --stage <id>`), the lifecycle (`lifecycle.jsonl`, appended by the open, the release, the stage-end publish, the orchestrator's accept and the clear), and `gate.json` with `manifest.json`, written by the stage-end publish before the commit. The release refuses a RED that is not bound to the approved tests, and the stage-end publish refuses a GREEN or a lane run that is not bound to the candidate (deterministic enforcement); whether the failing tests are the right ones stays the orchestrator's judgment on the packet's `red-failing:` line (agent judgment). A stage opened before this release has no lifecycle and is judged as before, and one line says so.
@@ -296,7 +308,9 @@ One host, one runner adapter, one transport: Claude Code at 2.1.295 or later, th
 
 On Windows a killed test process and a test file that fails to load both reach node --test as exit code 1 with no signal, so a RED there whose only failures are file-level is classified cancelled_or_load and the release refuses it, naming both readings (deterministic enforcement at the release): make the test fail by an assertion, or run the RED on a POSIX host. The records are checked against each other and against the commit, never against their author: anyone who can write the repository can rewrite a record together with its manifest hash and evidence.cjs --verify still passes, so a fabricated record is outside the local trust boundary this path claims (observed evidence, not proof of authorship).
 
-The stage-end publish refuses a path changed since the approval's base that lies outside the stage's allowed set (the paths its section names in backticks, their twins, the red gate's test and document globs, the stage's measurements and the excluded prefixes) unless the packet carries an out-of-scope:<path> <why> line for it, and gate.json records each line as out_of_scope (deterministic enforcement at the stage-end publish); the check sees paths, never contents, so a call added inside a named file is invisible to it and stays the orchestrator's reading of the diff (agent judgment). Before the stamp ask the orchestrator reads the bundle through `node scripts/evidence.cjs --stage <id> --review`, which writes nothing (observed evidence), and answers the review contract's five questions in its manual (agent judgment).
+The release records the scope the RED is approved against, read at HEAD through one reader of the stage's Phase doc (the one of docs/build-prompts/M<nn>*.md, docs/bugfix/<bug-id>.md and proposals/M<nn>*.md that carries the stage, the same set the stage-prompt validator, the pre-commit and the ci leg read): the stage's section; every section a <scope_locks>, <deliverable> or <acceptance_criteria> ref in its live stage prompt names (the prompt in an ```xml fence, comments ignored), with the whole ## Scope beside a <scope_locks> ref to one of its subsections; docs/scope.md whole; and the "What this isn't" and "Stack (locked)" sections of docs/identity.md when the file carries them. The amendment and stage-end publishes compare each with HEAD and with the index, the bytes the stage commit will carry, and refuse naming the section that moved (deterministic enforcement at the publish). Phase docs none of which carries the stage, an id that names no milestone, a second live prompt for it, or a prompt that is not live (outside a fence or in a comment) refuse the release with the repair named; a project with no Phase doc at HEAD at all records no scope, and the review says why (deterministic enforcement at the release). A ref's own refs are not followed and a section no ref names is outside the record, so a change there is the orchestrator's reading of the diff (agent judgment), and the record holds what HEAD carried when the release ran (observed evidence).
+
+The stage-end publish refuses a path changed since the approval's base that lies outside the stage's allowed set (the paths its section names in backticks, their twins, the red gate's test globs, the project's own `.claude/red-gate-allow.txt` entries, the documents outside the held paths, the stage's measurements and the excluded prefixes) unless the packet carries an out-of-scope:<path> <why> line for it, and gate.json records each line as out_of_scope (deterministic enforcement at the stage-end publish). The held paths are behaviour or the plan and are never in a free class: the workflows and the rest of .github/, .claude/ outside the evidence, the channel and the stage's measurements, spec/, docs/backlog.md, docs/scope.md, docs/identity.md and the Phase docs (docs/build-prompts/, docs/bugfix/ and proposals/M<nn>*.md); a stage that changes one names it in backticks in its section or carries its out-of-scope: line, and gate.json records that line (deterministic enforcement at the stage-end publish). The check sees paths, never contents, so a call added inside a named file is invisible to it and stays the orchestrator's reading of the diff (agent judgment). Before the stamp ask the orchestrator reads the bundle through `node scripts/evidence.cjs --stage <id> --review`, which writes nothing (observed evidence), and answers the review contract's five questions in its manual (agent judgment).
 
 The evidence path adds no owner word: the words stay /send, /send --approval with its click, pass or fail with a note, commit and push (human authorization); the accepted state is written by the orchestrator's channel.cjs accept on the stamp it already transcribes, and a resolved: line is the builder's, in a packet the orchestrator already adjudicates (agent judgment).
 
@@ -311,9 +325,9 @@ Optional (default-on at Full). The build appends a one-line checkpoint to `.clau
 ```
 
 ### `<test_honesty>`
-Optional tag, **required-by-gate** on work stages in v1.7+ Phase docs (the G9 test-honesty gate; enforced by `validators/validate-test-honesty.cjs`). Valid in `<work_stage_prompt>` and `<verifier_stage_prompt>`. It makes the test-honesty standard structural rather than prose: for each enforcement / security / destructive surface the stage touches, it declares **(a)** the **mutation** — the named point to break and which test must then go RED — and **(b)** the **effectiveness** assertion (proves the behavior, not "no error"; cross-boundary agreement uses an *independent* fixture, never one that agrees with itself).
+Optional tag, **required-by-gate** on work stages in v1.7+ Phase docs whose project took the Custom calibration path (the G9 test-honesty gate; enforced by `validators/validate-test-honesty.cjs`, keyed on the `Calibration:` line in `project-config.md`). On the Full path (the glance, the default) the slot is optional: the stage names its mutation on the retrospective handoff note's `mutation:` line, which `validators/validate-retrospective.cjs` refuses at commit when it is missing, blank or a placeholder ("TBD", "will pick one later" and their like) and accepts as a named mutation or `n/a - <reason>`, and a new work-stage retrospective must carry the note (deterministic enforcement over the text; whether the named mutation is the right one, and is killed, is Stage V's re-run: agent judgment). On the Custom path the same placeholders are refused in the slot. Valid in `<work_stage_prompt>` and `<verifier_stage_prompt>`. It makes the test-honesty standard structural rather than prose: for each enforcement / security / destructive surface the stage touches, it declares **(a)** the **mutation** — the named point to break and which test must then go RED — and **(b)** the **effectiveness** assertion (proves the behavior, not "no error"; cross-boundary agreement uses an *independent* fixture, never one that agrees with itself).
 
-**Risk-tiered, never blanket.** A real mutation is named only where the stage *declares a risk surface*; a pure utility/doc stage uses the explicit sentinel `n/a — no risk surface`. The slot is **never silently omitted** — the omission itself is the tell the gate exists to catch, so an absent slot on a v1.7+ work stage **blocks**. The gate does **not** mandate a global mutation score (that is the cargo-cult current practice warns against); it requires a mutant-killing test only on the declared surface.
+**Risk-tiered, never blanket.** A real mutation is named only where the stage *declares a risk surface*; a pure utility/doc stage uses the explicit sentinel `n/a — no risk surface`. The slot is **never silently omitted** — the omission itself is the tell the gate exists to catch, so on the Custom path an absent slot on a v1.7+ work stage **blocks**; on the Full path (the default) the slot is optional and the retrospective's handoff `mutation:` line names the mutation, refused at commit when it is missing or a placeholder (deterministic enforcement). The gate does **not** mandate a global mutation score (that is the cargo-cult current practice warns against); it requires a mutant-killing test only on the declared surface.
 
 Risk surface (names a mutation):
 ```xml
@@ -333,7 +347,7 @@ Utility/doc stage (no risk surface):
 
 **Composition with coverage.** G9 is the *effectiveness* layer on top of the existing coverage gates: coverage proves a line *executed*; the test-honesty mutation proves the failure is *caught*. They compose; neither replaces the other.
 
-**Honest limitation (presence-gated — the validator is the floor, Stage V is the adversary).** Like its two siblings (G10's presence-only App-Map Evidence cell and the count-reconciliation gate's presence-gated escape), `validate-test-honesty.cjs` can only assert *presence*, not *effectiveness*. (1) A tautological assertion (`expect(1).toBe(1)`), an always-matching snapshot, or a mock that asserts its own return all **pass** the static assertion-honesty heuristic — whether a present test actually *kills* its named mutation is judged in **Stage V's plan-challenge** (the slot's mutation is re-run there), never by the validator. (2) The assertion-honesty half is **JS/Cypress-centric** and silently no-ops on non-JS test files (a Python `def test_x()` with no `assert` passes unflagged); the **slot-requirement half is language-agnostic**, so G9 is not dead off JS, but the assertion-honesty signal is JS/TS-only until the vocabulary is extended to other test frameworks. Floor (validator) + adversary (Stage V) = a real gate; neither alone is.
+**Honest limitation (presence-gated — the validator is the floor, Stage V is the adversary).** Like its two siblings (G10's presence-only App-Map Evidence cell and the count-reconciliation gate's presence-gated escape), `validate-test-honesty.cjs` can only assert *presence*, not *effectiveness*. (1) A tautological assertion (`expect(1).toBe(1)`), an always-matching snapshot, or a mock that asserts its own return all **pass** the static assertion-honesty heuristic — whether a present test actually *kills* its named mutation is judged in **Stage V's plan-challenge** (the slot's mutation is re-run there), never by the validator. (2) The assertion-honesty half evaluates JS/TS (the `test.each`, `it.only`, `.skip` and `.concurrent` forms included), Python, Go and Rust test files, read from the staged copy that commits; a Ruby test file gets a visible skip line, and a JS/TS test file in which no test is found gets a named skip line. It still misses a Rust unit test inside `src/` and the test files of other stacks (Dart, Java), which get no line, and an assertion written inside a string or a docstring satisfies it (deterministic enforcement with known gaps, planned for a later release). The **slot-requirement half is language-agnostic**. Floor (validator) + adversary (Stage V) = a real gate; neither alone is.
 
 ### `<risk_declaration>`
 
@@ -557,7 +571,7 @@ Required. Enumerates what must be read before drafting the closeout artifacts. D
 ```xml
 <cumulative_reads>
   <codebase>entire shipped codebase to date (cumulative across all merged milestones)</codebase>
-  <spec>spec/project-spec.md (end-to-end, focus on M01-touched sections)</spec>
+  <spec>spec/live-spec.md (end-to-end, focus on M01-touched sections)</spec>
   <gap_analysis>docs/gap-analysis.md (all prior entries)</gap_analysis>
   <retrospectives>retrospectives/M01.*-retrospective.md (all stages of this milestone)</retrospectives>
   <summary>retrospectives/M01-summary.md (will be authored as part of this stage)</summary>
@@ -1009,7 +1023,7 @@ Gotchas graduation rule (v1.2 enforcement). Stage-specific `<gotchas>` are **per
 
 The version banner & grandfathering — **banner-less = current.** A Phase doc declares its protocol version with a `**Protocol version:** vN.M` banner near the top. Version-gated rules (the G9 `<test_honesty>` slot, v1.7+; the G13 `<risk_declaration>` matrix, v1.8+) key their requirement off that banner. **The grandfather rule:** a doc with an **explicit pre-bump banner** (e.g. `v1.0`, `v1.6`) is exempt from rules introduced after its declared version — that's the genuinely-old case the banner records honestly. **A banner-LESS doc is treated as *current* (must comply), NOT grandfathered** — only an *explicit* pre-bump banner exempts. Under a "no banner = grandfathered" rule, any new doc could dodge a version-gated rule by simply omitting the banner — an omission-escape inherent to *every* banner-gated rule, not just one. **History is not retro-failed:** the version-gated validators (`validate-test-honesty.cjs`, `validate-risk-matrix.cjs`) run on the **changed set only** (`--staged` in the pre-commit), never `--all` over a repo's phase-doc history, so a committed-but-untouched banner-less older doc is never re-checked; the only `--all` invocation in the framework is the **version-agnostic** schema validator (`validate-stage-prompts.cjs`), which enforces no version-gated rule. The rule is applied **in lockstep** across both version-gated validators — drop it from one and a doc still dodges the other.
 ## 11. Validation
-A validation script lives at `scripts/validate-stage-prompts.py` (or your preferred language). It runs in CI on every PR that touches `docs/build-prompts/M[NN]-*.md`.
+The validator is `validators/validate-stage-prompts.cjs`. CI runs it with `--all` on every pull request that touches a Phase doc (`docs/build-prompts/M[NN]-*.md`, `docs/bugfix/<bug-id>.md` or `proposals/M[NN]-*.md`), and the pre-commit runs it on each Phase doc staged, reading the file as it stands in the working tree (deterministic enforcement at both): the same path set the stage reader uses.
 **v1.2 ships lean.** Structural checks are errors (block CI); cross-file resolution checks are warnings (surface in PR check output, do not block). Cross-checks promote to errors in v1.3 once the cross-check logic survives 3+ milestones without false positives.
 **Errors (block CI):**
 - Extracts every fenced ```xml block from the Phase doc
@@ -1047,7 +1061,7 @@ A non-first milestone, Stage A — absorbs M01 carry-forward and references the 
     <file>BUILD-PLAYBOOK.md</file>
     <file>docs/identity.md</file>
     <file>docs/gates.md</file>
-    <file>spec/project-spec.md §1, §N</file>
+    <file>spec/live-spec.md §1, §N</file>
     <file>docs/scope.md §M02</file>
     <file>docs/build-prompts/M02-<title>.md (Background, Document Structure, Implementation Workflow, Stage A sections A.1–A.4)</file>
     <file>docs/style.md</file>
@@ -1129,13 +1143,13 @@ Demonstrates the v1.2 closeout shape, including the required `<gotchas_graduatio
     <file>BUILD-PLAYBOOK.md (especially §3.4, §4.6)</file>
     <file>docs/identity.md</file>
     <file>docs/gates.md</file>
-    <file>spec/project-spec.md §1, §N</file>
+    <file>spec/live-spec.md §1, §N</file>
     <file>docs/scope.md §M02</file>
   </read_first>
 
   <cumulative_reads>
     <codebase>entire shipped codebase to date (cumulative across M01 + M02.A–M02.D commits)</codebase>
-    <spec>spec/project-spec.md (end-to-end, focus on M02-touched sections)</spec>
+    <spec>spec/live-spec.md (end-to-end, focus on M02-touched sections)</spec>
     <gap_analysis>docs/gap-analysis.md (M01 prior entry; M02.E appends the second)</gap_analysis>
     <retrospectives>retrospectives/M02.A-retrospective.md, M02.B-, M02.C-, M02.D-retrospective.md (all work stages)</retrospectives>
   </cumulative_reads>

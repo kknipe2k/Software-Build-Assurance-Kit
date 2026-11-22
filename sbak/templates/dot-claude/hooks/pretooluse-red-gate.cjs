@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // .claude/hooks/pretooluse-red-gate.cjs
 //
 // PreToolUse hook (matcher Edit|Write|MultiEdit|NotebookEdit, and a second group with matcher
@@ -30,12 +30,19 @@
 //   1. a repair invocation (REPAIR_EXACT), bare and alone in the call, run from the project root,
 //      with scripts/kit-update.cjs AUTHENTICATED (below): allowed in every state, unknown included;
 //   2. a write to a control target - hook-root CONTROL_FILES under .claude/ and CONTROL_PATHS (the
-//      installed release manifest) - by an edit tool or by a recognised shell write construct (its
-//      literal target, a directory pathspec holding one, or a glob that could expand to one):
-//      refused in every state, .claude/settings.json included (M34.C: Phase 3 places it through
-//      the kit-update --place-settings door, and the line names the door), and the read-first
-//      lists .claude/read-first-list*.txt (M34.D: CONTROL_LIST_GLOB, placed through
-//      --place-read-first);
+//      installed release manifest, and the channel's own files: the send token, the approval
+//      record, both logs and the watcher markers, M34.5.F.1) - by an edit tool or by a recognised
+//      shell write construct (its literal target, a directory pathspec holding one, or a glob that
+//      could expand to one): refused in every state, .claude/settings.json included (M34.C: Phase
+//      3 places it through the kit-update --place-settings door, and the line names the door), and
+//      the read-first lists .claude/read-first-list*.txt (M34.D: CONTROL_LIST_GLOB, placed through
+//      --place-read-first); and, where sbak/release-manifest.json is a regular file at the root (an
+//      installed project), hook-root FLOOR_PATHS, the commit floor (M34.5.F.1, C2-01): the git
+//      hooks, the validators and the kit scripts the git hooks run, placed through kit-update
+//      --apply or --place-floor. The kit's own source tree has no installed manifest, so there
+//      those files are judged as implementation, by step 4. Under the PowerShell tool the floor is
+//      judged by the shell write gate's reading of the command, not by the name guard (which would
+//      refuse every command that runs or reads a validator or a kit script);
 //   3. the unknown state: refused. A repair invocation that failed its authentication is refused
 //      with the human-path line instead, so the person learns the repair is theirs to run;
 //   4. an open, unapproved work stage: the four conditions below, and for a shell tool the one
@@ -105,7 +112,13 @@
 // hook_seq, which identifies a row and claims no coverage). The verdict is fixed before the write,
 // the write is fail-soft, and the decision never waits on it. On a stage on the evidence path an ack
 // row in the approval record folds only when the orchestrator's channel message it names is in the
-// log with that sha256; a role and a hash identify a message on this machine, not a person.
+// log with that sha256; a role and a hash identify a message on this machine, not a person. On every
+// v2 record an ack row folds only when its files recount (M34.5.F.3, C4-02): the bytes it names, read
+// from git's object store by their blob, remove or loosen no assertion against the bytes folded before
+// it, by the ack verb's own counters (scripts/lib/channel.cjs ackRecount; deterministic enforcement).
+// A row that does not recount folds nothing, whoever wrote it, so an approved test weakened under a
+// written ack, as the ack verb counts it, still voids the approval; only the owner's /approve-red approves
+// that (human authorization). A file whose language the counter does not read folds as the ack verb would.
 //
 // THE ROLE IS THE ONE RECORDED AT STAGE OPEN (M33.A, R-50 a): the live .claude/role is a file an
 // edit tool could flip, and a flip to verifier used to stand the gate down. The gate now reads
@@ -233,7 +246,7 @@
 // the gate cannot read - a variable, a glob, a substitution, or none - is refused at step 4 with
 // the construct named, never allowed by default.
 // NOT JUDGED, said plainly: a command with no recognised write construct - every script and
-// program run (node scripts/*.cjs, npm test, the lanes, git commit, git add, make, npx); test and
+// program run (node scripts/*.cjs, npm test, the lanes, git add, make, npx); test and
 // build runs writing under their own output folders; an interpreter that writes without the path
 // in the command text (a script file that writes, a script fed on stdin) or through a call not on
 // the list (copyFileSync, createWriteStream, write_bytes, WriteAllLines, and python -c removals
@@ -253,6 +266,17 @@
 // read-only command naming either one is exempt (M34.6.J). A command parser is not a sandbox: the
 // recognised list is the whole control.
 //
+// THE GIT FENCE (M34.5.F.2, W4-10). Every git invocation the shell write gate reads, under the Bash
+// and the PowerShell tool, nested bodies included, is judged by git's own grammar (git.c
+// handle_options): the global options before the command are skipped, an alias is resolved, and a
+// commit or a push answers ask, in every state, so the call goes to the person's permission prompt
+// (deterministic enforcement; the prompt is human authorization). Claude Code documents that in auto
+// mode a PreToolUse hook's ask goes to the permission prompt and the classifier does not decide it;
+// under bypassPermissions the hook's ask is not documented and was not tested. Not read by the fence:
+// a git run inside a script file, through xargs, find -exec, iex or Start-Process, or from a variable
+// command word; an external git-<name> on the path; and a push an allowed command runs has no prompt
+// (agent judgment).
+//
 // HONEST SCOPE. This is a PROCESS gate, not a security boundary:
 //   * a hook that cannot START (the file deleted, node absent, a syntax error, a hang) is outside
 //     its own reach, and the host decides (M34.D, M34.1.A): on Claude Code 2.1.295 and above, with
@@ -265,7 +289,11 @@
 //     recognised list (the NOT JUDGED list) passes. It is a bar-raise, not a wall. The control
 //     set's second layer (M33.A) is the Edit(...) deny rules in settings.json: they hold outside a
 //     stage too, and reach recognized Bash file commands and redirect targets, but not a script
-//     that writes a file itself.
+//     that writes a file itself. M34.5.F.1: the channel's files and, where the kit is installed,
+//     the commit floor are in both layers, and the pre-commit compares itself and its validators
+//     with the installed release before it runs any (deterministic enforcement); a neutered
+//     pre-commit does not run that check, so the two layers are what keep it whole, and a program
+//     the agent writes and an allowed command runs is not judged here (agent judgment).
 //   * it stops implement-before-red; it does NOT catch test-deletion or
 //     test-weakening (the documented AI-TDD failure mode). It is effective ONLY
 //     paired with the human red-review + mutation-kill. Claim no more.
@@ -295,7 +323,14 @@ const PROBE_MAX_BYTES = 8 * 1024 * 1024; // one tool call is far below this; it 
 const PROBE_CONTROL_FILES = ['settings.json', 'settings.local.json', 'role', 'stage-active', 'stage-role', 'red-approved', 'red-gate-allow.txt', 'hooks'];
 const PROBE_CONTROL_LIST_GLOB = 'read-first-list*.txt'; // M34.D: the read-first lists, hook-root CONTROL_LIST_GLOB
 const PROBE_CONTROL_FILE_RE = new RegExp('^' + PROBE_CONTROL_LIST_GLOB.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
-const PROBE_CONTROL_PATHS = ['sbak/release-manifest.json'];
+const PROBE_CONTROL_PATHS = ['sbak/release-manifest.json', '.claude/channel/send-token', '.claude/channel/approval.json',
+  '.claude/channel/orch-to-builder.jsonl', '.claude/channel/builder-to-orch.jsonl', '.claude/channel/watch.*.json']; // M34.5.F.1: the channel's files
+// M34.5.F.1 (C2-01): the commit floor, hook-root FLOOR_PATHS, bound only where PROBE_FLOOR_MARK is a regular file.
+const PROBE_FLOOR_MARK = 'sbak/release-manifest.json';
+const PROBE_FLOOR_PATHS = ['.githooks/**', 'validators/**', 'scripts/kit-update.cjs', 'scripts/evidence.cjs', 'scripts/verify-local.cjs',
+  'scripts/lib/channel.cjs', 'scripts/lib/evidence.cjs', 'scripts/lib/hook-chmod.cjs', 'scripts/lib/hook-root.cjs',
+  'scripts/lib/read-ledger.cjs', 'scripts/lib/receipts.cjs', 'scripts/lib/sandbox.cjs', 'scripts/lib/settings-merge.cjs',
+  'scripts/lib/stage-structure.cjs'];
 const STAGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const SHELL_TOOLS = /^(?:Bash|PowerShell)$/;
 const EDIT_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/;
@@ -438,21 +473,39 @@ function probeState(root) {
 // lowercased (the Windows FS is case-insensitive; over-blocking an odd-cased path on a
 // case-sensitive FS is the fail-closed direction). `hooks` is a directory, matched as a prefix.
 // -> the control target's repo-relative form, or null.
-function probeIsControl(rel) {
+// M34.5.F.1: a control-path entry is exact, a folder (/**) or one * inside its last segment
+// (hook-root pathEntryMatch, the lockstep pin binds them). Both sides lowercased.
+function probePathMatch(rel, entry) {
+  if (entry.slice(-3) === '/**') { const d = entry.slice(0, -3); return rel === d || rel.indexOf(d + '/') === 0; }
+  if (entry.indexOf('*') === -1) return rel === entry;
+  return new RegExp('^' + entry.split('*').map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[A-Za-z0-9_.-]*') + '$').test(rel);
+}
+// The floor binds at a root holding the installed release manifest as a regular file (lstat: a link is not one).
+function probeFloorBound(root) {
+  try { return fs.lstatSync(path.join(root, ...PROBE_FLOOR_MARK.split('/'))).isFile(); } catch (_) { return false; }
+}
+function probeIsControl(rel, floor) {
   const p = rel.toLowerCase();
   return PROBE_CONTROL_FILES.some((n) => p === '.claude/' + n || p.startsWith('.claude/' + n + '/'))
-    || PROBE_CONTROL_PATHS.some((c) => p === c)
-    || (p.startsWith('.claude/') && p.indexOf('/', 8) === -1 && PROBE_CONTROL_FILE_RE.test(p.slice(8)));
+    || PROBE_CONTROL_PATHS.some((c) => probePathMatch(p, c))
+    || (p.startsWith('.claude/') && p.indexOf('/', 8) === -1 && PROBE_CONTROL_FILE_RE.test(p.slice(8)))
+    || (!!floor && PROBE_FLOOR_PATHS.some((c) => probePathMatch(p, c)));
+}
+// A floor path (no control path besides) -> true: its refusal line names the floor's doors.
+function probeIsFloor(rel) {
+  const p = rel.toLowerCase();
+  return PROBE_FLOOR_PATHS.some((c) => probePathMatch(p, c)) && !PROBE_CONTROL_PATHS.some((c) => probePathMatch(p, c));
 }
 function probeControl(rawPath, roots) {
   for (const r of roots) {
     if (!r) continue;
     const abs = path.resolve(r, rawPath);
+    const floor = probeFloorBound(r);
     for (const rel of [path.relative(r, abs), path.relative(probeRealForm(r), probeRealForm(abs))]) {
       const n = normRel(path.normalize(rel));
       // On win32 an odd-cased spelling is the same file: the line names the control file itself
       // (M34.1.A). Elsewhere it is another file, refused fail-closed under the spelling given.
-      if (probeIsControl(n)) return process.platform === 'win32' ? n.toLowerCase() : n;
+      if (probeIsControl(n, floor)) return process.platform === 'win32' ? n.toLowerCase() : n;
     }
   }
   return null;
@@ -509,20 +562,40 @@ function approvalVoidLine(root, st) {
   if (!rec || rec.v !== 2 || rec.stage !== st.stage || !Array.isArray(rec.rows)) return bindingLine;
   const idx = rec.rows.findIndex((r) => r && r.kind === 'approval' && probeRowHash(r) === st.binding);
   if (idx === -1) return bindingLine;
-  const latest = new Map((Array.isArray(rec.rows[idx].files) ? rec.rows[idx].files : []).map((f) => [String(f.path), f.sha256]));
+  const latest = new Map((Array.isArray(rec.rows[idx].files) ? rec.rows[idx].files : []).map((f) => [String(f.path), { sha256: f.sha256, blob: f.blob || null }]));
   const bound = evidencePath(root, st.stage) ? orchMessages(root) : null;
+  // M34.5.F.3 (item 2, C4-02): before an ack row folds, its files are recounted by the ack verb's own
+  // rule (scripts/lib/channel.cjs ackRecount: the acked blob is the row's bytes, and it removes or
+  // loosens no assertion against the bytes folded before it). A row that does not recount folds
+  // nothing, whoever wrote it, so the approved bytes stand and the edit below meets the void.
+  let notFolded = null;
   for (const r of rec.rows.slice(idx + 1)) {
     if (!r) continue;
     if (r.kind === 'approval') return bindingLine; // a later approval the marker does not name
     if (r.kind === 'void') return `[red-gate] approval void - stage ${st.stage}'s RED approval was voided (${voidReason(r.reason)}); the owner runs /approve-red\n`;
-    if (r.kind === 'ack' && (!bound || ackBound(bound, r))) for (const f of Array.isArray(r.files) ? r.files : []) latest.set(String(f.path), f.sha256);
+    if (r.kind !== 'ack' || (bound && !ackBound(bound, r))) continue;
+    const rc = ackRecountHere(root, latest, r);
+    // a recount that cannot run is a broken install, said as one, with its repair (gate-1 C6)
+    if (!rc.ok && rc.broken) return `[red-gate] approval void - the ack row for amendment seq ${r.seq} cannot be recounted: ${voidReason(rc.why)}; repair the install: node scripts/kit-update.cjs --adopt (the ack folds again once it recounts)\n`;
+    if (!rc.ok) { if (!notFolded) notFolded = { seq: r.seq, path: rc.path, why: rc.why }; continue; }
+    for (const f of Array.isArray(r.files) ? r.files : []) latest.set(String(f.path), { sha256: f.sha256, blob: f.blob || null });
   }
-  for (const [rel, sha] of latest) {
+  for (const [rel, want] of latest) {
     let now = null;
     try { now = crypto.createHash('sha256').update(fs.readFileSync(path.join(root, ...rel.split('/')))).digest('hex'); } catch (_) { now = null; }
-    if (now === null || now !== sha) return `[red-gate] approval void - ${rel} changed since the RED approval and no ack covers it; the owner runs /approve-red (an amendment inside an approved file is acked by the orchestrator)\n`;
+    if (now !== null && now === want.sha256) continue;
+    if (notFolded && notFolded.path === rel) return `[red-gate] approval void - ${rel} changed since the RED approval and the ack row for amendment seq ${notFolded.seq} does not fold: ${voidReason(notFolded.why)}; only the owner's /approve-red approves that; the owner runs /approve-red\n`;
+    return `[red-gate] approval void - ${rel} changed since the RED approval and no ack covers it; the owner runs /approve-red (an amendment inside an approved file is acked by the orchestrator)\n`;
   }
   return null;
+}
+// The recount through the channel library (required lazily, as hook-root.cjs and receipts.cjs are);
+// a library that does not load folds nothing.
+function ackRecountHere(root, latest, r) {
+  let ch = null;
+  try { ch = require(path.join(__dirname, '..', '..', 'scripts', 'lib', 'channel.cjs')); } catch (_) { ch = null; }
+  if (!ch || typeof ch.ackRecount !== 'function') return { ok: false, broken: true, path: (r && Array.isArray(r.files) && r.files[0] && String(r.files[0].path)) || '?', why: 'scripts/lib/channel.cjs did not load' };
+  try { return ch.ackRecount(root, latest, r); } catch (e) { return { ok: false, broken: true, path: '?', why: `the recount failed (${oneLine(e && e.message)})` }; }
 }
 // After the human's void the marker is gone and the gate engaged; the refusal names the void.
 function explicitVoidLine(root, st) {
@@ -579,6 +652,9 @@ function controlLine(rel, construct, removal) {
   // M34.2.A (G-18): a removal or a move of a control file is refused in every state, approved
   // included, so its line names the person's terminal, never the release.
   if (removal) return `[red-gate] REFUSED - '${rel}' is a red-gate control file, not writable by an edit tool or a shell write (${construct}); removing or moving it is refused in every state; the kit's scripts do it from your own terminal (a stage's markers: node scripts/stage-active.cjs --clear).\n`;
+  // M34.5.F.1: the commit floor arrives through kit-update's doors; the channel's files through its script.
+  if (probeIsFloor(rel)) return `[red-gate] REFUSED - '${rel}' is a red-gate control file, not writable by an edit tool${construct ? ` or a shell write (${construct})` : ''}; the commit floor changes only through the kit's script: node scripts/kit-update.cjs --apply ${rel} restores the installed release's copy, and node scripts/kit-update.cjs --place-floor <fills file> places the validators the project lacks and the filled .githooks/pre-commit and scripts/verify-local.cjs.\n`;
+  if (/^\.claude\/channel\//i.test(rel)) return `[red-gate] REFUSED - '${rel}' is a red-gate control file, not writable by an edit tool${construct ? ` or a shell write (${construct})` : ''}; the kit's channel script and hooks write it (node scripts/channel.cjs).\n`;
   return `[red-gate] REFUSED - '${rel}' is a red-gate control file, not writable by an edit tool${construct ? ` or a shell write (${construct})` : ''}; the kit's scripts write it (the release is /approve-red, or: node scripts/approve-red.cjs --stage <id> --release-seq <n>).\n`;
 }
 function unreadLine(construct, token) {
@@ -598,6 +674,16 @@ function allow() {
   judgedRow('allow', null);
   process.exit(ALLOW);
 }
+// M34.5.F.2 (item 4): the git fence's answer - Claude Code's JSON decision on stdout, exit 0, so the
+// call goes to the person's permission prompt, in auto mode too ("In auto mode, a PreToolUse hook's
+// "ask" normally sends the tool call to the permission prompt, and the classifier doesn't decide it").
+function askLine(verb) { return `[red-gate] git ${verb} asks you: the kit judges every git commit and push by the parsed command, so this prompt is your commit or push word`; }
+function ask(verb) {
+  const line = askLine(verb);
+  judgedRow('ask', line);
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: line } }) + '\n');
+  process.exit(ALLOW);
+}
 
 // ---- the judgment row (M34.6.B item 7): diagnostic, fail-soft, after the verdict is fixed ----
 // JUDGED is filled by main() as the call is read; a refusal before the state is known is the unknown
@@ -613,6 +699,7 @@ function classOf(line) {
   if (/^\[red-gate\] Implementation edit /.test(l)) return 'implementation';
   if (/^\[red-gate\] Outside-repo edit /.test(l)) return 'outside';
   if (l.indexOf('[red-gate] approval void') === 0) return 'void';
+  if (/^\[red-gate\] git .* asks you: /.test(l)) return 'git-fence';
   return 'other';
 }
 // The read ledger's refFor (sha256 over 'sbak-read:' and the canonical form, 16 hex) over the
@@ -864,7 +951,7 @@ const psReadLine = (name) => `[red-gate] REFUSED - under the PowerShell tool a c
 // glob and PROBE_CONTROL_PATHS), any case, never part of a longer name.
 const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const PS_CONTROL_NAME = new RegExp('(?:^|[^A-Za-z0-9_.-])(' + PROBE_CONTROL_FILES.map((f) => '\\.claude/' + reEsc(f))
-  .concat(['\\.claude/' + PROBE_CONTROL_LIST_GLOB.split('*').map(reEsc).join('[A-Za-z0-9_.-]*')], PROBE_CONTROL_PATHS.map(reEsc)).join('|') + ')(?![A-Za-z0-9_.-])', 'i');
+  .concat(['\\.claude/' + PROBE_CONTROL_LIST_GLOB.split('*').map(reEsc).join('[A-Za-z0-9_.-]*')], PROBE_CONTROL_PATHS.map((c) => c.split('*').map(reEsc).join('[A-Za-z0-9_.-]*'))).join('|') + ')(?![A-Za-z0-9_.-])', 'i');
 function psControlName(command) {
   for (const t of nameTexts(command, 'PowerShell')) { const m = PS_CONTROL_NAME.exec(t); if (m) return m[1].toLowerCase(); }
   return null;
@@ -1574,11 +1661,74 @@ function operands(as, takes) {
   return out;
 }
 
+// ---- the git fence (M34.5.F.2 item 4, W4-10) ----
+// Every git invocation the shell write gate reads - under Bash and PowerShell, nested bodies and
+// bash -c, sh -c, eval and pwsh -c texts included - is judged by git's own grammar (git.c
+// handle_options, read 2026-11-14; git(1) 2.56.0): the global options before the command are
+// skipped, and the verb commit or push answers ask (the person's prompt), in every state. An option
+// the grammar does not name before the verb asks too. An alias is resolved: from a -c alias.<verb> on
+// the line, else git config --get alias.<verb> in the command's folder (5 s, no pager, no optional
+// locks, never a shell); a value starting with ! or naming commit or push asks, and a lookup that
+// fails asks. A verb in GIT_BUILTINS (git 2.43.0's --list-cmds=builtins) is never looked up, since git
+// ignores an alias that shadows one; a verb git adds later is looked up, then no ask.
+const GIT_VALUE_OPTS = /^(?:--git-dir|--work-tree|--namespace|--super-prefix|--config-env|--attr-source|--shallow-file)$/;
+const GIT_EQ_OPTS = /^--(?:git-dir|work-tree|namespace|super-prefix|config-env|attr-source|list-cmds|exec-path)=/;
+const GIT_FLAGS = ['-p', '--paginate', '-P', '--no-pager', '--bare', '--no-replace-objects', '--no-lazy-fetch', '--no-optional-locks', '--no-advice',
+  '--literal-pathspecs', '--no-literal-pathspecs', '--glob-pathspecs', '--noglob-pathspecs', '--icase-pathspecs', '--html-path', '--man-path', '--info-path', '--exec-path'];
+const GIT_BUILTINS = new Set("add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout--worker checkout-index cherry cherry-pick clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-cache--daemon credential-store describe diagnose diff diff-files diff-index diff-tree difftool fast-export fast-import fetch fetch-pack fmt-merge-msg for-each-ref for-each-repo format-patch fsck fsck-objects fsmonitor--daemon gc get-tar-commit-id grep hash-object help hook index-pack init init-db interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-ours merge-recursive merge-recursive-ours merge-recursive-theirs merge-subtree merge-tree mktag mktree multi-pack-index mv name-rev notes pack-objects pack-redundant pack-refs patch-id pickaxe prune prune-packed pull push range-diff read-tree rebase receive-pack reflog remote remote-ext remote-fd repack replace rerere reset restore rev-list rev-parse revert rm send-pack shortlog show show-branch show-index show-ref sparse-checkout stage stash status stripspace submodule--helper switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info upload-archive upload-archive--writer upload-pack var verify-commit verify-pack verify-tag version whatchanged worktree write-tree".split(' '));
+const GIT_FENCED = ['commit', 'push'];
+const GIT_ALIAS_DEPTH = 8;
+// The first verb of an alias value, past its own global options: { verb } | { shell: true }.
+function aliasVerb(value) {
+  const v = String(value || '').trim();
+  if (v.startsWith('!')) return { shell: true };
+  const w = v.split(/\s+/).filter(Boolean);
+  let k = 0;
+  while (k < w.length) {
+    if (w[k] === '-C' || w[k] === '-c' || GIT_VALUE_OPTS.test(w[k])) { k += 2; continue; }
+    if (w[k].startsWith('-')) { k++; continue; }
+    break;
+  }
+  return { verb: w[k] || '' };
+}
+function aliasLookup(verb, cwd) {
+  const { spawnSync } = require('child_process');
+  const env = Object.assign({}, process.env, { GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat', PAGER: 'cat' });
+  const r = spawnSync('git', ['config', '--get', 'alias.' + verb], { cwd: cwd || undefined, env, encoding: 'utf8', timeout: 5000, windowsHide: true, shell: false });
+  if (r.error || r.signal) return { fail: r.error ? (r.error.code || r.error.message) : r.signal };
+  if (r.status === 0) return { value: String(r.stdout).trim() };
+  if (r.status === 1) return { none: true };
+  return { fail: 'git config exit ' + r.status };
+}
+function gitFence(verbWord, aliasDefs, cwd, unknownOpt, asks) {
+  if (unknownOpt) { asks.push({ verb: 'an option the kit does not read (' + unknownOpt + ')' }); return; }
+  if (!verbWord) return;
+  if (verbWord.sub || verbWord.vr || PCT_VAR.test(verbWord.v) || /\$\(|`/.test(verbWord.v)) { asks.push({ verb: 'a verb the kit cannot read (' + verbWord.v + ')' }); return; }
+  let verb = verbWord.v.toLowerCase();
+  for (let d = 0; d <= GIT_ALIAS_DEPTH; d++) {
+    if (GIT_FENCED.indexOf(verb) !== -1) { asks.push({ verb }); return; }
+    if (GIT_BUILTINS.has(verb) || !verb) return;
+    let value;
+    if (aliasDefs.has(verb)) value = aliasDefs.get(verb);
+    else {
+      const r = aliasLookup(verb, cwd);
+      if (r.fail) { asks.push({ verb: verb + ' (its alias lookup failed: ' + r.fail + ')' }); return; }
+      if (r.none) return;
+      value = r.value;
+    }
+    const a = aliasVerb(value);
+    if (a.shell) { asks.push({ verb: verb + ' (a shell alias)' }); return; }
+    verb = String(a.verb || '').toLowerCase();
+  }
+  asks.push({ verb: verbWord.v + ' (an alias chain past ' + GIT_ALIAS_DEPTH + ')' });
+}
+
 function shellWrites(command, cwd0, tool, root, depth) {
   const lvl = depth || 0;
   const finds = [];
   let releaseGlob = false;
   let stageGlob = false; // M34.6.G: a glob that could expand to scripts/stage-active.cjs
+  const asks = []; // M34.5.F.2 (item 4): the git fence's finds - each a commit or push the person is asked about
   let moved = false;
   let cwd = cwd0 || null;
   const push = (construct, token, abs, extra) => finds.push(Object.assign({ construct, token, abs: abs || null }, extra || {}));
@@ -1635,6 +1785,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
     if (open || lvl + 1 > BODY_DEPTH) { unreadBody(tok); return false; }
     const sub = shellWrites(text, ctx.cwd, bodyTool, root, lvl + 1);
     for (const f of sub.finds) finds.push(f);
+    for (const a of sub.asks || []) asks.push(a);
     if (sub.releaseGlob) releaseGlob = true;
     if (sub.stageGlob) stageGlob = true;
     return sub.cwdMoved;
@@ -1807,15 +1958,22 @@ function shellWrites(command, cwd0, tool, root, depth) {
         else if (!(spec.name === 'Tee-Object' && named.variable)) push(construct, '(none)', null);
       }
     } else if (name === 'git') {
-      let k = 0; let gcwd = ctx.cwd;
+      // M34.5.F.2 (item 4): git's own global-option grammar (git.c handle_options): the options before
+      // the command, -c's alias definitions kept for the fence, an option the grammar does not name
+      // noted (the fence asks: a future option taking a value could hide the verb).
+      let k = 0; let gcwd = ctx.cwd; const aliasDefs = new Map(); let unknownOpt = null; let helped = false;
       while (k < args.length) {
         const v = args[k].v;
         if (v === '-C') { const d = args[k + 1]; gcwd = d && readableWord(d) ? shellPath(d.v, gcwd, tool) : null; k += 2; continue; }
-        if (/^(?:-c|--git-dir|--work-tree|--namespace|--super-prefix|--config-env)$/.test(v)) { k += 2; continue; }
-        if (v.startsWith('-')) { k++; continue; }
+        if (v === '-c') { const m = args[k + 1] ? /^alias\.([^=]+)=([\s\S]*)$/i.exec(args[k + 1].v) : null; if (m) aliasDefs.set(m[1].toLowerCase(), m[2]); k += 2; continue; }
+        if (GIT_VALUE_OPTS.test(v)) { k += 2; continue; }
+        if (GIT_EQ_OPTS.test(v) || GIT_FLAGS.indexOf(v) !== -1) { k++; continue; }
+        if (/^(?:-h|--help|-v|--version)$/.test(v)) { helped = true; break; }
+        if (v.startsWith('-')) { if (!unknownOpt) unknownOpt = v; k++; continue; }
         break;
       }
-      const verb = args[k] ? args[k].v : '';
+      const verb = helped ? '' : (args[k] ? args[k].v : '');
+      if (!helped) gitFence(args[k] || null, aliasDefs, gcwd, unknownOpt, asks);
       const rest = args.slice(k + 1);
       const g = { cwd: gcwd, tool, root };
       if (verb === 'apply') {
@@ -2043,7 +2201,7 @@ function shellWrites(command, cwd0, tool, root, depth) {
       }
     } else if (name === 'popd') { moved = true; cwd = null; }
   }
-  return { finds, releaseGlob, stageGlob, cwdMoved: moved };
+  return { finds, asks, releaseGlob, stageGlob, cwdMoved: moved };
 }
 // A directory pathspec that holds a control target -> that target's repo-relative form, or null.
 function dirControl(dir, roots) {
@@ -2054,28 +2212,55 @@ function dirControl(dir, roots) {
     const pre = rel === '' || rel === '.' ? '' : rel.replace(/\/+$/, '') + '/';
     const hit = PROBE_CONTROL_FILES.map((nm) => '.claude/' + nm).concat(PROBE_CONTROL_PATHS).find((t) => t.startsWith(pre));
     if (hit) return hit;
+    // M34.5.F.1: where the floor binds, a folder holding a floor path, or one inside a floor folder.
+    if (probeFloorBound(r)) {
+      for (const t of PROBE_FLOOR_PATHS) {
+        const d = t.slice(-3) === '/**' ? t.slice(0, -3) : null;
+        if ((d || t).startsWith(pre) || (d && pre.startsWith(d + '/'))) return d || t;
+      }
+    }
   }
   return null;
 }
 // A glob target that could expand, from its directory, to a control target -> that target. With
 // `folders` (a deletion's victim, M34.1.A) a glob that could expand to a folder holding the control
-// set (.claude, .claude/hooks, sbak) reaches it too.
-const CONTROL_FOLDERS = [['.claude', '.claude/settings.json'], ['.claude/hooks', '.claude/hooks'], ['sbak', 'sbak/release-manifest.json']];
+// set (.claude, .claude/hooks, .claude/channel, sbak; where the floor binds, its folders) reaches it too.
+const CONTROL_FOLDERS = [['.claude', '.claude/settings.json'], ['.claude/hooks', '.claude/hooks'], ['.claude/channel', '.claude/channel/approval.json'], ['sbak', 'sbak/release-manifest.json']];
+const FLOOR_FOLDERS = [['.githooks', '.githooks'], ['validators', 'validators'], ['validators/lib', 'validators'], ['scripts', 'scripts/kit-update.cjs'], ['scripts/lib', 'scripts/lib/hook-root.cjs']];
+// A floor folder's files, read where they exist (bounded): the candidates a glob inside it could reach.
+function floorFiles(r) {
+  const out = [];
+  for (const t of PROBE_FLOOR_PATHS) {
+    if (t.slice(-3) !== '/**') { out.push(t); continue; }
+    const d = t.slice(0, -3);
+    (function walk(rel, depth) {
+      if (depth > 3 || out.length > 400) return;
+      let names = [];
+      try { names = fs.readdirSync(path.join(r, ...rel.split('/')), { withFileTypes: true }); } catch (_) { return; }
+      for (const e of names) { const p = `${rel}/${e.name}`; if (e.isDirectory()) walk(p, depth + 1); else out.push(p); }
+    })(d, 0);
+  }
+  return out;
+}
 function globControl(glob, cwd, roots, folders) {
   if (!cwd) return null;
   const re = globRe(glob);
   if (!re) return null;
   for (const r of roots) {
     if (!r) continue;
-    const cands = PROBE_CONTROL_FILES.map((nm) => '.claude/' + nm).concat(PROBE_CONTROL_PATHS);
+    // A control path with a * stands for the names it can take (watch.work.json, watch.orchestrator.json) and the files that exist.
+    const cands = PROBE_CONTROL_FILES.map((nm) => '.claude/' + nm).concat(...PROBE_CONTROL_PATHS.map((c) => (c.indexOf('*') === -1 ? [c] : ['work', 'orchestrator'].map((s) => c.replace('*', s)))));
     try { for (const e of fs.readdirSync(path.join(r, '.claude', 'hooks'))) cands.push(`.claude/hooks/${e}`); } catch (_) { /* no hooks folder */ }
     try { for (const e of fs.readdirSync(path.join(r, '.claude'))) if (PROBE_CONTROL_FILE_RE.test(e.toLowerCase())) cands.push(`.claude/${e}`); } catch (_) { /* no .claude folder */ }
+    try { for (const e of fs.readdirSync(path.join(r, '.claude', 'channel'))) if (PROBE_CONTROL_PATHS.some((c) => probePathMatch(`.claude/channel/${e.toLowerCase()}`, c))) cands.push(`.claude/channel/${e}`); } catch (_) { /* no channel folder */ }
+    const floor = probeFloorBound(r);
+    if (floor) cands.push(...floorFiles(r));
     for (const t of cands) {
       const abs = path.join(r, ...t.split('/'));
       if (re.test(fwd(path.relative(cwd, abs))) || re.test(fwd(abs))) return t.startsWith('.claude/hooks/') ? '.claude/hooks' : t;
     }
     if (folders) {
-      for (const [dir, t] of CONTROL_FOLDERS) {
+      for (const [dir, t] of CONTROL_FOLDERS.concat(floor ? FLOOR_FOLDERS : [])) {
         const abs = path.join(r, ...dir.split('/'));
         if (re.test(fwd(path.relative(cwd, abs))) || re.test(fwd(abs))) return t;
       }
@@ -2256,6 +2441,9 @@ function main() {
         if (refusal) refuse(refusal); // the target's refusal named first
       }
     }
+    // M34.5.F.2 (item 4): the git fence answers ask - after every refusal above (a refusal outranks
+    // it, as Claude Code ranks hook decisions: deny > defer > ask > allow), in every state.
+    if (writes.asks && writes.asks.length) ask(writes.asks[0].verb);
     allow();
   }
   if (rawPath) {
@@ -2272,5 +2460,5 @@ function main() {
 if (require.main === module) {
   try { main(); } catch (e) { refuse(unknownLine(`the gate threw: ${(e && e.message) || e}`)); }
 } else {
-  module.exports = { probeWalk, probeRealForm, payloadHash, probeRowHash, PROBE_CONTROL_FILES, PROBE_CONTROL_PATHS, PROBE_CONTROL_LIST_GLOB };
+  module.exports = { probeWalk, probeRealForm, payloadHash, probeRowHash, PROBE_CONTROL_FILES, PROBE_CONTROL_PATHS, PROBE_CONTROL_LIST_GLOB, PROBE_FLOOR_PATHS, PROBE_FLOOR_MARK, probePathMatch };
 }

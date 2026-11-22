@@ -10,7 +10,7 @@
 
 In a hurry? One decision, one chat, then the kit drives **(you need Git, Node 22+, and VS Code with Copilot - §0)**:
 
-1. **New project** - unzip the release ZIP into a fresh directory and adopt (§1's **New repo** sequence). **Existing repo** - unzip into the repo and adopt (§1's "Existing repo" line).
+1. **New project** - unzip the release ZIP into a fresh directory and adopt (§1's **New repo** sequence). **Existing repo** - extract into the repo without replacing your files, and adopt (§1's "Existing repo" line).
 2. Open the folder in VS Code (**File, then Open Folder**), open Copilot Chat, pick a **Claude model**, switch to **Agent Mode** (§2), and type one line - what you want (*"fix a bug in this app"*, *"add CSV export to my app"*, *"build me a game"*) or just `go`. The kit takes it from there: everything else arrives one thing at a time, at the moment the run needs it.
 
 **Nothing leaves your machine until you explicitly approve it** - Agent Mode shows every file write for Apply/Discard, and the kit's own rule keeps `git commit`/`git push` waiting on your explicit go-ahead. Push and PR are single, separate approvals near the end of a run. Until then, everything is local.
@@ -43,54 +43,55 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.10-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.11-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.10-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.10-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.10-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.10-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.11-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.11-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.11-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.11-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
 
-**What the unzip lands:** exactly one root file - `CLAUDE.md` - plus one kit directory, `sbak/` (everything else lives inside it). The only possible collision with an existing repo is `CLAUDE.md` itself, adjudicated at bootstrap.
+**What the extract lands:** one root file, `CLAUDE.md`, and one kit directory, `sbak/` (everything else lives inside it). The extract lines below never replace a file you already have: where your repository has a `CLAUDE.md` of its own, yours stays and the kit's instructions reach Copilot through `.github/copilot-instructions.md`, taken from the ZIP (deterministic enforcement, run as printed); where you also have a `.github/copilot-instructions.md`, the kit does not replace it: add the kit's rules to it yourself, from the ZIP's `CLAUDE.md` (human authorization).
 
 **Copy is not install.** Unzip alone lands no active enforcement: the Git hooks are not armed until the `adopt` step arms and verifies them.
 
-**One Copilot-specific step the install needs:** Copilot auto-loads its instructions from `.github/copilot-instructions.md` at the workspace root, and **neither the ZIP nor a clone of this repo includes that file**. The sequences below create it by copying `CLAUDE.md` into that slot, so every chat opens with the kit's entry rules in context.
+**One Copilot-specific step the install needs:** Copilot auto-loads its instructions from `.github/copilot-instructions.md` at the workspace root, and **neither the ZIP nor a clone of this repo includes that file**. The sequences below create it from the ZIP's `CLAUDE.md`, only where you have none, so every chat opens with the kit's entry rules in context.
 
 **New repo** - the full sequence. Run it from the folder the ZIP downloaded to (usually `Downloads`), and replace `<projects-path>` with wherever you keep code - the point is that the project gets a real home, not `Downloads`.
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.10-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip -n sbak-v1.0.11-starter.zip -d <projects-path>/my-project
+mkdir -p <projects-path>/my-project/.github
+[ -e <projects-path>/my-project/.github/copilot-instructions.md ] || unzip -p sbak-v1.0.11-starter.zip CLAUDE.md > <projects-path>/my-project/.github/copilot-instructions.md
+cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
-mkdir -p .github
-cp CLAUDE.md .github/copilot-instructions.md
 ```
 
-Windows (cmd or PowerShell):
+Windows (cmd or PowerShell, not Git Bash, whose own `tar` cannot read a `C:` path):
 
 ```
-mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.10-starter.zip -C <projects-path>\my-project
-cd <projects-path>\my-project
+mkdir "<projects-path>\my-project\.sbak-copilot"
+tar -xkf sbak-v1.0.11-starter.zip -C "<projects-path>\my-project"
+tar -xf sbak-v1.0.11-starter.zip -C "<projects-path>\my-project\.sbak-copilot" CLAUDE.md
+cd "<projects-path>\my-project"
+node -e "const fs=require('fs');fs.mkdirSync('.github',{recursive:true});if(!fs.existsSync('.github/copilot-instructions.md'))fs.copyFileSync('.sbak-copilot/CLAUDE.md','.github/copilot-instructions.md');fs.rmSync('.sbak-copilot',{recursive:true,force:true})"
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
-mkdir .github
-copy CLAUDE.md .github\copilot-instructions.md
 ```
 
 Then open the folder in VS Code: **File, then Open Folder, pick `my-project`.** Don't use `code .` - depending on VS Code's last-opened state it can restore a multi-root *workspace* and nest your project under an "UNTITLED (WORKSPACE)" wrapper, which scopes the framework-anchored paths (`.github/`, `CLAUDE.md`) to the wrong root so Copilot may not auto-load the instructions. Open Folder is unambiguous. If VS Code opens the folder in Restricted Mode, choose **Trust** - Copilot Chat and the kit's Node scripts need a trusted workspace.
 
-**Existing repo:** unzip into the repo, run the same adopt command, create the same `.github/copilot-instructions.md` copy, then open the folder in VS Code.
+**Existing repo:** run the same extract lines with the repository as the target (they never replace a file you already have, your `CLAUDE.md` and `.github/copilot-instructions.md` included), run the same adopt command, then open the folder in VS Code. If git already runs hooks of yours there, adopt names them, changes nothing in your git configuration and exits 1: re-run it with `--hooks chain` (yours run first, then the kit's checks, in this clone) or `--hooks replace` (yours stop running; the previous setting stays in git config as `sbak.hooksReplaced`). Until the bootstrap ends, the kit's pre-commit refuses every commit in the repository, yours included: the bootstrap fills it and places the validators it runs (deterministic enforcement).
 
 **Order matters:** `git init` must come before `adopt`. Skip it and adopt exits 1, prints `ADOPTION INCOMPLETE`, names the control (`MISSING: Git hook activation (core.hooksPath)`), and prints the fix (`repair: git init`). Run the printed repair, then re-run adopt.
 
 **The adopt step verifies itself, and its exit code is the contract:**
 
-- **Exit 0 means adoption COMPLETE** - every required enforcement layer is active (Git hooks armed via `core.hooksPath`, no destination refused, no incomplete settings merge) - and it prints exactly that.
+- **Exit 0 means adoption COMPLETE** - every required enforcement layer is active (the kit's own Git hooks armed via `core.hooksPath`, with yours chained when you chose that, no destination refused, no incomplete settings merge), read by content: the kit's hooks are compared with the installed release (your project's fills read as the kit's; an earlier release's copy is the migration's to merge), and every file this project's tier requires is present (before the bootstrap no validator is required, and the bootstrap places them; while a migration is pending, a file new since your kit pin waits for it) - and it prints exactly that (deterministic enforcement).
 - **Exit 1 means `ADOPTION INCOMPLETE`** - the missing control is named on a `MISSING:` line, with a `repair:` command that runs as printed.
 - **Exit 2 is a usage or fail-closed refusal.**
-- An incomplete install cannot silently look complete: run the printed repair, then re-run `--adopt` - re-running is always safe; a clean re-run changes nothing.
+- An incomplete install cannot silently look complete: adopt names a required file that is absent, or a git hook that is not the kit's by content, with the repair that restores it; run the printed repair, then re-run `--adopt` - re-running is always safe; a clean re-run changes nothing.
 
 On this host that contract is worth restating: the session-layer hooks never run in Copilot, so **the Git hooks adopt arms are the only mechanical wall between an agent mistake and your history**. Don't skip adopt here.
 
@@ -151,7 +152,7 @@ You can change any of these later - see `FRAMEWORK-CONFIG.md` §7.
 
 ## 4. Describe what you want to build
 
-**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 54 files for Lite, 121 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 2).
+**A paragraph may be enough - but a more detailed description will get better results.** The agent runs bootstrap in order: discovery questions, a spec, (web/UI only) a design brief, a milestone plan, then the scaffold - 54 files for Lite, 123 for Full (counts derived from this release's scaffold set; a declared risk trigger adds 4).
 
 **Each phase surfaces for your approval** per the `pre_write_surface` toggle, and **before any disk write the agent states the blast radius** ("I'll create about N files across `.claude/`, `.githooks/`, `scripts/`, `docs/`, `.github/`, plus root files") so you consent to the footprint up front. In Agent Mode, VS Code additionally shows the diff for every file write - **Apply** or **Discard**, per edit.
 
@@ -260,7 +261,7 @@ Two Copilot-specific realities:
 
 ## 6. Keeping the instructions file fresh (copy vs symlink)
 
-Your `.github/copilot-instructions.md` is a copy of `CLAUDE.md` (§1's step), so it goes stale if `CLAUDE.md` changes during bootstrap iterations. Refresh it with the same copy command, or replace it with a symlink that tracks `CLAUDE.md` automatically:
+Your `.github/copilot-instructions.md` is a copy of `CLAUDE.md` (§1's step), so it goes stale if `CLAUDE.md` changes during bootstrap iterations. Refresh it by deleting it and running §1's line again, which takes the ZIP's `CLAUDE.md`, or, where the root `CLAUDE.md` is the kit's (not a file of your own the extract kept), replace it with a symlink that tracks `CLAUDE.md` automatically:
 
 macOS / Linux:
 

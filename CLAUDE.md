@@ -8,7 +8,7 @@
 
 ## First response — every session
 
-Echo the `[read-first stamp]` line from your context (the SessionStart hook prints it; a missing stamp is caught by the hook layer itself, not by you). Your first response is that echo plus exactly ONE question — nothing else before it - and one line after it:
+Echo the `[read-first stamp]` line from your context (the SessionStart hook prints it; with none there, say first that the kit's hooks did not run here). Your first response is that echo plus exactly ONE question — nothing else before it - and one line after it:
 
 > **What do you want to build?**
 >

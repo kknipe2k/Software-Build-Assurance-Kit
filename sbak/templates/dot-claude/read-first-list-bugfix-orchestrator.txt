@@ -39,3 +39,5 @@ project-config.md  when: session-start - operating_mode: bug_fix + tier
 sbak/BUILD-PLAYBOOK.md  when: on-demand - the per-stage loop, when authoring phase prompts
 docs/bugfix/<bug-id>.md  when: on-demand - the bug contract, when authoring or adjudicating a phase
 docs/gotchas.md  when: session-start - the accumulated traps
+# M34.5.F.8: the open stage's view, as the greenfield orchestrator list carries it.
+view: <stage>  when: on-demand - the open stage's view, when adjudicating a gate (node scripts/stage-view.cjs <stage> --role orchestrator builds it)

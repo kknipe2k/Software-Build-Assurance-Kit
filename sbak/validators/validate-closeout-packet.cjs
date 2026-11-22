@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-closeout-packet.cjs
 //
 // The closeout floor (M30.I, audit fades 2 + 4, rows 48/49 - all RULED at M30.B):
@@ -15,6 +15,13 @@
 //                     (receipts / retrospectives / V-R findings) instead of restating
 //                     them, and stated counts are seeded (a ```reconcile block), never
 //                     typed. Append-only is untouched - the hook owns it.
+//                     M34.7.B: where the project root (--root, default the working folder) has a
+//                     spec chain (spec/spec-chain.json), the packet carries a "## Requirement
+//                     changes" section holding either "no requirement changed" or the change files
+//                     it reconciled (spec/changes/ lines) - the block `validate-spec-chain.cjs
+//                     --closeout <milestone>` prints, which also refuses a chain that does not close.
+//                     Presence only: whether the section is the block that command printed is the
+//                     review's (agent judgment).
 //   --ladder <milestone> --release-state <file>
 //                     The ladder hook (row 49): the closing milestone must have a row in
 //                     the release-state ledger - a missed update breaks the next cut
@@ -26,13 +33,14 @@
 // owner's review of the packet is that wall.
 //
 // Usage:
-//   node validators/validate-closeout-packet.cjs --packet <file>
+//   node validators/validate-closeout-packet.cjs --packet <file> [--root DIR]
 //   node validators/validate-closeout-packet.cjs --gap <file>
 //   node validators/validate-closeout-packet.cjs --ladder <MNN> --release-state <file>
 
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 const { escapeRegExp } = require('./lib/escape-regexp.cjs'); // the shared payload escape: --ladder is a CLI arg
 
 function die(msg, code) { process.stderr.write(msg.endsWith('\n') ? msg : msg + '\n'); process.exit(code); }
@@ -41,9 +49,15 @@ function readOrDie(f) {
   return '';
 }
 
-function checkPacket(file) {
+function checkPacket(file, root) {
   const t = readOrDie(file);
   const errors = [];
+  // M34.7.B: a project with a spec chain names its requirement changes, or says none happened.
+  if (fs.existsSync(path.join(root, 'spec', 'spec-chain.json'))) {
+    const m = t.match(/^##\s+Requirement changes\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m);
+    if (!m) errors.push('no "## Requirement changes" section - this project has a spec chain, so the closeout names the requirement changes it reconciled or says "no requirement changed" (node validators/validate-spec-chain.cjs --closeout <milestone> prints the block)');
+    else if (!/^no requirement changed\s*$/m.test(m[1]) && !/spec\/changes\/\S+\.md/.test(m[1])) errors.push('the "## Requirement changes" section lists no change file and does not say "no requirement changed" - paste the block node validators/validate-spec-chain.cjs --closeout <milestone> prints');
+  }
   const headings = [...t.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
   if (headings.length === 0 || !/^deltas from plan/i.test(headings[0])) {
     errors.push('the packet does not LEAD with "## Deltas from plan" - an all-good packet is the false-green shape; deltas and open findings come first (hard rule 3)');
@@ -96,14 +110,14 @@ function main() {
 
   let errors = [];
   let ran = false;
-  if (packet) { errors = errors.concat(checkPacket(packet)); ran = true; }
+  if (packet) { errors = errors.concat(checkPacket(packet, path.resolve(get('--root') || '.'))); ran = true; }
   if (gap) { errors = errors.concat(checkGap(gap)); ran = true; }
   if (ladder) {
     const rs = get('--release-state') || 'docs/release-state.md';
     errors = errors.concat(checkLadder(ladder, rs));
     ran = true;
   }
-  if (!ran) die('usage: validate-closeout-packet.cjs --packet <file> | --gap <file> | --ladder <MNN> [--release-state <file>]', 2);
+  if (!ran) die('usage: validate-closeout-packet.cjs --packet <file> [--root DIR] | --gap <file> | --ladder <MNN> [--release-state <file>]', 2);
 
   if (errors.length > 0) {
     for (const e of errors) process.stderr.write(`FAIL  closeout-packet: ${e}\n`);

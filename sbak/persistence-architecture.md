@@ -102,7 +102,7 @@
               │  1. CLAUDE.md                  (auto)      │
               │  2. BUILD-PLAYBOOK.md (relevant sections)  │
               │  3. M[NN]-<title>.md  X.1–X.4              │
-              │  4. spec/project-spec.md (sections cited)  │
+              │  4. spec/live-spec.md (sections cited)     │
               │  5. ADRs (cited)                           │
               │  6. PRIOR-STAGE RETROSPECTIVES (X≥B)       │
               │     [END] Decisions for the next stage     │
@@ -253,7 +253,12 @@ M01 lifecycle                                M02 lifecycle
 | `FRAMEWORK-CONFIG.md` | Slow | Framework-level reference; toggle schema or tier definition changes require ADR | Maintainer + ADR |
 | `.claude/settings.json` + `.claude/hooks/...` | Evolves | Hook wiring changes when the protocol's enforcement model changes | Maintainer or per session |
 | `.claude/read-first-list.txt` | Evolves | Updated when a new Phase doc opens or a new framework-level reference becomes load-bearing | Per stage / per milestone |
-| `spec/project-spec.md` | Slow | ADR required for any change to architecture, schemas, gates, primitives | Maintainer + ADR |
+| `spec/project-spec.md` | Frozen | The original spec, the record of what was first agreed: never edited after the bootstrap commit; the commit floor refuses a staged change to it (deterministic enforcement) | Written once, at bootstrap |
+| `spec/discovery-notes.md` | Written once | The discovery questions and the person's answers (Full), the spec challenge's second read; not hashed into the chain, so an edit is not refused | Written at discovery, before the spec |
+| `spec/spec-challenge.md` | Written once | The spec challenge's record (Full): its findings and their dispositions, or the person's decline, the person's sign-off line and the second person's or "no second person"; the freeze and the bootstrap commit refuse a Full spec without it (deterministic enforcement); not hashed into the chain | Written once, before the freeze |
+| `spec/live-spec.md` | Slow | The live spec, born at the bootstrap commit as a byte copy of the original and the only spec that changes, and only where `spec/spec-chain.json` reaches it (deterministic enforcement). A requirement change is one change file under `spec/changes/`, approved by the person (human authorization) and applied in the same commit (deterministic enforcement); an architecture decision still takes an ADR | Change file + the person's approval |
+| `spec/spec-chain.json` | Grows | The original's sha256 and each change's before and after; the commit floor refuses a change to its original record and a live spec the chain does not reach (deterministic enforcement) | Written at the freeze, then with each change |
+| `spec/changes/NNNN-<slug>.md` | Append-only | One requirement change: the five fields, the live spec's sha256 before and after (written by `validate-spec-chain.cjs --change`) and the approval line, the person's word recorded as text (the kit does not check who wrote it); the commit floor refuses an edit or a deletion once it is committed (deterministic enforcement) | One per change, with its live-spec edit |
 | `schemas/*.v1.*` (if applicable) | Slow | Major bumps require new file `*.v2.*` + ADR; minor (additive) edits in-place | Maintainer + ADR |
 | `examples/` (if applicable) | Slow | Changes evaluated against archetype matrix; archetype-breaking changes blocked | Maintainer |
 | `CLAUDE.md` | Evolves | Edits when protocol changes (gates, hard rules, gotchas); commit history is the audit | Claude per session, user-approved |
@@ -394,7 +399,7 @@ graph TB
 1. `CLAUDE.md` (auto)
 2. `BUILD-PLAYBOOK.md` §3 (per-stage loop)
 3. `docs/build-prompts/M01-<title>.md` sections A.1 → A.4
-4. `spec/project-spec.md` (sections cited by M01)
+4. `spec/live-spec.md` (sections cited by M01; the current spec, the frozen original `spec/project-spec.md` beside it)
 5. ADRs cited by M01
 6. `prompts/RETROSPECTIVE-TEMPLATE.md`
 7. `docs/gates.md` (M01 row)
@@ -415,13 +420,13 @@ Stage A list **plus**:
 - All prior retrospectives (M01.A → M01.D)
 - `M01-summary.md`
 - Cumulative read of every code file shipped across M01 stages
-- `spec/project-spec.md` end-to-end skim
+- `spec/live-spec.md` end-to-end skim
 
 ### M02 Stage A (first stage of second milestone, fresh session, fresh branch)
 - `CLAUDE.md` (auto; may have new §15 gotchas added by M01)
 - `BUILD-PLAYBOOK.md` (re-skim if updated)
 - `docs/build-prompts/M02-<title>.md` A.1 → A.4
-- `spec/project-spec.md` (M02 sections)
+- `spec/live-spec.md` (M02 sections)
 - ADRs (existing + any added during M01)
 - `docs/gap-analysis.md` **full history** (Pre-M01 + M01 entry) — for Carry-forward of items targeting M02
 - `docs/sessions.md` (M01 close + any M02-prep entries)

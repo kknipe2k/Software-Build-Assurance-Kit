@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/channel.cjs
 //   (kit source of truth: templates/scripts/channel.cjs; the core is scripts/lib/channel.cjs)
 //
@@ -21,7 +21,9 @@
 //   node scripts/channel.cjs identity [--init]   (M34.6.A: the origin every row carries; --init writes .claude/channel/identity once)
 //   node scripts/channel.cjs accept --stage <id> --seq <the stage-end packet's seq> --stamp-file <f>
 //                                                       role=orchestrator (M34.6.B): the stamp transcribed
-//                                                       into the stage's gate.json, once
+//                                                       into the stage's gate.json, once; M34.5.F.3: only
+//                                                       when this session recorded a prompt typed after
+//                                                       the stage-end packet with its text, which it cites
 //
 // THE EVIDENCE PATH (M34.6.B). On a stage on the evidence path (scripts/lib/evidence.cjs) every
 // refusal this CLI prints for publish, send, ack and pickup appends a row to
@@ -146,8 +148,24 @@ if (verb === 'publish' || verb === 'send') {
     // M34.6.E item 2 (R-144): only the release needs the owner's keystroke; every other send leaves on
     // the orchestrator's authority, its hash, seq and log row the record. A /send token present is
     // consumed by any send, so a keystroke typed for one message never stands for a later release.
-    const gate = ch.sendGate(cwd);
-    if (cls === 'approval-request' && !gate.ok) die(gate.line);
+    // M34.5.F.2 (items 1 and 2): the release send is the session's that took the owner's typed
+    // /send --approval - the keyboard check first (a test runner or package script refused; an empty
+    // session id under a Claude Code ancestor refused; no session at all refused, since the token
+    // belongs to the session that minted it), then the token's binding (that session, that turn, the
+    // expiry, the release still pending). The typed word recorded by the hook is the owner's act on
+    // record (R-245): no second prompt is required of the send itself (gate-1 ruling C4).
+    if (cls === 'approval-request') {
+      let rc = null;
+      try { rc = require('./lib/receipts.cjs'); } catch (_) { rc = null; }
+      const burn = (line) => { ch.sendGate(cwd); die(line); };
+      if (!rc) burn('channel: send refused - scripts/lib/receipts.cjs did not load, so who is at the keyboard cannot be told; nothing was sent - repair: node scripts/kit-update.cjs --adopt');
+      const kb = rc.keyboard(process.env);
+      if (kb.state === 'refused') burn(rc.keyboardRefusalLine('channel', kb, 'release send', 'sent'));
+      if (kb.state === 'malformed') burn('channel: send refused - CLAUDE_CODE_SESSION_ID fails the session format check, so the send token cannot be bound to a session; nothing was sent');
+      if (kb.state === 'none') burn('channel: send refused - the release send runs only in the orchestrator session where the owner typed /send --approval (the token belongs to that session); from your own terminal, release with the release script itself; nothing was sent');
+      const gate = ch.sendGate(cwd, { session: kb.session, res });
+      if (!gate.ok) die(gate.line);
+    } else ch.sendGate(cwd);
   }
   const kind = opt('--kind', null) || (cls === 'stage-open' ? 'open' : cls === 'courier' ? 'message' : cls);
   if (!ch.KIND_RE.test(kind)) die(`channel: --kind must match ${ch.KIND_RE}`);
@@ -254,7 +272,10 @@ if (verb === 'pickup') {
 // ---------------------------------------------------------------------------
 if (verb === 'watch') {
   const res = resolved();
-  const pollMs = parseInt(opt('--poll-ms', '750'), 10) || 750;
+  const pollAsked = parseInt(opt('--poll-ms', '750'), 10) || 750;
+  // M34.5.F.1: never a poll longer than the freshness rule reads (lib/channel.cjs MAX_POLL_MS).
+  const pollMs = Math.min(pollAsked, ch.MAX_POLL_MS);
+  if (pollAsked > pollMs) out(`channel: --poll-ms ${pollAsked} is over the watcher's maximum, ${ch.MAX_POLL_MS} ms; polling every ${pollMs} ms`);
   const livenessMs = parseInt(opt('--liveness-ms', '120000'), 10) || 120000;
   const maxMs = parseInt(opt('--max-ms', String(8 * 3600 * 1000)), 10) || 8 * 3600 * 1000;
   const peerRole = ch.PEER[res.role];
@@ -356,7 +377,10 @@ if (verb === 'accept') {
   if (!stage || !ch.KIND_RE || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(stage) || !seq || !/^[1-9][0-9]{0,8}$/.test(seq) || !sf) die('channel: accept needs --stage <id> --seq <the stage-end packet\'s seq> --stamp-file <the stamp, verbatim>');
   let stamp;
   try { stamp = fs.readFileSync(path.resolve(cwd, sf), 'utf8'); } catch (e) { die(`channel: accept refused - cannot read --stamp-file ${sf} (${e.message})`); }
-  const r = require('./lib/evidence.cjs').accept(res.tree, stage, parseInt(seq, 10), stamp, { role: res.role, session: process.env.CLAUDE_CODE_SESSION_ID || null });
+  // M34.5.F.3 (item 1): the owner's prompt is read from this session's receipts, in this tree first
+  // (where its UserPromptSubmit hook wrote), then in each worktree git lists.
+  const here = (() => { const g = require('child_process').spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8', windowsHide: true }); return g.status === 0 ? String(g.stdout).trim() : cwd; })();
+  const r = require('./lib/evidence.cjs').accept(res.tree, stage, parseInt(seq, 10), stamp, { role: res.role, session: process.env.CLAUDE_CODE_SESSION_ID || null }, { promptRoots: [here].concat(ch.worktrees(cwd) || []) });
   if (!r.ok) die(r.line);
   out(r.line);
   process.exit(0);

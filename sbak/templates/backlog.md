@@ -16,7 +16,7 @@
 
 Why this is non-negotiable: if the agent could re-rank the backlog on its own, "off track" would be *unfalsifiable* — the agent would simply lower the bar to clear it. Priority is a user-domain decision (`sbak/BUILD-PLAYBOOK.md` §4.2 lists "priority — which deliverable matters more" as an explicit escalate-to-user fork). The `Depends on` column is held to the **same** bar deliberately: a fabricated dependency is the exact loophole that would let the agent manufacture a "build-sequence necessity" to launder priority drift into justification. The agent proposes dependency edits *with rationale*; the human ratifies.
 
-**Mechanically:** this rides on the do-not-commit-without-approval rule (G1) — nothing commits unreviewed, so a backlog change is necessarily seen by the human. The added discipline is that a backlog change must be **surfaced explicitly for ratification**, never folded silently into an unrelated stage commit. At Full tier, every re-rank is also recorded in the override log (same pattern as a tier change), so direction is always traceable to a human sign-off.
+**Mechanically:** a backlog change commits through the do-not-commit-without-approval rule (G1): Claude Code asks before `git commit` runs, and the ask shows the command and its message, not the diff (human authorization of the commit, not of the backlog change). The added discipline is that a backlog change must be **surfaced explicitly for ratification**, never folded silently into an unrelated stage commit. At Full tier, every re-rank is also recorded in the override log below as text the person confirms: no script reads that log, and the kit does not check who wrote its ratifier line (agent judgment and the person's confirmation).
 
 ---
 
@@ -68,7 +68,7 @@ the two; justified inversions are logged in docs/off-track-log.md.
 
 ## Override log (Full tier — every re-rank recorded here, append-only)
 
-> A re-rank is a human-ratified change to priority order. Record each one so direction stays traceable. Newest at the bottom. (This section is honor-system unless the ledger workflow is risk-armed; ratification still happens either way.)
+> A re-rank is a human-ratified change to priority order. Record each one so direction stays traceable. Newest at the bottom. (No script reads this section; it is checked append-only in CI only in a project with a declared risk trigger, and the kit does not check who wrote a ratifier line.)
 
 <!-- Append re-rank records below this line. Format:
 - YYYY-MM-DD — moved #N above #M (was rank X, now rank Y). Reason: {{user's reason}}. Ratified by: {{user}}.

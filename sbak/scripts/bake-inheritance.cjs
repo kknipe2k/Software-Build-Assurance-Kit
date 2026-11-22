@@ -196,6 +196,8 @@ function receiptsLeg(bakedRoot) {
       '# Retrospective: M01.A — leg fixture', '',
       '**Self-correction budget for this stage:** 3', '',
       '- [x] RED-first loop honored.', '',
+      // The baked collector counts a RED-first control only from this structured line.
+      'red-first: tests/leg.test.cjs failed at abc1234', '',
       FENCE + 'rework', 'implementation: 1', 'verifier: 0', 'irl: 0', 'post-merge: 0', FENCE, '',
       FENCE + 'user-stamp', 'verdict: pass', FENCE, '',
     ].join('\n'), 'utf8');
@@ -770,6 +772,7 @@ if (omit !== 'validate-release-readiness.cjs') {
 // blocked" from the review's journey is realised as (3) clear→dormant + (4) reopen→re-block (a fresh
 // /stage re-arms the gate). Asserting a block on a stage-less tree would assert a bug; (4) is the
 // honest "re-locks" proof.
+let goldenWhere = null; // set when the release and clear legs cannot run here (a Claude Code session or a test runner above)
 try {
   const gb = require(path.join(KIT_ROOT, 'scripts/golden-bootstrap.cjs')); // require.main-guarded → pure import
   const goldenRoot = sandbox.sandboxRoot('kit-golden-leg-');
@@ -889,10 +892,18 @@ try {
   spawnSync('git', ['init', '-q'], { cwd: goldenRoot, env: sandbox.scrubGitEnv(), encoding: 'utf8' });
   fs.mkdirSync(path.join(goldenRoot, 'tests'), { recursive: true });
   fs.writeFileSync(path.join(goldenRoot, 'tests', 'golden.test.js'), "test('golden', () => {});\n");
-  runRendered('scripts/approve-red.cjs', ['--stage', 'M01.A', '--release-seq', 'none']); // 2) human approves the RED (reads recorded above); the bare release form, no channel here
+  // The release and the clear are the person's acts, decided by the process tree (the rendered
+  // receipts.cjs keyboard check). From the person's own terminal this leg drives both; under a Claude
+  // Code session or a test runner it checks that the release is refused and the edit stays blocked,
+  // and says plainly that the allow and clear legs were not run here.
+  let kb = null;
+  try { kb = require(path.join(goldenRoot, 'scripts', 'lib', 'receipts.cjs')).keyboard(process.env); } catch (_) { kb = null; }
+  goldenWhere = kb && kb.state !== 'none' ? (kb.state === 'refused' && kb.cause === 'runner' ? kb.runner : kb.state === 'refused' && kb.cause === 'tree' ? 'a process tree it cannot read' : 'a Claude Code session') : null;
+  const rel = runRendered('scripts/approve-red.cjs', ['--stage', 'M01.A', '--release-seq', 'none']); // 2) human approves the RED (reads recorded above); the bare release form, no channel here
   const s2 = redGate();
-  runRendered('scripts/stage-active.cjs', ['--clear']); // 3) stage closed → dormant
-  const s3 = redGate();
+  if (!goldenWhere) runRendered('scripts/stage-active.cjs', ['--clear']); // 3) stage closed → dormant
+  const s3 = goldenWhere ? 0 : redGate();
+  if (goldenWhere && (rel !== 2 || s2 !== 2)) findings.push(`golden leg — under ${goldenWhere} the release was not refused (exit ${rel}) or the edit was not still blocked (exit ${s2}); the release is the person's act.`);
   runRendered('scripts/stage-active.cjs', ['M01.A']); // 4) re-open a fresh stage → re-armed
   const s4 = redGate();
   for (const rel of [phaseDocRel, path.join('.claude', 'views'), '.git']) { try { fs.rmSync(path.join(goldenRoot, rel), { recursive: true, force: true }); } catch (_) { /* best effort */ } }
@@ -905,7 +916,7 @@ try {
       `cannot write .claude/stage-active, so the flagship TDD gate is fail-open. (Behavior, not hook-file presence.)`
     );
   }
-  if (s2 !== 0) {
+  if (!goldenWhere && s2 !== 0) {
     findings.push(
       `golden leg — after approve-red the rendered red-gate did NOT allow the edit: exited ${s2}, ` +
       `expected 0 (ALLOW). The gate must release implementation edits for the approved stage.`
@@ -1182,7 +1193,7 @@ if (findings.length === 0) {
     `the inline rework-fence skip inherits; ` +
     `the G16 fixture isolates the missing-review check; ` +
     `the golden leg proves the rendered red-gate is wired AND BLOCKS a pre-approval edit ` +
-    `(block → approve-red → allow → clear → re-block); ` +
+    (goldenWhere ? `(block → the release refused under ${goldenWhere} → re-block); not run here (2): the allow leg and the clear leg, which run from your own terminal, or in CI started without a package runner; ` : `(block → approve-red → allow → clear → re-block); `) +
     `the baked project's own mini-smoke runs green AND goes RED on a broken hook; ` +
     `the receipts leg proves the baked pipeline end-to-end — synthesized adapter payloads feed the EVENT ` +
     `sections and the bounded fixture-history synthesizer feeds the COLLECTOR sections — with --check green ` +

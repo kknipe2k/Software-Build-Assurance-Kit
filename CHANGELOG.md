@@ -2,9 +2,33 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.11 - 2026-11-21
+
+**The current release** - the live spec, and the feature walk's fixes: a project's original spec is frozen at the bootstrap commit and a live spec carries every later change through one approved change file the commit floor follows; and the previous release, walked feature by feature as a person meets it, had 22 defects, each closed here; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
+
+- **Capabilities.** Everything in v1.0.10.
+  - The original spec is frozen at the bootstrap commit; `spec/live-spec.md` is born as its copy and `spec/spec-chain.json` records both hashes; the commit floor refuses an edit of the original and a live spec the chain does not reach.
+  - Requirements carry `REQ-` ids and the spec an Assumptions section, each assumption with what would show it false.
+  - A requirement change is one file under `spec/changes/`, recorded with `--change` and committed with its live-spec edit; it must name requirement ids the live spec defines before or after the commit that carries it.
+  - The milestone closeout prints the requirement changes it reconciled, or "no requirement changed".
+  - Before the freeze a fresh-context session challenges the draft spec; its findings, your sign-off and a second sign-off or "no second person" are recorded, and the freeze refuses a spec without the record.
+  - A fifth label, forecast, for a claim about conditions not exercised.
+  - A project that carries a spec chain is checked whatever its Tier line reads.
+  - The commit floor's files and the channel's files are in the control set and the deny floor; the pre-commit checks itself and its validators against the release manifest; the secret files' family is denied whole.
+  - The gate scripts decide whether a person is at the terminal from the process tree; the release keystroke is bound to its session, its turn and a pending release; the stamp is recorded from the typed prompt.
+  - The installer and adopt find your existing git hooks before any write and chain or replace them only on your word.
+  - Readiness and adopt read the git hooks, the managed files and the Done line by content, and readiness runs a small smoke with a pre-commit fixture.
+  - The installer never writes through a symlink or into a nested repository, reports every root write and names a downgrade.
+  - A resolved migration conflict stays resolved, and the re-run raises the pin.
+  - The scope record is compared at the index as well as HEAD; the append-only checks read the base's ledger list and walk the refs being pushed.
+  - The receipt takes a claim only from a structured field of a committed record and prints UNKNOWN where nothing ran.
+- **Upgrading a v1.0.10 project.** Upgrade the kit folder with `sbak-install`, then run `node scripts/kit-update.cjs --migrate`. In a project that carries the spec-chain validator the migration splits the spec (the original frozen as it is, the live copy written, the chain started) and says so on its `spec:` line before anything is written; in a project that does not carry the validator it leaves the spec as it is and says so. An edited kit file that a migration kept reads NOT READY until it is declared an INTENTIONAL DIVERGENCE. A conflict resolved by taking the release side in an earlier migration may have left an unfilled `{{TOKEN}}`; `.claude/kit-migrate.json` names the files. On the Full path a new work-stage retrospective needs its handoff note with a named mutation, or `n/a - <reason>`. The config toggle that claimed to switch hook enforcement is retired.
+- **Limitations.** Added: the spec chain proves where the live spec came from, not that a change was wise; the approval and sign-off lines are text checked for being filled, not for who wrote them; a change's contract text and named tests are not compared with the live spec; the spec challenge is a second look, not a proof; the forecast label is checked by keyword, in the kit's own documents only; the spec floor holds only in a project that carries the spec-chain validator.
+- **Evidence.** The previous release was walked in five audit passes, each followed by a fresh-context challenge: 22 red findings, each closed by one of thirteen fix stages, RED-first. The live spec was verified by two fresh-context verifier iterations; their three important findings were closed, two by a fix stage and the last in the closeout stage with its own failing tests first, and no third verifier iteration checked that last fix. The calibration exam was scored by the orchestrator at 0 missed seeds in both iterations.
+
 ## v1.0.10 - 2026-11-10
 
-**The current release** - the gate attests itself: each stage's evidence becomes a record a later reader can check, the verifier's calibration is scored by someone other than the verifier, and the gate's own scripts and the PowerShell tool's reading are held more tightly; what the kit used to ask a person or an agent to remember, a program now does or refuses; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
+The gate attests itself, superseded by v1.0.11: each stage's evidence becomes a record a later reader can check, the verifier's calibration is scored by someone other than the verifier, and the gate's own scripts and the PowerShell tool's reading are held more tightly; what the kit used to ask a person or an agent to remember, a program now does or refuses; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
 
 - **Capabilities.** Everything in v1.0.9.
   - An upgrade keeps a CLAUDE.md the kit placed for you as yours.

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // validators/validate-claude-integrity.cjs
 //
 // The project's CLAUDE.md self-integrity gate (M30.I) - the one check that would
@@ -10,9 +10,12 @@
 // Two halves:
 //   1. SHRINK (--staged): when the repo-root CLAUDE.md is staged, its staged byte count is
 //      compared against the PREVIOUS commit's (read via git, never a stored number). A
-//      staged copy under half the committed size BLOCKS. A legitimate shrink (the owner
-//      cutting ceremony) passes via the override - SBAK_ALLOW_CLAUDE_SHRINK=<reason> - and
-//      the reason is LOGGED to stderr, never silent.
+//      staged copy under half the committed size BLOCKS. A staged deletion is a shrink to 0
+//      (M34.5.F.4), and CLAUDE.sbak.md - the rules file a combined root imports with the line
+//      @CLAUDE.sbak.md - is checked the same way while the root (staged or committed) imports it.
+//      A legitimate shrink (the owner cutting ceremony) passes via the override -
+//      SBAK_ALLOW_CLAUDE_SHRINK=<reason> - and the reason is PRINTED on stderr, never silent; it
+//      is kept in no file (the commit carries the cut, not the reason).
 //   2. WIRING (--staged, and --settings <file> directly): the session-hook layer must be
 //      wired - .claude/settings.json carries all four session hooks
 //      (session-start-read-first, receipts-lifecycle, user-prompt-submit-mode-check,
@@ -119,36 +122,45 @@ function checkSettings(file, { absentIsNote, resolveScripts }) {
 }
 
 // ── half 1: the shrink check ─────────────────────────────────────────────────────────────
+// The import line a combined root carries once the bootstrap placed the project's rules (the placement
+// door's own shape: the token outside a code span).
+const SBAK_IMPORT_RE = /(^|[^`])@CLAUDE\.sbak\.md(?![`\w])/;
+function importsSbak(text) { return text !== null && SBAK_IMPORT_RE.test(String(text).replace(/`[^`]*`/g, '')); }
 function checkShrink() {
   let staged;
   try {
-    staged = git('diff --cached --name-only --diff-filter=ACM').split(/\r?\n/).filter(Boolean);
+    staged = new Map(git('diff --cached --name-status --no-renames --diff-filter=ACMD').split(/\r?\n/).filter(Boolean)
+      .map((l) => { const p = l.split('\t'); return [p[p.length - 1], p[0].charAt(0)]; }));
   } catch (e) {
     die(`FAIL  claude-integrity: cannot enumerate staged files (${(e.stderr || e.message || '').toString().trim()}) - fail-closed (ERR-004).`, 2);
   }
-  if (!staged.includes('CLAUDE.md')) return 0;
-
-  let prev = null;
-  try { prev = git('cat-file -s HEAD:CLAUDE.md').trim(); } catch (_) { prev = null; }
-  if (prev === null) return 0; // first commit of the file - nothing to shrink from
-
-  let now = null;
-  try { now = git('cat-file -s :CLAUDE.md').trim(); } catch (_) { now = null; }
-  if (now === null) die('FAIL  claude-integrity: CLAUDE.md is staged but its staged blob is unreadable - fail-closed.', 2);
-
-  const before = parseInt(prev, 10);
-  const after = parseInt(now, 10);
-  if (!(after < before * SHRINK_RATIO)) return 0;
-
-  const reason = process.env.SBAK_ALLOW_CLAUDE_SHRINK;
-  if (reason && reason.trim() !== '') {
-    process.stderr.write(`NOTE  claude-integrity: CLAUDE.md shrank ${before} -> ${after} bytes; ALLOWED by override, reason logged: ${reason.trim()}\n`);
-    return 0;
+  const show = (spec) => { try { return git(`show ${spec}`); } catch (_) { return null; } };
+  const targets = ['CLAUDE.md'];
+  const stagedRoot = staged.has('CLAUDE.md') && staged.get('CLAUDE.md') !== 'D' ? show(':CLAUDE.md') : null;
+  if (importsSbak(stagedRoot) || importsSbak(show('HEAD:CLAUDE.md'))) targets.push('CLAUDE.sbak.md');
+  for (const file of targets) {
+    if (!staged.has(file)) continue;
+    let prev = null;
+    try { prev = git(`cat-file -s HEAD:${file}`).trim(); } catch (_) { prev = null; }
+    if (prev === null) continue; // first commit of the file - nothing to shrink from
+    const deleted = staged.get(file) === 'D';
+    let now = deleted ? '0' : null;
+    if (!deleted) { try { now = git(`cat-file -s :${file}`).trim(); } catch (_) { now = null; } }
+    if (now === null) die(`FAIL  claude-integrity: ${file} is staged but its staged blob is unreadable - fail-closed.`, 2);
+    const before = parseInt(prev, 10);
+    const after = parseInt(now, 10);
+    if (!(after < before * SHRINK_RATIO)) continue;
+    const reason = process.env.SBAK_ALLOW_CLAUDE_SHRINK;
+    if (reason && reason.trim() !== '') {
+      process.stderr.write(`NOTE  claude-integrity: ${file} ${deleted ? 'deleted' : 'shrank'} ${before} -> ${after} bytes; ALLOWED by override, the reason printed here and kept in no file: ${reason.trim()}\n`);
+      continue;
+    }
+    die(
+      `FAIL  claude-integrity: ${deleted ? `the staged change deletes ${file} (${before} -> 0 bytes), a shrink to nothing` : `the staged ${file} shrank ${before} -> ${after} bytes (under ${Math.round(SHRINK_RATIO * 100)}% of the previous commit's)`} - the truncated-rules class. ` +
+      `If this is deliberate, re-run the commit with SBAK_ALLOW_CLAUDE_SHRINK="<reason>"; the reason is printed with the commit's output, not kept in a file.`, 1
+    );
   }
-  die(
-    `FAIL  claude-integrity: the staged CLAUDE.md shrank ${before} -> ${after} bytes (under ${Math.round(SHRINK_RATIO * 100)}% of the previous commit's) - the truncated-rules class. ` +
-    `If this shrink is deliberate, re-run the commit with SBAK_ALLOW_CLAUDE_SHRINK="<reason>" so the reason is on the record.`, 1
-  );
+  return 0;
 }
 
 function main() {

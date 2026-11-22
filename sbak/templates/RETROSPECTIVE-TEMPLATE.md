@@ -53,7 +53,7 @@ landed: {{what landed — files, tests, run-of-record (the command + result refe
 open: {{what is open — each item with its NAMED next owner (a stage id or person)}}
 next-agent: {{what the next agent must know — the gotchas, the sharp edges, the load-bearing choices}}
 drive: {{the agent's drive of the real assembled surface + run reference — or "n/a - <reason>" (the sentinel is a field, not an exemption; required when the stage's acceptance names an observable change)}}
-mutation: {{the one-line test-mutation naming — which mutation was run, which check flipped RED alone}}
+mutation: {{the one-line test-mutation naming - which mutation was run, which check flipped RED alone; or n/a - <reason>. A placeholder (TBD, "will pick one later") is refused at commit, and on the Full path a new work-stage retro without this note is refused}}
 counts-from: {{the command or receipt every count in this note derives from — never a bare number}}
 off-track: {{highest-priority unblocked backlog item #N · this stage built #M · justified? (G8 — an unlogged inversion is off track by default; see docs/off-track-log.md)}}
 efficiency:
@@ -70,7 +70,7 @@ If the off-track line shows an inversion: surface it now — an explicit user re
 
 ### Human-drive record (closeout stages only — the spec's IRL/HITL plan, consumed)
 
-> **Closeout (Stage E) only** — delete this section in work-stage retros. When the gate arms (tier Full AND `spec/project-spec.md` carries the three-part IRL/HITL plan), the close-gate consumes that plan HERE: the human runs the drive moments the spec scheduled for this boundary, and their answers are **typed** into the block below **before the friction stamp counts** — `validators/validate-retrospective.cjs` blocks a closeout without them. Same pen rule as the stamp: the agent asks, the human answers, the agent transcribes verbatim. Use the spec's **real input**, not a convenient toy one. If the gate is not armed (Lite tier / section-less spec), the validator prints a visible n/a and this block is not required.
+> **Closeout (Stage E) only** — delete this section in work-stage retros. When the gate arms (tier Full AND the spec, `spec/live-spec.md` once the spec is frozen and `spec/project-spec.md` before, carries the three-part IRL/HITL plan), the close-gate consumes that plan HERE: the human runs the drive moments the spec scheduled for this boundary, and their answers are **typed** into the block below **before the friction stamp counts** — `validators/validate-retrospective.cjs` blocks a closeout without them. Same pen rule as the stamp: the agent asks, the human answers, the agent transcribes verbatim. Use the spec's **real input**, not a convenient toy one. If the gate is not armed (Lite tier / section-less spec), the validator prints a visible n/a and this block is not required.
 
 ```human-drive
 drove: {{what was driven, by whom, with which REAL input — the spec's part-A row for this boundary}}

@@ -32,3 +32,5 @@ project-config.md  when: session-start - operating_mode: bug_fix + tier
 sbak/BUILD-PLAYBOOK.md  when: on-demand - the per-stage loop, when a phase prompt cites a section
 docs/gotchas.md  when: session-start - the accumulated traps
 docs/bugfix/<bug-id>.md  when: stage-open - the bug contract: reproducer, blast radius, waiver
+# M34.5.F.8: the open stage's view, as the greenfield list carries it; the stage reader reads docs/bugfix/, so the view renders and the release requires it read.
+view: <stage>  when: stage-open - the open stage's view: its Phase section, the scope block, the rows it names (node scripts/stage-view.cjs <stage> builds it)

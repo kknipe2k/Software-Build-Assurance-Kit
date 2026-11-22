@@ -12,6 +12,21 @@
 
 Not a per-type option: **every** spec also appends the three-part IRL/HITL plan section from `templates/IRL-HITL-PLAN.md` — the drive moments per milestone boundary, what the human verifies **by hand** at each one, and where each answer gets typed. Phase 1 AUTHORS it with the spec (`bootstrap/PHASES.md` §Phase 1); `validators/validate-irl-plan.cjs` is the backstop that REDs a Full-tier spec shipped without it, not the primary. `TBD — set at Phase 2` boundary cells are the honest interim.
 
+## Requirement ids and the assumptions section - every type, Full
+
+Every spec also carries these two, because the spec is frozen at the bootstrap commit (`spec/project-spec.md`, the original) and from then on only its live copy (`spec/live-spec.md`) changes, each change naming the requirements it touches. `validators/validate-spec-chain.cjs` checks both at the freeze and on every commit that changes the live spec (deterministic enforcement).
+
+- **Requirement ids.** Each requirement opens with its id, `REQ-` and three or more digits, numbered from `REQ-001` in order of first appearance and never renumbered or reused: a list item that starts with the id (`- REQ-001 The tool reads stdin when no file is named.`) or a table row whose first cell is the id. Elsewhere an id is a reference. Refused: an id defined twice, a malformed id (`REQ-12`, `REQ-01a`), a spec that defines none.
+- **Assumptions.** Beside the open questions, a section headed `## Assumptions` with one table row per assumption the spec rests on and what would show it false. Refused: the section missing, no row, a blank or placeholder cell (`TBD` included). An assumption with no falsifier is a hope, not an assumption.
+
+```
+## Assumptions
+
+| Assumption | What would show it false |
+|---|---|
+| Input files are UTF-8 | A user's file in another encoding |
+```
+
 ## `cli` — Command surface
 
 The contract a CLI is judged against. Add to the spec as a section.

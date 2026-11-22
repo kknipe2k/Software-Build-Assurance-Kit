@@ -1,13 +1,34 @@
 #!/usr/bin/env sh
-# @kit-version 1.0.10
+# @kit-version 1.0.11
 # .githooks/pre-commit  —  fast checks only, for quick feedback.
 # The heavy cross-OS suite runs at pre-push (scripts/verify-local.cjs), not here.
 #
 # Activated by: git config core.hooksPath .githooks
 #   (run `node scripts/install-hooks.cjs` once after cloning).
 # Cross-platform: POSIX sh; on Windows it runs under Git's bundled bash.
-# Emergency override: git commit --no-verify  (logged, never routine).
+# Emergency override: git commit --no-verify skips this hook, and nothing records the skip (not
+# logged; never routine): the pre-push and the pull-request check, where the project has one, still run.
 set -e
+
+# --- your own hooks, chained (M34.5.F.5) -----------------------------------------
+# On your word, `node scripts/kit-update.cjs --adopt --hooks chain` records the folder your git hooks
+# ran from in this clone's git config (sbak.hooksChain, "<scope>:<folder>"; "default:" is git's own
+# folder). Your pre-commit there runs first, with git's arguments: a refusal from it refuses the
+# commit, and the kit's checks below run only after it passes (it may restage files; the staged set
+# is read after it). With no chain declared this does nothing. The kit cannot tell a hook of yours
+# that checks nothing from one that checks something.
+if sbak_chain=$(git config --get sbak.hookschain 2>/dev/null); then
+  sbak_dir=${sbak_chain#*:}
+  case "$sbak_chain" in default:*) sbak_dir="$(git rev-parse --git-common-dir)/hooks" ;; esac
+  case "$sbak_dir" in "~/"*) sbak_dir="$HOME/${sbak_dir#"~/"}" ;; esac
+  if [ ! -d "$sbak_dir" ]; then
+    echo "NOTE  pre-commit: the chained hooks folder $sbak_dir (git config sbak.hooksChain) is absent, so only the kit's checks ran" >&2
+  elif [ "$(cd "$sbak_dir" && pwd -P)" = "$(cd .githooks 2>/dev/null && pwd -P)" ]; then
+    echo "NOTE  pre-commit: git config sbak.hooksChain names .githooks itself, so nothing was chained" >&2
+  elif [ -x "$sbak_dir/pre-commit" ]; then
+    "$sbak_dir/pre-commit" "$@" || { sbak_rc=$?; echo "pre-commit: your own hook $sbak_dir/pre-commit refused the commit (exit $sbak_rc); the kit's checks did not run" >&2; exit $sbak_rc; }
+  fi
+fi
 
 # --- staged-file enumeration (ONCE, fail-closed) ------------------------------
 # Enumerate the staged set a SINGLE time and check git's OWN exit EXPLICITLY: a
@@ -21,10 +42,58 @@ staged_all=$(git diff --cached --name-only --diff-filter=ACMR) || {
   echo "pre-commit: 'git diff --cached' failed — refusing to skip the staged-file gates (fail-closed, PC-1)." >&2
   exit 1
 }
+# The staged deletions, once and fail-closed the same way: the CLAUDE.md integrity gate reads a
+# deleted rules file as a shrink to 0 (M34.5.F.4).
+staged_del=$(git diff --cached --name-only --no-renames --diff-filter=D) || {
+  echo "pre-commit: 'git diff --cached --diff-filter=D' failed - refusing to skip the staged-file gates (fail-closed, PC-1)." >&2
+  exit 1
+}
+
+# --- before the bootstrap: commits wait for it (M34.5.F.4) ----------------------
+# The bootstrap fills the token below with the project's fast suite (the ONE wiring token with no
+# inline default). A hook that still carries it was never filled: with no project-config.md the
+# project is installed but not bootstrapped, so commits wait for the bootstrap, which fills this hook
+# and places the validators it runs; in a bootstrapped project the fill was missed, named below.
+# Either way it fails closed (KF-27: never the cryptic `{{...}}: command not found`, never open).
+fast_check='{{FAST_CHECK_COMMAND}}'
+fast_check_placeholder='{{'"FAST_CHECK_COMMAND"'}}'   # split token: the Phase-3 fill regex cannot match this
+if [ "$fast_check" = "$fast_check_placeholder" ]; then
+  if [ ! -f project-config.md ]; then
+    echo "pre-commit: REFUSED - this project is installed but not bootstrapped yet: commits wait for the bootstrap," >&2
+    echo "  which fills this hook and places the validators it runs. Start claude in this folder and say what" >&2
+    echo "  you want to build; the bootstrap ends with its own commit." >&2
+    exit 1
+  fi
+  echo "pre-commit: the project fast-check command (FAST_CHECK_COMMAND) was never filled at bootstrap." >&2
+  echo "  Set your fast suite (e.g. 'npm run lint && npm test') on the fast_check= line in your own editor," >&2
+  echo "  or place it from this project's fills: node scripts/kit-update.cjs --place-floor <fills file>." >&2
+  echo "  Failing closed — the commit is blocked until it is set." >&2
+  exit 1
+fi
+
+# --- the self-check (M34.5.F.1): this hook and its validators, installed release --
+# Before any gate runs, the hook compares its own bytes (this project's fills read as the kit's)
+# and each validator it names with sbak/release-manifest.json (kit-update's one compare). A
+# difference refuses the commit, naming the file and its repair, unless the file's head carries
+# the ARC-007 divergence marker; with no installed manifest one line says the check did not run.
+# A hook someone neutered does not run this check: the red gate's control set keeps the agent's
+# tools off this file and the validators, and that is what keeps it whole.
+if [ ! -f sbak/release-manifest.json ]; then
+  echo "pre-commit: self-check did not run - no sbak/release-manifest.json, so this hook and its validators were not compared with an installed release" >&2
+elif [ -f scripts/kit-update.cjs ]; then
+  node scripts/kit-update.cjs --self-check || exit 1
+else
+  echo "pre-commit: REFUSED - scripts/kit-update.cjs is absent, so this hook and its validators cannot be compared with the installed release; restore it: node sbak/templates/scripts/kit-update.cjs --adopt" >&2
+  exit 1
+fi
 
 # --- the evidence path (M34.6.B): a stage commit carries its gate.json --------
 # While a stage on the evidence path is open, the commit is refused unless the index carries the
-# stage's .claude/evidence/<stage>/gate.json and manifest.json (the stage-end publish writes them).
+# stage's .claude/evidence/<stage>/gate.json and manifest.json (the stage-end publish writes them),
+# gate.json accepted with a cited typed prompt whose sha256 is the stamp's text (where an orchestrator
+# worktree exists; the bundle's own consistency - accept checked the prompt record),
+# every file the manifest lists staged as it lists it, and the index's subject the bundle's (a byte of
+# the subject staged after the accept refuses).
 # A stage opened before the evidence path says so in one line and commits as before. A project
 # without scripts/evidence.cjs cannot have opened a stage on the path (the open needs it), so there
 # is nothing to check; the ci step runs the script unguarded and fails closed.
@@ -63,14 +132,16 @@ gate_not_installed() {
     echo "      The required set could not be read (node scripts/kit-update.cjs --required did not answer)," >&2
     echo "      so the commit is refused: an unknown is never a pass." >&2
   fi
-  echo "      Restore the full set for this project's tier:  node scripts/kit-update.cjs --adopt" >&2
-  echo "      (when scripts/kit-update.cjs itself is gone:  node sbak/templates/scripts/kit-update.cjs --adopt)" >&2
+  echo "      Place the validators this project's tier requires:  node scripts/kit-update.cjs --place-floor" >&2
+  echo "      (when scripts/kit-update.cjs itself is gone, restore it first:  node sbak/templates/scripts/kit-update.cjs --adopt)" >&2
   exit 1
 }
 
 # --- framework validators (only fire when relevant files are staged) ----------
 # docs/bugfix/ is the bug_fix mode's phase-doc home — same schema, different tree (UAT 2026-07).
-staged_phase=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
+# The pattern is the one Phase-doc path set (scripts/lib/stage-structure.cjs PHASE_DOC_GREP, M34.5.F.8):
+# the stage reader, the validator's --all and the ci paths read the same set, proposals/ included.
+staged_phase=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}[^/]*|docs/bugfix/[^/]+|proposals/M[0-9]{2}[^/]*)\.md$' || true)
 if [ -n "$staged_phase" ]; then
   if [ -f validators/validate-stage-prompts.cjs ]; then
     node validators/validate-stage-prompts.cjs $staged_phase
@@ -113,8 +184,10 @@ fi
 # below half its committed size (the field incident: a closeout truncated a project's
 # CLAUDE.md 713 -> 83 lines, deleting every hard rule, and nothing noticed), and
 # .claude/settings.json must keep the four session hooks registered (the dormant-layer
-# class). Override for a deliberate cut: SBAK_ALLOW_CLAUDE_SHRINK="<reason>" (logged).
-staged_cim=$(printf '%s\n' "$staged_all" | grep -E '^CLAUDE\.md$|^\.claude/settings\.json$' || true)
+# class). M34.5.F.4: a staged deletion is a shrink to 0, and CLAUDE.sbak.md (the rules file a
+# combined root imports) is checked the same way. Override for a deliberate cut:
+# SBAK_ALLOW_CLAUDE_SHRINK="<reason>" (printed with the commit's output, kept in no file).
+staged_cim=$(printf '%s\n%s\n' "$staged_all" "$staged_del" | grep -E '^CLAUDE(\.sbak)?\.md$|^\.claude/settings\.json$' || true)
 if [ -n "$staged_cim" ]; then
   if [ -f validators/validate-claude-integrity.cjs ]; then
     node validators/validate-claude-integrity.cjs --staged
@@ -154,7 +227,7 @@ fi
 # validator NAMES the missing part. The unfilled template SHAPE passes (structure is the gate;
 # filling it is the pre-implementation lifecycle step the doc itself binds — never a first-commit
 # false-block, the KF-21 lesson). Severity follows the ratified model: --warn = advisory (the
-# Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when the challenge doc is staged (ERR-012 conditional-spawn).
+# Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when the challenge doc is staged (ERR-012 conditional-spawn).
 staged_oc=$(printf '%s\n' "$staged_all" | grep -E '^docs/outcome-challenge\.md$' || true)
 if [ -n "$staged_oc" ]; then
   if [ -f validators/validate-outcome-challenge.cjs ]; then
@@ -169,7 +242,7 @@ fi
 # assertion-free / exception-only. Risk-tiered + incremental — the validator filters
 # the staged set itself and fails CLOSED on a git error. Severity follows test_honesty
 # (FRAMEWORK-CONFIG §4.17): --warn = advisory (the Lite render);
-# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only spawn when a Phase doc or test file is
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: the test_honesty row of the staged project-config.md decides warn or block at each commit, whatever this flag (deterministic enforcement over a value the kit does not check the author of). Only spawn when a Phase doc or test file is
 # actually staged (mirrors the ERR-012 conditional-spawn pattern above). STACK-AWARE
 # (I12-2, M20.5.B): the spawn filter routes the per-language test shapes the validator
 # now evaluates — Python test_*/_test.py, Go *_test.go, Rust tests/*.rs — plus the
@@ -189,7 +262,7 @@ fi
 # no-op) + fail-closed on a git error. Only fires on the closeout / findings surfaces —
 # CHANGELOG, the gap-analysis / audit ledgers, and the milestone retros/findings — never
 # templates/ (whose example blocks carry placeholders by design). Severity follows the
-# same model as test-honesty: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Mirrors the ERR-012 conditional-spawn pattern above.
+# same model as test-honesty: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Mirrors the ERR-012 conditional-spawn pattern above.
 staged_rc=$(printf '%s\n' "$staged_all" | grep -E '^(CHANGELOG\.md|docs/gap-analysis\.md|docs/audit/.*\.md|retrospectives/(M[0-9]{2}|B[0-9]+).*\.md)$' || true)
 if [ -n "$staged_rc" ]; then
   if [ -f validators/validate-reconciliation.cjs ]; then
@@ -204,7 +277,7 @@ fi
 # because:` bound to the trigger) in docs/gates.md, or BLOCK. Per-trigger AND-ed; fail-closed
 # (a declared trigger + unreadable gates.md → non-zero; a no-trigger project no-ops). Severity
 # follows risk_escalation (FRAMEWORK-CONFIG §4.19): --warn = advisory (the Lite render);
-# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when project-config.md is
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when project-config.md is
 # staged (mirrors the ERR-012 conditional-spawn pattern above).
 staged_re=$(printf '%s\n' "$staged_all" | grep -E '(^|/)project-config\.md$' || true)
 if [ -n "$staged_re" ]; then
@@ -220,7 +293,7 @@ fi
 # code-file basename), it must carry BOTH a rollback test AND a confinement test exercising a
 # REAL hostile path (../, encoded, symlink) — never a toy path. Tier-independent (alongside G1);
 # fail-closed on a git error. Severity follows destructive_op (FRAMEWORK-CONFIG §4.17): --warn =
-# advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only
+# advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only
 # fires when a test file or a destructive-basename code file is staged (ERR-012 conditional-spawn).
 staged_dop=$(printf '%s\n' "$staged_all" | grep -E '\.(spec|test)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__)/.*\.[cm]?[jt]sx?$|(^|/)test_[^/]*\.py$|_test\.py$|(restore|import|migrate|delete|replace|extract|unzip|backup)[^/]*\.([cm]?[jt]sx?|py|rb|go|rs|java|kt|cs|cc|cpp|cxx|h|hpp|sh|bash|sql)$' || true)
 # .claude/measurements/ holds a stage's evidence, not product (the validator drops it too).
@@ -238,7 +311,7 @@ fi
 # matrix properties — each `covered-by: … — test: …` or an explicit `n/a`. Runs on the
 # CHANGED set only (--staged), so a committed-but-untouched legacy banner-less doc is never
 # retro-failed; fail-closed on a git error. Severity follows risk_matrix (FRAMEWORK-CONFIG
-# §4.19): --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a Phase doc is staged (ERR-012 conditional-spawn pattern).
+# §4.19): --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when a Phase doc is staged (ERR-012 conditional-spawn pattern).
 staged_rm=$(printf '%s\n' "$staged_all" | grep -E '^(docs/build-prompts/M[0-9]{2}.*|docs/bugfix/[^/]+)\.md$' || true)
 if [ -n "$staged_rm" ]; then
   if [ -f validators/validate-risk-matrix.cjs ]; then
@@ -258,7 +331,7 @@ fi
 # HONEST LOCUS: this floor only proves the harness is present + wired — the catch is agent
 # judgment (the verifier's verdicts) and the rate is the scorer's (observed evidence, written by
 # the orchestrator's run, never by the verifier), NOT a pre-commit check (you can't run a judge in a smoke
-# test). Severity follows the same model: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a calibration file or a findings file is staged.
+# test). Severity follows the same model: --warn = advisory (the Lite render); the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when a calibration file or a findings file is staged.
 staged_cal=$(printf '%s\n' "$staged_all" | grep -E '^prompts/calibration/|-findings\.md$' || true)
 if [ -n "$staged_cal" ]; then
   if [ -f validators/validate-calibration.cjs ]; then
@@ -274,7 +347,7 @@ fi
 # total against the fix-commit evidence (no "0 rework" while fix commits exist). The validator
 # SKIPS test/harness source files internally, so a state-named write in test code never blocks.
 # Severity follows transition (FRAMEWORK-CONFIG §4.20): --warn = advisory (the Lite render);
-# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when a source file (clause 1)
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when a source file (clause 1)
 # or a closeout / release-state surface (clause 2) is staged (ERR-012 conditional-spawn pattern).
 # STACK-AWARE (I12-2, M20.5.B, A-19): clause 1 evaluates JS/TS/JSX-TSX, Python, Go, and Rust
 # (extension-keyed), so the spawn filter routes all six. This filter lives in TWO pre-commits
@@ -299,7 +372,7 @@ fi
 # (advisory). Honest locus: the record is required PRESENT (not judged good) and the SLSA level
 # CITED (not that provenance was achieved — release.yml's attest step proves that at build).
 # Severity follows release_readiness (FRAMEWORK-CONFIG §4.21): --warn = advisory (the Lite render);
-# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override via the warn|block row in project-config.md (edit this line, or re-render with kit-update --apply). Only fires when the release-
+# the VALIDATOR_SEVERITY_FLAG token renders from calibration-core.json severity — Lite '--warn' (advisory) / Full '' (BLOCK, the validator's own default; M26.D, the ruled fork-1 flip); per-validator override: this validator does not read the project-config.md row; a changed severity is the person's edit of this line in their own editor under the pre-commit's ARC-007 divergence marker, which switches the self-check off for this file (human authorization). Only fires when the release-
 # state ledger is staged (ERR-012 conditional-spawn pattern).
 staged_rr=$(printf '%s\n' "$staged_all" | grep -E '^docs/release-state\.md$' || true)
 if [ -n "$staged_rr" ]; then
@@ -350,6 +423,23 @@ if [ -n "$staged_irl" ]; then
   fi
 fi
 
+# The spec chain (M34.7.A): spec/project-spec.md is the original, frozen at the bootstrap commit;
+# spec/live-spec.md is born as its byte copy and is the only spec that changes; spec/spec-chain.json
+# chains the two by sha256. At Full, when any spec/ path is staged or deleted, the validator refuses a
+# change to the original, a live spec the chain does not reach, the spec's first commit with no freeze,
+# a duplicate or malformed requirement id, and an assumptions section with no falsifier.
+# It takes NO severity flag on purpose: the freeze and the chain are deterministic enforcement, and a
+# warn severity in project-config.md does not loosen them. A spec committed before the live spec
+# (no chain at HEAD) gets one n/a line, nothing refused. `git commit --no-verify` skips it, as above.
+staged_chain=$(printf '%s\n%s\n' "$staged_all" "$staged_del" | grep -E '^spec/' || true)
+if [ -n "$staged_chain" ]; then
+  if [ -f validators/validate-spec-chain.cjs ]; then
+    node validators/validate-spec-chain.cjs --staged
+  else
+    gate_not_installed validators/validate-spec-chain.cjs
+  fi
+fi
+
 # --- I12-1 visible-skip, scope NARROWED by I12-2 (M20.5.B): the G9/G15 static floors now
 # evaluate JS/TS/JSX-TSX, Python, Go, and Rust (extension-keyed, A-19). DISCLOSE — never
 # silently skip — when staged GENUINELY-OTHER source files exist (rb/java/kt/…): those
@@ -362,12 +452,8 @@ if [ -n "$staged_nonjs" ]; then
 fi
 
 # --- project fast checks (lint + unit subset) ---------------------------------
-# The bootstrap fills the token below with the project's fast suite (e.g.
-# `npm run lint && npm test`) — the ONE wiring token with no inline default, so it is
-# filled from discovery. The guard turns an UNFILLED token into a plain-English failure
-# instead of the cryptic `{{...}}: command not found` wall (KF-27 residual, M26.C) — while
-# STILL failing closed: set -e holds and this hook never fails open. The refuted half of
-# KF-27 (fail-OPEN) stays refuted; only the diagnosability residual is closed here.
+# The fast_check line is filled at the bootstrap and read near the top of this hook (an unfilled one
+# refuses there, before any gate runs); it runs here, last.
 #
 # PATH-SCOPE THE TEST INVOCATION (KF-48 instance 3, M27.D). If the fast suite runs Node's
 # built-in test runner, scope it to this project's OWN tests with a QUOTED GLOB:
@@ -377,12 +463,4 @@ fi
 # denominator (73.54% reported against a real 95-100% in the md2page trial). A bare directory
 # positional (`node --test tests`) is NOT a scoped run: current Node resolves it as a module
 # path and the command fails outright.
-fast_check='{{FAST_CHECK_COMMAND}}'
-fast_check_placeholder='{{'"FAST_CHECK_COMMAND"'}}'   # split token: the Phase-3 fill regex cannot match this
-if [ "$fast_check" = "$fast_check_placeholder" ]; then
-  echo "pre-commit: the project fast-check command (FAST_CHECK_COMMAND) was never filled at bootstrap." >&2
-  echo "  Edit .githooks/pre-commit and replace the placeholder on the fast_check= line with your" >&2
-  echo "  fast suite (e.g. 'npm run lint && npm test'). Failing closed — the commit is blocked until it is set." >&2
-  exit 1
-fi
 eval "$fast_check"

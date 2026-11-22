@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.10
+// @kit-version 1.0.11
 // scripts/stage-active.cjs
 //
 // Atomic writer for .claude/stage-active — the open-stage marker the PROC-001
@@ -9,6 +9,12 @@
 // Writing a new stage id ALSO clears any stale .claude/red-approved: a fresh stage
 // starts un-approved, so a leftover approval from a prior stage can never unlock
 // the new one. --clear removes both markers (the gate goes dormant).
+//
+// THE RESUME (M34.5.F.3, W4-06, R-258): the open run again on the stage that is open with its RED
+// approval standing (red-approved names it and binds the current approval row, no void after) keeps
+// the approval and appends a `resumed` lifecycle row naming the session the approval was recorded in
+// and this one - no click, no new release (deterministic enforcement); the scope check and the
+// approved-test check guard every change after it, as before. Anything else opens as before.
 //
 // THE ROLE AT OPEN (M33.A, R-50 a): the open also writes .claude/stage-role, the session's role
 // read through the channel library's strict reader (a resolved role; absent gives work; a garbage
@@ -143,6 +149,16 @@ const clearing = (args.length === 1 && args[0] === '--clear') || (args.length ==
 if (clearing) {
   // Every refusal before the clear is one stderr line and exit 2, the markers untouched.
   const refuseClear = (line) => { process.stderr.write(line + '\n'); process.exit(2); };
+  // WHO IS AT THE KEYBOARD (M34.5.F.2 item 1, C4-01): the process tree decides, before anything is
+  // read or removed - a Claude Code ancestor makes the call a session's whatever
+  // CLAUDE_CODE_SESSION_ID holds (an empty one refused), and a test runner or a package script in the
+  // chain is refused (deterministic enforcement). The limit: a process that leaves the tree reads as
+  // the person's own terminal.
+  let receiptsLib = null;
+  try { receiptsLib = require('./lib/receipts.cjs'); } catch (_) { receiptsLib = null; }
+  if (!receiptsLib) refuseClear('stage-active: refused at the keyboard - scripts/lib/receipts.cjs did not load, so who is at the keyboard cannot be told; nothing was cleared - repair: node scripts/kit-update.cjs --adopt');
+  const kb = receiptsLib.keyboard(process.env);
+  if (kb.state === 'refused') refuseClear(receiptsLib.keyboardRefusalLine('stage-active', kb, 'clear', 'cleared'));
   let chanLib = null;
   try { chanLib = require('./lib/channel.cjs'); } catch (_) { chanLib = null; }
   const sameReal = (a, b) => {
@@ -171,12 +187,10 @@ if (clearing) {
   // THE CLICK (M34.6.G item 3): from a Claude Code session the clear needs the prompt this call raised
   // on record in the session's own receipts (the calling tree first, then each worktree git lists);
   // with none, or a malformed session id, it is refused before anything is read or removed. With no
-  // session id - the person's own terminal, outside the session - it clears as before.
-  let receiptsLib = null;
-  try { receiptsLib = require('./lib/receipts.cjs'); } catch (_) { receiptsLib = null; }
-  const sess = receiptsLib ? receiptsLib.clickSession(process.env) : { state: process.env.CLAUDE_CODE_SESSION_ID ? 'unreadable' : 'none' };
+  // session - no Claude Code ancestor and no session id (the keyboard check above): the person's own
+  // terminal, outside the session - it clears as before.
+  const sess = kb.state === 'session' ? { state: 'session', session: kb.session } : kb.state === 'malformed' ? { state: 'malformed' } : { state: 'none' };
   if (sess.state !== 'none') {
-    if (!receiptsLib) refuseClear('stage-active: refused at the click - scripts/lib/receipts.cjs did not load, so the click cannot be read; nothing was cleared - repair: node scripts/kit-update.cjs --adopt, or run it from your own terminal, outside the session');
     if (trees === null && chanLib) { try { trees = chanLib.worktrees(process.cwd()); } catch (_) { trees = null; } }
     const click = receiptsLib.recordedClick([process.cwd()].concat(trees || []), sess.state === 'session' ? sess.session : null);
     if (!click) refuseClear(receiptsLib.clickRefusalLine('stage-active', sess, 'clear', 'cleared'));
@@ -281,13 +295,11 @@ try { chan = require('./lib/channel.cjs'); } catch (e) {
   process.stderr.write(`stage-active: ${id} is NOT open - the listening gate cannot check (scripts/lib/channel.cjs did not load); repair the install with node scripts/kit-update.cjs --adopt, then open the stage again.\n`);
   process.exit(2);
 }
-const sameTree = (a, b) => {
-  const x = path.resolve(a); const y = path.resolve(b);
-  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
-};
 function listeningGate() {
   const courier = (why) => ({ open: true, line: `STAGE OPEN: ${id} - the listening gate did not apply: ${why}; packets travel by the human courier.` });
-  const trees = chan.worktrees(process.cwd());
+  // M34.5.F.3 (Q11): the one reading of "an orchestrator worktree exists", shared with the pre-commit.
+  const ot = chan.orchestratorTrees(process.cwd());
+  const trees = ot.all;
   if (trees === null) {
     // M34.A: null is "not a repository" OR "git did not run"; only the first is the
     // courier case. git itself tells them apart, and anything but its own "not a git repository"
@@ -298,10 +310,11 @@ function listeningGate() {
     const said = String(g.stderr || '').split(/\r?\n/).map((l) => l.trim()).find(Boolean) || `git worktree list failed, git rev-parse exit ${g.status}`;
     return { open: false, line: `stage-active: ${id} is NOT open - git failed (${said}), so the listening gate cannot see this repo's worktrees; fix git here, then open the stage again.` };
   }
-  const orch = trees.filter((w) => !sameTree(w, process.cwd())).filter((w) => { const r = chan.readRole(w); return r.state === 'resolved' && r.role === 'orchestrator'; });
+  const orch = ot.orch;
   if (orch.length === 0) return courier('no orchestrator worktree in this repo (Lite, or before the worktree split)');
   const w = chan.watcherState(path.join(claudeDir, 'channel', 'watch.orchestrator.json'));
-  if (w.state === 'listening') return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is listening (watcher pid ${w.m.pid}, armed ${typeof w.m.since === 'string' ? w.m.since : 'at an unknown time'}).` };
+  // M34.5.F.1 (W4-03): the line states the limit that stays - liveness, not identity.
+  if (w.state === 'listening') return { open: true, applied: true, line: `STAGE OPEN: ${id} - the orchestrator is listening (watcher pid ${w.m.pid}, armed ${typeof w.m.since === 'string' ? w.m.since : 'at an unknown time'}). Any process that runs node scripts/channel.cjs watch from the orchestrator tree counts as listening.` };
   // M34.6.E item 7 (R-174): only a live watcher opens a stage; a recent prompt (presence) no longer does.
   return { open: false, why: w.state === 'none' ? 'no watcher' : `its watcher is ${w.state}` };
 }
@@ -328,13 +341,34 @@ if (uncleared.length) {
   process.exit(2);
 }
 
+// THE RESUME (M34.5.F.3 item 5, W4-06, R-258). The open run again on the stage that is open with a
+// standing approval - .claude/red-approved names this stage and binds (its "record <sha256>" line) the
+// current approval row of .claude/channel/approval.json for it, with no void after - keeps the approval
+// and records a resumed row naming the session the approval was recorded in and this one. No click and
+// no re-release; the scope check and the approved-test check guard every change after it, as before.
+// Anything else (no marker, another stage's, a binding the record does not carry, a void) opens as before.
+function standingApproval() {
+  let open = null; let marker = null;
+  try { open = fs.readFileSync(stageFile, 'utf8').trim(); } catch (_) { return null; }
+  if (open !== id) return null;
+  try { marker = fs.readFileSync(redApprovedFile, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean); } catch (_) { return null; }
+  if (marker.length !== 2 || marker[0] !== id || !/^record [0-9a-f]{64}$/.test(marker[1])) return null;
+  const rec = chan.readApproval(path.join(claudeDir, 'channel'));
+  if (!rec || rec.legacy || rec.stage !== id) return null;
+  const cur = chan.currentApproval(rec);
+  if (!cur || cur.voided || chan.approvalRowHash(cur.row) !== marker[1].slice(7)) return null;
+  return { row: cur.row, hash: marker[1].slice(7) };
+}
+let standing = null;
+try { standing = standingApproval(); } catch (_) { standing = null; }
+
 try {
   atomicWrite(stageFile, id + '\n');
   // the role the gate judges for this stage, recorded now (M33.A).
   const r = chan.readRole(process.cwd());
   atomicWrite(stageRoleFile, (r.state === 'unresolved' ? 'unresolved' : r.role) + '\n');
-  // a new stage starts un-approved — clear any stale approval.
-  try { fs.rmSync(redApprovedFile, { force: true }); } catch (_) { /* best effort */ }
+  // a new stage starts un-approved — clear any stale approval; a resumed one keeps its standing approval.
+  if (!standing) { try { fs.rmSync(redApprovedFile, { force: true }); } catch (_) { /* best effort */ } }
 } catch (e) {
   process.stderr.write(`stage-active: could not write ${stageFile}: ${e && e.message ? e.message : 'unknown error'}\n`);
   process.exit(2);
@@ -355,7 +389,9 @@ if (!subj.error) {
   try { session = require('./lib/receipts.cjs').resolveScriptSession(process.env).session || null; } catch (_) { session = null; }
   try {
     const r = chan.readRole(process.cwd());
-    evid.appendLife(process.cwd(), id, 'opened', { role: r.state === 'resolved' ? r.role : (r.state === 'absent' ? 'work' : 'unresolved'), session, subject: subj.subject });
+    const role = r.state === 'resolved' ? r.role : (r.state === 'absent' ? 'work' : 'unresolved');
+    if (standing) evid.appendLife(process.cwd(), id, 'resumed', { role, from_session: standing.row.session || null, session, approval_seq: Number.isInteger(standing.row.seq) ? standing.row.seq : null, approval_row_hash: standing.hash, subject: subj.subject });
+    else evid.appendLife(process.cwd(), id, 'opened', { role, session, subject: subj.subject });
   } catch (e) { unopen(`the evidence could not be recorded: .claude/evidence/${id}/lifecycle.jsonl ${(e && e.code) || 'error'}`); }
   const live = evid.probeLiveness(process.cwd());
   try { evid.appendLife(process.cwd(), id, 'probed', live); } catch (e) { unopen(`the evidence could not be recorded: .claude/evidence/${id}/lifecycle.jsonl ${(e && e.code) || 'error'}`); }
@@ -364,7 +400,9 @@ if (!subj.error) {
   onPath = true;
 }
 
-process.stdout.write(`stage-active = ${id} (red-approved cleared)\n`);
+process.stdout.write(standing
+  ? `stage-active = ${id} (red-approved kept: resumed, the RED approval recorded in ${standing.row.session ? `session ${standing.row.session}` : 'the person\'s own terminal'} stands)\n`
+  : `stage-active = ${id} (red-approved cleared)\n`);
 emitReceipt('stage_opened', { stage: id, marker: 'stage-active' });
 
 // The stage-open packet, published here so it carries the loud line (the orchestrator's pickup
