@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 // validators/validate-spec-chain.cjs
 //
 // THE SPEC CHAIN (M34.7.A, R-189) - the original spec frozen at the bootstrap commit, the live

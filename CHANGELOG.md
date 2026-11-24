@@ -2,9 +2,18 @@
 
 Release history of the Software Build Assurance Kit, in the same shape as the release notes - capabilities, limitations, evidence - never a build diary. Full detail for the current release: [RELEASE-NOTES.md](RELEASE-NOTES.md).
 
+## v1.0.12 - 2026-11-24
+
+**The current release** - two defects of v1.0.11 fixed, nothing else changed: on a project installed at the Lite tier `kit-update --ready` read NOT READY, because the mini-smoke ran a validator that tier does not install; and after an upgrade from v1.0.11 the commit the upgrade asked for was refused by the project's own pre-commit; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
+
+- **Capabilities.** Everything in v1.0.11. The mini-smoke's two human-drive checks and its workflow app-map check each ask whether the validator they run is installed, and print a skip naming it where it is not. The upgrade places the commit floor (the pre-commit hook and `verify-local`) from the new release with your fills kept, so the commit it asks for passes your own pre-commit; a copy you edited beyond its fills is left as it is and named.
+- **Upgrading a v1.0.11 project.** Upgrade the kit folder with `sbak-install`, commit the upgrade, then run `node scripts/kit-update.cjs --migrate`.
+- **Limitations.** Unchanged from v1.0.11. The read-first lists of a project installed at the Lite tier still name files only the Full tier installs; the bootstrap repairs them before its handoff.
+- **Evidence.** The first found by an outside execution review of the published v1.0.11, the second by the v1.0.12 cut's rehearsal on the real assets. Each fixed RED-first with three mutations killed, under the owner's stamp. No verifier iteration has checked either fix.
+
 ## v1.0.11 - 2026-11-21
 
-**The current release** - the live spec, and the feature walk's fixes: a project's original spec is frozen at the bootstrap commit and a live spec carries every later change through one approved change file the commit floor follows; and the previous release, walked feature by feature as a person meets it, had 22 defects, each closed here; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
+The live spec, and the feature walk's fixes, superseded by v1.0.12: a project's original spec is frozen at the bootstrap commit and a live spec carries every later change through one approved change file the commit floor follows; and the previous release, walked feature by feature as a person meets it, had 22 defects, each closed here; full detail in [RELEASE-NOTES.md](RELEASE-NOTES.md). The build loop does not change, and the Claude Code floor stays at 2.1.295.
 
 - **Capabilities.** Everything in v1.0.10.
   - The original spec is frozen at the bootstrap commit; `spec/live-spec.md` is born as its copy and `spec/spec-chain.json` records both hashes; the commit floor refuses an edit of the original and a live spec the chain does not reach.

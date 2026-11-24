@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 // validators/lib/fenced-block.cjs
 //
 // The shared LINE-ANCHORED, BLOCK-BOUND fence/field extractor —

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // validators/lib/release-version.cjs
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 //
 // THE ONE DERIVATION SOURCE for the kit's release identity.
 //

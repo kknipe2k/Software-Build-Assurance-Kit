@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 // scripts/kit-update.cjs
 //
 // THE UPDATE STORY (I13, M20.5.B) — a bootstrapped project's drift report against the
@@ -2902,6 +2902,65 @@ function cmdPlaceFloor(projRoot, fillsArg) {
   }
   return differ.length ? 1 : 0;
 }
+// --place-floor --carry (M34.8.A.1): the upgrade's floor step. The installer's upgrade has
+// replaced sbak/ but not yet committed it, so git HEAD still holds the release the project was on.
+// Each bootstrap-filled floor file (.githooks/pre-commit, scripts/verify-local.cjs) is placed from
+// the NEW installed template, hash-checked against the installed payload, with the fills read back
+// from the live file against the OLD template, read from HEAD and hash-checked against HEAD's own
+// payload map. The fills are read strictly (readFills, the self-check's own reader) and compared:
+// the old template filled with them must equal the live file. A file edited beyond its fills, a
+// token the new template adds, a severity the tier refuses, a template off its hash, a link: the
+// file is left as it is, named, with its door. No value is ever supplied. Outside an upgrade (HEAD's
+// sbak/ at the installed version) it writes nothing. The self-check is not changed by any of this.
+// The prior bytes are archived under .claude/floor.archive/, as --place-floor archives them.
+// Exit 0 when nothing was kept, 1 when a file was kept (named on its own line).
+const CARRY = 'kit-update: --place-floor --carry';
+const CARRY_DOOR = "place it from this project's fills: node scripts/kit-update.cjs --place-floor <fills file>, or mark it INTENTIONAL DIVERGENCE in its first lines to keep your edit";
+function cmdCarryFloor(projRoot) {
+  const say = (l) => process.stdout.write(`${CARRY}: ${l}\n`);
+  const inst = installedPayload(projRoot);
+  if (!inst.map) { say(`nothing placed - ${inst.why}, so nothing can be checked against an installed release`); return 1; }
+  const curVer = versionAt(path.join(projRoot, KIT_DIR));
+  const headMan = gitAt(projRoot, ['show', `HEAD:./${KIT_DIR}/release-manifest.json`]);
+  let head = null; try { head = headMan.status === 0 ? JSON.parse(String(headMan.stdout)) : null; } catch (_) { head = null; }
+  if (!head || !head.version) { say(`nothing to carry - git HEAD records no ${KIT_DIR}/release-manifest.json, so there is no installed release to read the fills against`); return 0; }
+  if (String(head.version) === String(curVer)) { say(`nothing to carry - ${KIT_DIR}/ is at the version HEAD records (v${curVer})`); return 0; }
+  const oldMap = head.payload && typeof head.payload === 'object' ? head.payload : null;
+  const req = requiredSet(projRoot);
+  let kept = 0;
+  for (const rel of FLOOR_FILLED) {
+    const row = MANAGED.find((r) => r.file === rel);
+    const tplRel = `${KIT_DIR}/${row.template}`;
+    const liveAbs = path.join(projRoot, ...rel.split('/'));
+    let liveBuf = null; try { liveBuf = fs.readFileSync(liveAbs); } catch (_) { liveBuf = null; }
+    if (liveBuf === null) continue; // not rendered here: nothing to carry
+    const keep = (why) => { kept++; say(`${rel} kept as it is - ${why}; ${CARRY_DOOR}`); };
+    const live = normalize(liveBuf.toString('utf8'));
+    if (declaresDivergence(live)) { say(`${rel} kept as it is - it declares INTENTIONAL DIVERGENCE`); continue; }
+    const o = gitAt(projRoot, ['show', `HEAD:./${tplRel}`]);
+    if (o.status !== 0 || !oldMap || typeof oldMap[tplRel] !== 'string' || payloadSha256(String(o.stdout)) !== oldMap[tplRel]) { keep(`the v${head.version} template it was filled from is not in git HEAD with its release hash, so its fills cannot be read back`); continue; }
+    let nb = null; try { nb = fs.readFileSync(path.join(projRoot, ...tplRel.split('/'))); } catch (_) { nb = null; }
+    if (nb === null || typeof inst.map[tplRel] !== 'string' || payloadSha256(nb) !== inst.map[tplRel]) { keep(`${tplRel} is missing or differs from the installed release's hash (re-run the installer)`); continue; }
+    const OLD = normalize(String(o.stdout)); const NEW = normalize(nb.toString('utf8'));
+    const fills = readFills(OLD, live);
+    if (fills === null || fillTokens(OLD, fills) !== live) { keep(`it is not v${head.version}'s ${path.basename(rel)} with this project's fills (an edit of yours)`); continue; }
+    const tokens = (NEW.match(/\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g) || []).map((t) => t.slice(2, -2)).filter((t, i, a) => a.indexOf(t) === i);
+    const missing = tokens.find((t) => !Object.prototype.hasOwnProperty.call(fills, t));
+    if (missing) { keep(`{{${missing}}} is new in v${curVer} and your copy has no value for it`); continue; }
+    if (tokens.indexOf('VALIDATOR_SEVERITY_FLAG') !== -1 && !severityAllowed(req, fills.VALIDATOR_SEVERITY_FLAG.trim())) { keep(severityLine(req, fills.VALIDATOR_SEVERITY_FLAG.trim())); continue; }
+    const out = fillTokens(NEW, fills);
+    if (out === live) { say(`${rel} current - already v${curVer}'s template with this project's fills`); continue; }
+    let abs;
+    try { abs = assertInside(projRoot, rel); } catch (e) { keep(e.message); continue; }
+    if (classifyDestination(abs).kind === 'symlink') { keep('it is a link; the door never writes over or through one'); continue; }
+    try {
+      writeArchive(path.join(projRoot, ...FLOOR_ARCHIVE_REL.split('/')), liveBuf, new Date(), '.' + path.basename(rel));
+      writeKeepingMode(abs, out);
+    } catch (e) { keep(`a write failed (${e.code || e.message})`); continue; }
+    say(`${rel} placed from v${curVer}'s template with this project's fills (the prior bytes archived under ${FLOOR_ARCHIVE_REL}/)`);
+  }
+  return kept ? 1 : 0;
+}
 
 function main() {
   const argv = process.argv.slice(2);
@@ -2974,6 +3033,8 @@ function main() {
   }
   // --place-floor [<fills file>] (M34.5.F.1): the commit floor's one door (Phase 3 runs it once).
   const floorIdx = argv.indexOf('--place-floor');
+  // --place-floor --carry (M34.8.A.1): the upgrade's floor step; the fills read back from the files.
+  if (floorIdx !== -1 && argv.includes('--carry')) process.exit(cmdCarryFloor(projRoot));
   if (floorIdx !== -1) {
     const a = argv[floorIdx + 1];
     process.exit(cmdPlaceFloor(projRoot, a && !a.startsWith('--') ? a : null));

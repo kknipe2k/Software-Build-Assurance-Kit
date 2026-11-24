@@ -43,11 +43,11 @@ You do **not** need Claude Code installed. Everything Copilot needs is Copilot i
 
 ### Download the release ZIP - recommended
 
-Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.11-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
+Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha256`. Get the current one - `sbak-v1.0.12-starter.zip` - from the [releases page](https://github.com/kknipe2k/Software-Build-Assurance-Kit/releases), and **verify before you unpack**:
 
-- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.11-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.11-starter.zip` against the published value).
-- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.11-starter.zip SHA256`, then compare the printed hash against the published value.
-- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.11-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
+- **Checksum, macOS / Linux:** `sha256sum -c sbak-v1.0.12-starter.zip.sha256` (or compare `sha256sum sbak-v1.0.12-starter.zip` against the published value).
+- **Checksum, Windows (cmd or PowerShell):** `certutil -hashfile sbak-v1.0.12-starter.zip SHA256`, then compare the printed hash against the published value.
+- **Build attestation (stronger, optional):** `gh attestation verify sbak-v1.0.12-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` - confirms the ZIP was built by this repo's release workflow (SLSA build provenance). On Claude Code, `sbak-install` runs this check for you and reports one of four results: verified; unavailable, when `gh` is not installed; could not run, with one retry and then the word `checksum only` to go on without it; or REJECTED, where only re-download or abort continue.
 
 **What the extract lands:** one root file, `CLAUDE.md`, and one kit directory, `sbak/` (everything else lives inside it). The extract lines below never replace a file you already have: where your repository has a `CLAUDE.md` of its own, yours stays and the kit's instructions reach Copilot through `.github/copilot-instructions.md`, taken from the ZIP (deterministic enforcement, run as printed); where you also have a `.github/copilot-instructions.md`, the kit does not replace it: add the kit's rules to it yourself, from the ZIP's `CLAUDE.md` (human authorization).
 
@@ -60,9 +60,9 @@ Each release ships one asset named `sbak-<version>-starter.zip` plus its `.sha25
 macOS / Linux:
 
 ```
-unzip -n sbak-v1.0.11-starter.zip -d <projects-path>/my-project
+unzip -n sbak-v1.0.12-starter.zip -d <projects-path>/my-project
 mkdir -p <projects-path>/my-project/.github
-[ -e <projects-path>/my-project/.github/copilot-instructions.md ] || unzip -p sbak-v1.0.11-starter.zip CLAUDE.md > <projects-path>/my-project/.github/copilot-instructions.md
+[ -e <projects-path>/my-project/.github/copilot-instructions.md ] || unzip -p sbak-v1.0.12-starter.zip CLAUDE.md > <projects-path>/my-project/.github/copilot-instructions.md
 cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
@@ -72,8 +72,8 @@ Windows (cmd or PowerShell, not Git Bash, whose own `tar` cannot read a `C:` pat
 
 ```
 mkdir "<projects-path>\my-project\.sbak-copilot"
-tar -xkf sbak-v1.0.11-starter.zip -C "<projects-path>\my-project"
-tar -xf sbak-v1.0.11-starter.zip -C "<projects-path>\my-project\.sbak-copilot" CLAUDE.md
+tar -xkf sbak-v1.0.12-starter.zip -C "<projects-path>\my-project"
+tar -xf sbak-v1.0.12-starter.zip -C "<projects-path>\my-project\.sbak-copilot" CLAUDE.md
 cd "<projects-path>\my-project"
 node -e "const fs=require('fs');fs.mkdirSync('.github',{recursive:true});if(!fs.existsSync('.github/copilot-instructions.md'))fs.copyFileSync('.sbak-copilot/CLAUDE.md','.github/copilot-instructions.md');fs.rmSync('.sbak-copilot',{recursive:true,force:true})"
 git init

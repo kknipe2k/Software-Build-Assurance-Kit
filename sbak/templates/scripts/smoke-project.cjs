@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 // scripts/smoke-project.cjs
 //
 // THE GENERATED MINI-SMOKE — a bootstrapped project's OWN regression
@@ -407,8 +407,10 @@ vPair('validate-irl-plan.cjs',
   'a Full-tier spec with no three-part IRL/HITL plan (the no-human-ever-ran-the-app archetype)');
 
 // The consumption half of the IRL/HITL floor: an ARMED closeout retro (Full tier + spec section) must
-// carry a typed ```human-drive block before the stamp counts. Same secondary-coverage note.
-if (fs.existsSync(vPath('validate-irl-plan.cjs'))) {
+// carry a typed ```human-drive block before the stamp counts. Same secondary-coverage note. The two
+// legs run validate-retrospective.cjs, so they ask whether THAT file is installed (a project may hold
+// validate-irl-plan.cjs without it): where it is not, one skip line names it.
+if (fs.existsSync(vPath('validate-retrospective.cjs'))) {
   const armed = fixtureDir('irl-armed');
   write('irl-armed/project-config.md', '**Tier:** Full\n');
   write('irl-armed/spec/project-spec.md', IRL_SPEC_OK);
@@ -422,7 +424,7 @@ if (fs.existsSync(vPath('validate-irl-plan.cjs'))) {
   hd = runNode(vPath('validate-retrospective.cjs'), [withDrive], { cwd: armed });
   ok('validator validate-retrospective.cjs: armed closeout WITH a typed human-drive block passes (IRL/HITL consumption)',
     hd.code === 0, `exit ${hd.code} — ${String(hd.stderr).slice(0, 200)}`);
-} else skip('validate-retrospective.cjs human-drive consumption legs', 'validate-irl-plan.cjs not present in this render/tier');
+} else skip('validate-retrospective.cjs human-drive consumption legs', 'validate-retrospective.cjs is not installed in this project, so the two checks that run it are not run');
 
 // Kit-only / mode-conditional validators — visibly skipped BY DESIGN, with the reason.
 const BY_DESIGN_SKIPS = {
@@ -442,6 +444,9 @@ const BY_DESIGN_SKIPS = {
   try { text = fs.readFileSync(wf, 'utf8'); } catch (_) { text = null; }
   const map = path.join(PROJ, 'docs', 'app-map.md');
   if (text === null || !fs.existsSync(map)) { skip('workflow app-map invocation', 'no pr-smoke.yml or no docs/app-map.md in this project'); return; }
+  // Both forms run validate-app-map.cjs: without it each exits 1 on the missing module and the two
+  // exits would agree, a pass that checked nothing.
+  if (!fs.existsSync(vPath('validate-app-map.cjs'))) { skip('workflow app-map invocation', 'validate-app-map.cjs is not installed in this project, so the CI invocation has nothing to run here'); return; }
   const line = (text.split(/\r?\n/).find((l) => /validate-app-map\.cjs/.test(l)) || '');
   const tm = /--tests\s+'([^']+)'/.exec(line);
   if (!tm) { skip('workflow app-map invocation', 'pr-smoke.yml has no --tests value to exercise'); return; }

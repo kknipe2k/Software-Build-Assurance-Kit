@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml"><img src="https://github.com/kknipe2k/Software-Build-Assurance-Kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License: MIT"></a>
-  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.11-green" alt="Status: GA v1.0.11"></a>
+  <a href="RELEASE-NOTES.md"><img src="https://img.shields.io/badge/status-GA%20v1.0.12-green" alt="Status: GA v1.0.12"></a>
   <a href="https://slsa.dev/spec/v1.0/levels"><img src="https://img.shields.io/badge/SLSA-Level%202-blue" alt="SLSA Level 2"></a>
 </p>
 
@@ -26,7 +26,7 @@ This is a drop-in kit that wraps a coding agent in controls you can check. It gi
 - **[HOW-IT-WORKS.html](sbak/HOW-IT-WORKS.html)** - the visual overview. A few minutes, in your browser.
 - **[example-receipt.html](example-receipt.html)** - what the output looks like on real work. The kit was built with its own process, and this receipt is derived by the collectors from the commit it names, reading the repository's records at that commit (deterministic enforcement), not a staged demo.
 - **[WHY-THIS-KIT.md](WHY-THIS-KIT.md)** - deciding if it's worth your evening? Two pages, honest costs.
-- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.11 GA release: exactly what is claimed, what is not, and the notes for both.
+- **[RELEASE-NOTES.md](RELEASE-NOTES.md)** - this is the v1.0.12 GA release: exactly what is claimed, what is not, and the notes for both.
 
 ## How it works
 
@@ -125,7 +125,7 @@ Your answer can simply be what you want - *"fix a bug"*, *"add a feature"*, *"bu
 
 If the adopt step exited non-zero it says why: exit 1 is `ADOPTION INCOMPLETE` - the missing control is **named**, with a `repair:` command that runs as printed; exit 2 is a usage or fail-closed refusal. An incomplete install cannot silently look complete: adopt names a required file that is absent, or a git hook that is not the kit's by content, and nothing downstream may read a non-zero adopt as armed. Re-running `--adopt` is always safe; a clean re-run changes nothing.
 
-**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block, one line per check and one next command; the bootstrap-filled files stay at the installed version (the pre-commit hook and `verify-local`, named, and any generated CI workflow) - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in them, file by file, and merges it three ways from the version you were on, keeping your fills (deterministic enforcement; a project that records no kit pin names the version it was built on once, with `--pin`). An edit of yours in or beside a line the release changed is written with conflict markers and the pin stays: resolve them (your judgment) and commit, with the record the run wrote, `.claude/kit-migrate.json`; on the re-run a file you resolved is kept as you committed it for this upgrade, and once no file is left with markers the pin rises, which removes the record. Or move your edit away from the changed lines, or mark the file `INTENTIONAL DIVERGENCE` and stop receiving its fixes. A kit file that is not bootstrap-filled is kept whole when you changed it, or taken whole with `--release`.
+**Upgrading** an installed kit is the same command: `sbak-install` inside `claude`. The report becomes an upgrade report (installed vs pinned version, what changes under `sbak/`), a single proceed question, nothing written before your word, and the previous version stays in git history. `sbak/` and the live kit files refresh; files you modified are kept and named; live kit files the new release no longer ships are retired, an edited one kept and named; the upgrade ends on the readiness block, one line per check and one next command; the commit floor (the pre-commit hook and `verify-local`) is placed from the new release with your fills read back from your own copies, the prior bytes archived under `.claude/floor.archive/`, so the commit the upgrade asks for passes your own pre-commit, and a copy you edited beyond its fills is left as it is and named (deterministic enforcement); any generated CI workflow stays at the installed version - then `node scripts/kit-update.cjs --migrate` shows what the new version changes in the files left at the installed version, file by file, and merges it three ways from the version you were on, keeping your fills (deterministic enforcement; a project that records no kit pin names the version it was built on once, with `--pin`). An edit of yours in or beside a line the release changed is written with conflict markers and the pin stays: resolve them (your judgment) and commit, with the record the run wrote, `.claude/kit-migrate.json`; on the re-run a file you resolved is kept as you committed it for this upgrade, and once no file is left with markers the pin rises, which removes the record. Or move your edit away from the changed lines, or mark the file `INTENTIONAL DIVERGENCE` and stop receiving its fixes. A kit file that is not bootstrap-filled is kept whole when you changed it, or taken whole with `--release`.
 
 **Need more detail?** Full documentation is below, or see [QUICKSTART.md](sbak/QUICKSTART.md) §1 - which also covers the manual ZIP path, adopting into an existing repo, and the clone alternate.
 
@@ -317,12 +317,12 @@ Release artifacts are built from a signed tag, not a working tree, and carry bui
 
 **Recommended:** download `sbak-install.cjs` from the releases page into the target directory, start `claude`, type `sbak-install` - the script does the verification below for you and asks before writing.
 
-**Manual:** download `sbak-v1.0.11-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.11-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
+**Manual:** download `sbak-v1.0.12-starter.zip` and its `.sha256` and verify before you unpack - the `.sha256` checksum, and stronger, `gh attestation verify sbak-v1.0.12-starter.zip -R kknipe2k/Software-Build-Assurance-Kit` (SLSA build-provenance attestation; an `HTTP 404` from it means the repository holds no attestation for that file, so it is not the asset the repository built). Run these from the folder the ZIP downloaded to, and replace `<projects-path>` with wherever you keep code:
 
 macOS / Linux:
 
 ```
-unzip sbak-v1.0.11-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
+unzip sbak-v1.0.12-starter.zip -d <projects-path>/my-project && cd <projects-path>/my-project
 git init
 node sbak/templates/scripts/kit-update.cjs --adopt
 CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1 claude --model opus
@@ -332,7 +332,7 @@ Windows (cmd):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.11-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.12-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt
@@ -343,7 +343,7 @@ Windows (PowerShell):
 
 ```
 mkdir <projects-path>\my-project
-tar -xf sbak-v1.0.11-starter.zip -C <projects-path>\my-project
+tar -xf sbak-v1.0.12-starter.zip -C <projects-path>\my-project
 cd <projects-path>\my-project
 git init
 node sbak\templates\scripts\kit-update.cjs --adopt

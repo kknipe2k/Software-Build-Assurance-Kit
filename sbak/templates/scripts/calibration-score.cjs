@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @kit-version 1.0.11
+// @kit-version 1.0.12
 // scripts/calibration-score.cjs
 //   (kit source of truth: templates/scripts/calibration-score.cjs)
 //
